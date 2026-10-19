@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="420" viewBox="0 0 420 420" role="img">
+<title>Soft Orbit / light</title>
+<desc>Copilot Reel concept vector master. Application symbols are placeholders. No raster images are embedded.</desc>
+<g transform="translate(210 210) scale(1)">
+<circle cx="0" cy="6.8" r="180" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.012"/>
+<circle cx="0" cy="6.2" r="176" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.019"/>
+<circle cx="0" cy="5.75" r="173" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.026"/>
+<circle cx="0" cy="5.3" r="170" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.034"/>
+<circle cx="0" cy="0" r="168" fill="#F4F6F8" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<rect x="-20" y="-132" width="40" height="40" rx="10" fill="#E5E9EF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(0 -112) scale(1.208)">
+<circle cx="-4" cy="0" r="6" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<circle cx="4" cy="0" r="6" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+<rect x="66.995" y="-86" width="60" height="64" rx="14" fill="#DEECFA" stroke="#005FB8" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<circle cx="96.995" cy="-31" r="2" fill="#005FB8" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<rect x="76.995" y="-76" width="40" height="40" rx="10" fill="#E5E9EF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(96.995 -56) scale(1.208)">
+<path d="M4 0 L10 0" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M2.828 2.828 L7.071 7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 4 L0 10" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-2.828 2.828 L-7.071 7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-4 0 L-10 0" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-2.828 -2.828 L-7.071 -7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-0 -4 L-0 -10" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M2.828 -2.828 L7.071 -7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+<rect x="76.995" y="36" width="40" height="40" rx="10" fill="#E5E9EF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(96.995 56) scale(1.208)">
+<path d="M0 -10 C2 -3 3 -2 10 0 C3 2 2 3 0 10 C-2 3 -3 2 -10 0 C-3 -2 -2 -3 0 -10 Z" fill="#4A515D" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+<rect x="-20" y="92" width="40" height="40" rx="10" fill="#E5E9EF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(0 112) scale(1.208)">
+<path d="M-4 -7 L-10 0 L-4 7" fill="none" stroke="#4A515D" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M4 -7 L10 0 L4 7" fill="none" stroke="#4A515D" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M2 -9 L-2 9" fill="none" stroke="#4A515D" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+<rect x="-116.995" y="36" width="40" height="40" rx="10" fill="#E5E9EF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(-96.995 56) scale(1.208)">
+<rect x="-8" y="-8" width="16" height="16" rx="3" fill="none" stroke="#4A515D" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 -10 L0 10" fill="none" stroke="#4A515D" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-10 0 L10 0" fill="none" stroke="#4A515D" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+<rect x="-116.995" y="-76" width="40" height="40" rx="10" fill="#E5E9EF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(-96.995 -56) scale(1.208)">
+<path d="M-7 0 L7 0" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 -7 L0 7" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+<circle cx="0" cy="0" r="44" fill="#FFFFFF" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="0" y="-4.24" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="600" text-anchor="middle">Claude</text>
+<text x="0" y="17.08" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="middle">Release</text>
+</g>
+</svg>

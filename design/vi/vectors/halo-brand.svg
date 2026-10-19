@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img">
+<title>Fluent Halo / brand direction</title>
+<desc>Copilot Reel concept vector master. Application symbols are placeholders. No raster images are embedded.</desc>
+<g transform="translate(0 0) scale(2)">
+<rect x="0" y="0" width="64" height="64" rx="14" fill="#005FB8" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(32 32) scale(1)">
+<path d="M0 -22 C6.84 -22 13.29 -18.819 17.454 -13.393 C21.617 -7.967 23.021 -0.913 21.25 5.694 L13.523 3.623 C14.649 -0.581 13.757 -5.07 11.107 -8.523 C8.457 -11.976 4.352 -14 0 -14 Z" fill="#FFFFFF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M19.053 11 C15.633 16.923 9.653 20.919 2.872 21.812 C-3.909 22.705 -10.72 20.393 -15.556 15.556 L-9.899 9.899 C-6.822 12.977 -2.488 14.448 1.827 13.88 C6.143 13.312 9.948 10.769 12.124 7 Z" fill="#FFFFFF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-19.053 11 C-22.472 5.077 -22.943 -2.1 -20.325 -8.419 C-17.708 -14.738 -12.301 -19.48 -5.694 -21.25 L-3.623 -13.523 C-7.828 -12.396 -11.269 -9.379 -12.934 -5.358 C-14.6 -1.336 -14.301 3.231 -12.124 7 Z" fill="#FFFFFF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<circle cx="0" cy="0" r="4" fill="#FFFFFF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+</g>
+</g>
+</svg>

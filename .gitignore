@@ -1,0 +1,32 @@
+# Local build and IDE output
+/build/
+/out/
+/.vs/
+/.idea/
+CMakeUserPresets.json
+*.user
+*.suo
+*.obj
+*.pdb
+*.ilk
+
+# Generated packages and signing secrets
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.pfx
+*.p12
+*.key
+
+# Machine-specific research and runtime data
+/local/
+/evidence/
+/logs/
+/tmp/
+/tools/local/
+/artifacts/
+__pycache__/
+*.etl
+.env
+.env.*
