@@ -7,6 +7,7 @@ rendered separately from the resulting PDF with Poppler.
 from __future__ import annotations
 
 import json
+import base64
 import math
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,6 +17,7 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
+from reportlab.lib.utils import ImageReader
 
 ROOT = Path(__file__).resolve().parents[3]
 VI = ROOT / 'design' / 'vi'
@@ -54,6 +56,9 @@ class Scene:
     def text(self, x, y, value, size=18, color=INK, bold=False, align='left'):
         self.ops.append(('text', (x, y, str(value), size, color, bold, align)))
 
+    def asset(self, x, y, size, png_path, svg_path=None):
+        self.ops.append(('asset', (x, y, size, Path(png_path), Path(svg_path) if svg_path else None)))
+
     def wrap(self, x, y, text, width, size=18, leading=30, color=INK, bold=False):
         lines = []
         font = font_for(text, bold)
@@ -90,6 +95,14 @@ class Scene:
                 c.restoreState()
                 continue
             c.saveState()
+            if kind == 'asset':
+                x, y, size, png_path, _ = p
+                c.translate(x, y + size)
+                c.scale(1, -1)
+                c.drawImage(ImageReader(str(png_path)), 0, 0, size, size,
+                            preserveAspectRatio=True, anchor='c', mask='auto')
+                c.restoreState()
+                continue
             if kind == 'text':
                 x, y, value, size, color, bold, align = p
                 c.setFillColor(HexColor(color))
@@ -135,13 +148,20 @@ class Scene:
         def n(v): return f'{v:.3f}'.rstrip('0').rstrip('.') if isinstance(v, (float, int)) else str(v)
         out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" viewBox="0 0 {self.w} {self.h}" role="img">',
                f'<title>{escape(title)}</title>',
-               '<desc>Copilot Reel vector master with shared monochrome application symbols. No raster images are embedded. Native control details may vary.</desc>']
+               '<desc>Copilot Reel vector UI master with verified vendor artwork. Source SVGs remain vector; official PNG marks are embedded where no usable SVG is supplied.</desc>']
         for kind, p in self.ops:
             if kind == 'push':
                 out.append(f'<g transform="translate({n(p[0])} {n(p[1])}) scale({n(p[2])})">')
                 continue
             if kind == 'pop':
                 out.append('</g>')
+                continue
+            if kind == 'asset':
+                x, y, size, png_path, svg_path = p
+                source = svg_path if svg_path and svg_path.exists() else png_path
+                mime = 'image/svg+xml' if source.suffix == '.svg' else 'image/png'
+                encoded = base64.b64encode(source.read_bytes()).decode('ascii')
+                out.append(f'<image x="{n(x)}" y="{n(y)}" width="{n(size)}" height="{n(size)}" preserveAspectRatio="xMidYMid meet" href="data:{mime};base64,{encoded}"/>')
                 continue
             if kind == 'text':
                 x, y, value, size, color, bold, align = p
@@ -341,7 +361,7 @@ def desktop(s,x,y,w,h,dark=False):
 
 def footer(s,page,total=12):
     s.line(64,835,1376,835,LINE)
-    s.text(64,852,'COPILOT REEL  /  UNIFIED ORBIT + NATIVE OSD  /  v0.5',12,MUTED)
+    s.text(64,852,'COPILOT REEL  /  RADIAL OSD + OFFICIAL APP IDENTITY  /  v0.6',12,MUTED)
     s.text(1376,852,f'{page:02d} / {total:02d}',12,MUTED,align='right')
 
 

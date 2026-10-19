@@ -1,91 +1,85 @@
-# Visual identity v0.5: Unified Orbit and native OSD controls
+# Visual identity v0.6: Soft Orbit and radial OSD
 
-Soft Orbit is the selected reel design. Fluent Halo and Command Petals remain comparison assets. Application v0.2.0 implements the OSD hierarchy, shared vector symbols, and guarded edge placement. The compact primary menu replaces the large configuration form; focused secondary pages retain native control semantics.
+Soft Orbit remains the selected visual direction. Every primary navigation level is now a wheel. The previous rectangular quick-menu design is superseded; a focused native task editor remains appropriate only for entering text or launch details. The specification documents implementation intent and does not substitute for runtime test evidence.
 
 ## Deliverables
 
-- [English VI PDF](../output/pdf/copilot-reel-vi-v0.5.pdf): 12 pages covering the reel, OSD hierarchy, app editing, system appearance, edge handling, precedents, and vector handoff.
-- [SVG masters](../design/vi/vectors): 26 editable vector assets.
-- [Design tokens](../design/vi/tokens.json): semantic colors, geometry, timing, and implementation status.
-- [Style specification table](../design/vi/stylesheet.typ): English Typst source. The PDF is built by the Python scene generator, not this Typst file.
+- [English VI PDF](../output/pdf/copilot-reel-vi-v0.6.pdf): 12 pages.
+- [SVG masters](../design/vi/vectors): radial main, Settings, language, preferred-agent, management, and preset scenes in light and dark themes; material variants and historical comparison assets.
+- [Design tokens](../design/vi/tokens.json): geometry, timing, input behavior, artwork policy, and navigation.
+- [Style specification](../design/vi/stylesheet.typ): editable English Typst table. The Python scene generator builds the PDF.
+- [Official artwork provenance](../assets/brands/provenance.json): vendor files, origins, processing, and hashes.
 
-Earlier Chinese review drafts have been archived outside the active repository. PNG snapshots are generated from the PDF for review and are not runtime UI assets.
+PNG snapshots are generated from the PDF for review. They are never runtime UI or animation frames. SVG scenes preserve native vector UI geometry and embed verified source artwork; official PNG identities are retained where no usable SVG exists.
 
-## Navigation
+## Radial hierarchy
 
-The configuration OSD has a 560 x 360 DIP logical client area inside a native Windows caption and frame. It is centered within the current monitor work area. Small work areas use native overflow scrollbars, preserving readable control sizes. The launch reel remains anchored to the pointer. These are different surfaces with different placement rules.
-
-| Level | Page | Content |
+| Level | Wheel | Contents |
 | --- | --- | --- |
-| Primary | Quick menu | Apps, Appearance, Settings |
-| Secondary | Apps | Familiar app names and shared vector symbols; add, reorder, edit, remove |
-| Secondary | Appearance | Windows-controlled theme, material, and accent; link to Windows appearance |
-| Secondary | Settings | Native language selector and About |
-| Task sheet | Edit app | Display name and target; browse for a file or shortcut |
-| Task sheet | Advanced | Launch method, arguments, and working directory; returns to the same draft |
+| Primary | Main | Configured agents, + app management, Settings |
+| Secondary | Settings | Language, Preferred agent, Windows appearance |
+| Adjustment | Language | Current value at the center, small left/right chevrons, A / D |
+| Selection | Preferred agent | Configured applications; current preferred marker; center returns |
+| Secondary | Manage apps | Existing targets and Add; center returns |
+| Selection | Presets | Five verified agent identities per page, Custom, Previous/Next |
+| Action | Existing app | Edit details, preference/action options, removal, Back |
+| Focused task | Native editor | Name and actual executable, shortcut, URI, or AUMID; optional launch fields |
 
-Language belongs in Settings rather than the primary panel. English is the default; the native application also supports Simplified Chinese. Changing the interface language must not rename user-defined targets.
+The center or Esc restores the prior radial context. Windows appearance opens the Windows color settings page. Language arrows remain available in the Settings center, including during pointer movement. Secondary menus remain open for deliberate adjustment after the original hold ends. English is the default and Simplified Chinese is a native option. Changing language must never rename user data. A preset without a valid discovered installation opens the focused editor; do not silently replace a desktop application with an unrelated website.
 
-Back or Esc returns one level while preserving context. Close dismisses the OSD. The hold-to-launch gesture never opens an app editor. The primary menu does not show raw Shell types, AUMIDs, command-line arguments, or working directories.
+A short Copilot tap directly opens the user's saved preferred agent. A hold uses the official Windows threshold, approximately 300 ms, and opens the main reel. Explicit preview commands retain a click-to-select path. Each release resolves at most one action.
 
-There is no autostart preference in this release. Native buttons, list boxes, edit controls, and the language combo retain keyboard, focus, and accessibility semantics while custom drawing supplies the OSD styling.
+## Official identities and common styling
 
-## Appearance
+Use official marks with their original proportions and recognizable colors. The common treatment belongs to the tile, optical bounds, spacing, selected outline, focus, and preferred marker. Do not redraw a brand into a guessed geometric approximation, recolor it to force a monochrome set, or replace it with an initial.
 
-Use Segoe UI Variable with Segoe UI and system CJK fallback. Every app uses the same monochrome vector treatment. The wheel and OSD share `DrawAppSymbol`: recognized targets receive the VI symbol associated with their visible identity; unknown targets receive a neutral application-window symbol. The selected symbol uses the Windows accent, or highlighted-text color in high contrast. Full-color shell bitmaps and initials are not used.
+Initial identities include ChatGPT/Codex, Claude Desktop, Claude for Science, Antigravity, ZCode, DeepSeek Harness (`dsh`), VS Code, and JetBrains products including Junie, Air, Toolbox, and IDEs. Claude for Science shares Claude artwork; the installed OpenAI package supplies the current ChatGPT/Codex identity.
 
 | Token | Value |
 | --- | --- |
 | Reel diameter | 336 DIP |
-| Center cancellation diameter | 88 DIP |
-| Wheel icon tile | 40 DIP, 10 DIP corner radius |
-| Wheel symbol / stroke | 28 DIP / 1.75 DIP; 2 DIP stroke in high contrast |
 | Icon orbit radius | 112 DIP |
-| Selected item seat | 60 x 64 DIP |
-| OSD panel | 560 x 360 DIP |
-| OSD outer frame | Native Windows caption and corner treatment |
-| OSD content inset | 24 DIP |
-| Secondary row height | 47 DIP |
-| App label / status hint | 14 / 12 DIP |
+| Center cancellation zone | 88 DIP diameter |
+| Tile / radius | 40 DIP / 10 DIP |
+| Official mark bounds | 28 DIP |
+| Internal command stroke | 1.75 DIP; 2 DIP in high contrast |
+| Selected seat | 60 x 64 DIP |
+| Language arrow visual / hit | 30 x 30 / 44 x 44 DIP |
+| Language arrow centers | -60 and +60 DIP horizontally from center |
+| Label / hint | 14 / 12 DIP |
 
-The neutral surface follows the Windows app light/dark mode. Selection uses the Windows accent; the entire base is not filled with a saturated accent color. Sample accents are `#005FB8` in light previews and `#60CDFF` in dark previews, not fixed runtime values.
+Supported vendor SVGs use Direct2D. Official PNGs are allowed when no usable SVG exists or an SVG feature such as masking is unsupported. This exception concerns source artwork, not the application surface or animation pipeline. Unknown or missing artwork receives a neutral application glyph.
 
-Material priority:
+## System appearance
 
-1. High contrast: system background, foreground, and highlight colors; no frost.
-2. Transparency disabled or effect unavailable: opaque theme surface, alpha 1, no backdrop sampling.
-3. Transparency enabled and supported: one compositor backdrop layer under clear foreground content.
+The neutral base follows Windows app light/dark mode. The system accent colors selection outlines and indicators rather than the full base. High contrast uses system surfaces and readable outlines. Transparency off creates an opaque neutral surface with no backdrop sampling; transparency on permits a frosted host backdrop when supported. Effects availability and energy saver may require an opaque fallback. Reduced motion is independent and skips decorative transitions.
 
-The material follows system changes without altering app order, pointer origin, or the current selection. Native nonactivating-window backdrop behavior remains a separate validation concern. A translucent SVG is a tonal illustration, not proof of actual desktop blur.
+Theme changes preserve app order, menu context, and selection. The VI's translucent treatment is a tonal illustration, not proof that a nonactivating HWND can display the intended blur.
 
-## Pointer-edge adaptation
+## Pointer and screen edges
 
-The reel opens around the pointer whenever the complete footprint fits. Near an edge or corner, preserve the complete circle and move it the minimum distance needed to fit the current monitor work area. Item order, angles, radius, and icon size remain unchanged. The previous half-orbit and staggered-fan proposals are rejected.
+Capture the actual pointer position at gesture start. Select its monitor and place the complete wheel nearby, normally one outer radius (168 DIP) from the pointer. The opening line makes that spatial relation visible. Do not use a fixed screen center or a stale window position as the anchor.
 
-Default input policy: do not warp the system pointer. If the initial pointer lies outside the relocated center cancellation zone, enter `AwaitCenter`: no item highlights, crossing an outer icon does not select it, and release cancels. Entering the visible center changes the state to `Armed`; subsequent selection uses that same visible center. There is no timer-driven switch of logical origin. If the initial pointer is already inside the relocated center zone, arm normally.
+Clamp the complete footprint inside the monitor work area. At an edge or corner, the line may exceed 168 DIP to keep the wheel visible. Preserve slot order, angles, orbit radius, and icon sizes. Do not warp the pointer or reshape the menu into a fan.
 
-The cost is explicit: edge/corner activation can require an inward movement followed by the selection stroke. Pointer recentering is not implemented or enabled. Relative virtual-cursor behavior is not used.
+If the original pointer lies outside the final center zone, enter `AwaitCenter`: highlight nothing, crossing an outer icon does not select it, and early release cancels. Entering the visible center arms selection. Thereafter the visible center is the only hit-test origin. No timer changes the origin. A work area too small for the canvas scales the complete circle uniformly. This preserves proportions but reduces text and target sizes; small-display usability needs explicit validation.
 
-These behaviors are implemented. Rendering and hit testing consume the same geometry and center. A work area too small to fit the wheel opens the scrollable OSD instead of squeezing or clipping the radial layout. See [edge-placement research](edge-placement-research.md) for primary sources and the distinction between observed behavior and this project's policy.
+## Motion and resource use
 
-## Motion and rendering
+Opening lasts 230 ms: extend the pointer tether for 70 ms, then reveal the wheel over 160 ms. Windows Composition animates opacity, scale from 0.85 to 1, circular clip radius, and an outline sweep through one full circle. App icons stay upright. Closing reverses the reveal and retracts the tether over 190 ms, then detaches the visible composition tree. A new opening cancels pending exit completion. Reduced motion and high contrast apply the final state immediately.
 
-The implemented appearance animation is 100 ms, using compositor opacity and scale. Selection and OSD page changes are immediate in v0.2.0. Future transitions may use up to 80 ms for selection and 120 ms for OSD navigation; these are design ceilings, not implemented animations. Reduced motion applies the final state immediately. Release commits the chosen target independently of animation completion.
+Cache official artwork before a gesture, retain device-domain resources, and redraw surfaces only for relevant state changes. Pointer events within the same selected sector do not repaint. Animation uses compositor properties, not a fixed frame timer or pre-rendered images. At 60, 144, and 240 Hz, presentation cadence changes while animation duration remains the same.
 
-Reuse device resources, text formats, and DPI-dependent drawing surfaces. Symbols are vector drawing commands, rendered only when content changes. Animate compositor properties rather than pre-rendering an image sequence. Stop application rendering work while hidden. Keep optional blur and shadows separate from readable vector content.
+Physical key timing, interruption behavior, mixed DPI, high refresh rates, real background blur, and assistive-technology behavior require runtime validation. Current results belong in [validation](validation.md).
 
-## Implementation status
+## References
 
-The native reel, shared symbols, appearance synchronization, provider registration, app launching, OSD navigation, focused editor, and guarded full-circle edge placement are implemented. The vector OSD scenes illustrate layout and hierarchy; native frame and standard input-control rendering vary with Windows. Current verification results and remaining language, display, physical-key, material, and performance checks belong in [validation](validation.md); this VI is not a blanket test-pass claim.
-
-## Primary references
-
-- [Windows materials](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials)
-- [Windows geometry](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/geometry)
-- [Windows typography](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/typography)
 - [Windows motion](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/motion)
-- [Windows theme support](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-windows-themes)
-- [Composition tailoring](https://learn.microsoft.com/en-us/windows/apps/develop/composition/composition-tailoring)
-- [Apple materials](https://developer.apple.com/design/human-interface-guidelines/materials)
+- [Composition animation](https://learn.microsoft.com/en-us/windows/uwp/composition/composition-animation)
+- [Windows materials](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials)
+- [Windows typography](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/typography)
+- [Kando pointer warping](https://kando.menu/config-files/#warpmouse)
+- [Blender interface and pie menus](https://docs.blender.org/manual/en/latest/editors/preferences/interface.html)
+- [Prior edge-placement research](edge-placement-research.md)
 
-Reviewed on 2026-10-19. All development documentation, tokens, and comments use English. Chinese strings are retained only for the application's explicit Simplified Chinese localization and Unicode test fixtures.
+Specification date: 2026-10-19. Development documentation, comments, tokens, and sources use English. Chinese product strings are explicit localization resources.

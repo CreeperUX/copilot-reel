@@ -1,20 +1,21 @@
 # Copilot Reel
 
-A native Windows application wheel that appears around the pointer when the Copilot key is held. Move toward an application and release to open it; release in the center to cancel.
+A native Windows application wheel that opens near the pointer when the Copilot key is held. Move into its center, choose an application, and release to open it. A short Copilot tap directly opens the saved preferred agent.
 
-The first native prototype builds and runs. Soft Orbit rendering, Windows appearance synchronization, application configuration, single-instance activation, and launching are implemented. Core tests, 48 configuration checks, and the automated controller-to-launcher integration flow have passed. A signed development MSIX is installed and Windows Settings has been verified to recognize Copilot Reel. The key route remains a user-controlled setting. Physical Copilot-key delivery and the remaining display/performance matrix are still being validated.
+The native implementation builds and runs. Soft Orbit rendering, Windows appearance synchronization, configuration, single-instance activation, and launching are implemented. A signed development MSIX has been verified as eligible in Windows Settings. The key route remains user-controlled. Current build, test, installation, and remaining physical-input/display/performance evidence is recorded in [validation](docs/validation.md).
 
-Application v0.2.0 implements a compact OSD home with Apps, Appearance, and Settings; Language and About live inside Settings. The interface defaults to English and offers a native Simplified Chinese switch with persistent preferences. Ordinary launch opens the pointer-centered reel. At screen edges, the complete wheel moves inward and waits for center entry before arming selection when necessary. VI v0.5 documents the shared monochrome vector symbols and the implemented navigation/placement behavior.
+The current interface uses nested radial menus: configured agents, a + entry for app management, and Settings. Settings remains a wheel, including in-place language adjustment through left/right chevrons or A / D, preferred-agent selection, and system appearance. English is the default; Simplified Chinese is a native persistent option. VI v0.6 documents official app artwork in consistent containers and pointer-led reveal/reverse animation. Runtime validation is tracked separately from the visual specification.
 
 ## Behavior
 
 - The official Windows provider contract supplies the approximately 300 ms hold threshold and start/stop events.
 - The wheel opens without taking keyboard focus. Moving outside its center cancellation zone selects a direction.
-- Releasing commits at most one target and hides the wheel before activation.
-- A short tap or optional `Ctrl+Alt+R` opens a click-to-select preview. Right-click cancels.
-- The native OSD manages 1-8 targets: executables, shortcuts, URIs, and applicable packaged-app AUMIDs. Advanced launch fields live in a separate task sheet.
-- Every entry uses a consistent vector symbol and tile. Recognized apps receive their VI symbol; unknown targets use a neutral app symbol. Selected symbols use the system accent or high-contrast highlighted text.
-- Near monitor edges, entering the relocated center arms selection; release before entry cancels. A work area too small for the wheel opens the scrollable OSD.
+- Releasing commits at most one target, starts the closing animation, and activates that target once.
+- A short Copilot tap opens the preferred agent directly. Optional `Ctrl+Alt+R` opens a click-to-select preview.
+- The + entry opens a manage wheel for 1-8 targets: executables, shortcuts, URIs, and packaged-app AUMIDs. Presets and app selection remain radial; a focused native editor handles text and launch fields.
+- Recognized entries use verified official artwork with common tile size, optical bounds, and selection treatment. Unknown targets use a neutral app glyph. Vendor artwork keeps its identity and proportions; Windows accent colors the selection container.
+- Opening extends a line from the actual pointer to the nearby wheel center, normally 168 DIP away. Edge/corner clamping preserves the complete circle and can lengthen that line. Center entry arms selection; release before entry cancels.
+- Settings is another wheel. Language changes in place with the visible arrows or A / D. Back or Esc returns one radial level.
 - The Soft Orbit base follows Windows light/dark appearance. Transparency effects request a frosted backdrop when supported; otherwise the base is opaque. Selection uses the system accent. High contrast, disabled animations, and energy saver take precedence where applicable.
 
 Targets inside the wheel do not need to register as Copilot providers. Only Copilot Reel registers with Windows.
@@ -32,7 +33,7 @@ The development target is Windows 11 x64. The package declares build 22621 as it
 
 Bootstrap downloads pinned Microsoft MSVC and Windows SDK packages into the ignored `tools/local` directory, without installing an IDE or changing the machine PATH. Build runs core/configuration tests and produces `build/Release/CopilotReel.exe`. See [toolchain notes](docs/toolchain.md).
 
-The application uses C++20, Win32, Windows Composition, Direct2D, and DirectWrite. Geometry and text render at the target DPI; PNG/PDF design previews are reference material, not animation frames. State changes and compositor timelines drive rendering instead of a permanent application frame loop.
+The application uses C++20, Win32, Windows Composition, Direct2D, and DirectWrite. Geometry and text render at the target DPI. Supported official SVG marks render as vectors; official PNGs cover sources without usable SVG or unsupported SVG features. PNG/PDF UI previews are reference material, never animation frames. State changes and compositor timelines drive rendering instead of a permanent application frame loop.
 
 ## Packaging and Windows integration
 

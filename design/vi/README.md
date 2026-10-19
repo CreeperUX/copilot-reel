@@ -1,23 +1,23 @@
-# VI source package v0.5
+# VI source package v0.6
 
-The selected scheme is `orbit` (Soft Orbit). Application v0.2.0 implements a primary quick menu, secondary Settings, focused app editing, a separate Advanced sheet, and shared monochrome vector symbols. Edge placement preserves the full circle, applies minimal translation, and waits for center entry when necessary. Small work areas use a scrollable OSD fallback.
+Soft Orbit is the selected scheme. This revision replaces the rectangular primary OSD with nested radial menus, defines in-place language arrows and A / D, distinguishes short-tap preferred-agent launch from hold-to-show, and adds pointer-led reveal/reverse motion. Official vendor artwork replaces invented brand approximations inside consistent tiles.
 
-- `vectors/`: 26 SVGs; 12 comparison/brand variants, 4 Soft Orbit material variants, and 10 OSD screen/theme variants.
-- `tokens.json`: English semantic design tokens and explicit implementation status.
-- `stylesheet.typ`: English style specification table; supplied as editable source, not used to generate the PDF.
-- `source/scene.py`: shared vector drawing primitives.
-- `source/osd_pages.py`: English OSD and edge-layout specification pages.
+- `vectors/`: active radial main, Settings, language, preferred-agent, manage, and preset masters in both themes; material and high-contrast variants; historical visual-direction comparisons.
+- `tokens.json`: English semantic design tokens and input/material/artwork policies.
+- `stylesheet.typ`: editable English style table; not the PDF generator.
+- `source/scene.py`: vector and official-artwork drawing primitives.
+- `source/radial_pages.py`: 12 English specification pages.
 - `source/build_vi.py`: PDF, SVG, and token generator.
-- [Review PDF](../../output/pdf/copilot-reel-vi-v0.5.pdf): 12 pages.
+- [Review PDF](../../output/pdf/copilot-reel-vi-v0.6.pdf).
 
 ## Rebuild
-
-From the repository root on Windows:
 
 ```powershell
 python design/vi/source/build_vi.py
 ```
 
-The generator requires Python, reportlab, and the Windows Segoe UI / Microsoft YaHei fonts. Use Poppler `pdftoppm` to generate PNG review snapshots.
+Requires Python, reportlab, and Windows Segoe UI / Microsoft YaHei fonts. Render PDF review snapshots with Poppler `pdftoppm`. All geometry and text remain vector in the PDF. Official PNG source marks may be embedded; SVG scene exports use the corresponding source SVG when present. Neither the PDF nor PNG review pages become application UI frames.
 
-App symbols use the shared native visual language: a 40 DIP wheel tile, 28 DIP mark, and 1.75 DIP stroke. Known identities receive the corresponding symbol; unknown apps use a neutral application-window mark. Selection uses the Windows accent or high-contrast highlighted text. No shell bitmap or bare-initial fallback is used. Runtime UI uses Direct2D geometry and DirectWrite text; the PDF or PNG is never the UI substrate. The OSD scenes illustrate hierarchy and layout; native caption, standard controls, and system typography can vary. Actual backdrop effects are an independent compositor concern with an opaque fallback. Validation is tracked in `docs/validation.md`.
+The generator retires `osd-*.svg` rectangular primary-panel masters from the active vector directory. Older PDF versions are historical reviews, not the current design contract.
+
+The runtime uses native geometry, DirectWrite, official-artwork caches, and Windows Composition animation properties. Asset ownership and source details live in `assets/brands/provenance.json`. Backdrop behavior, physical input timing, and high-refresh performance remain separate runtime validation items in `docs/validation.md`.

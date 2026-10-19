@@ -11,10 +11,19 @@ $makeappx=Join-Path $sdkBin 'makeappx.exe'
 $signtool=Join-Path $sdkBin 'signtool.exe'
 if(-not (Test-Path -LiteralPath $makeappx)) {throw 'Windows SDK packaging tool not found.'}
 $stage=Join-Path $projectRoot 'artifacts\package'
+# Recreate only this exact staging directory, so removed assets cannot survive
+# from an earlier package. Resolve and check the destination before deletion.
+$stage=[System.IO.Path]::GetFullPath($stage)
+$expectedStage=[System.IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts\package'))
+if($stage -ne $expectedStage -or (Split-Path -Parent $stage) -ne [System.IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts'))) {
+    throw 'The package staging directory is outside the expected workspace location.'
+}
+if(Test-Path -LiteralPath $stage) {Remove-Item -LiteralPath $stage -Recurse -Force}
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'CopilotReel.exe')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\AppxManifest.xml') -Destination (Join-Path $stage 'AppxManifest.xml')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\assets') -Destination $stage -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\brands') -Destination (Join-Path $stage 'assets') -Recurse -Force
 [xml]$manifest=Get-Content -LiteralPath (Join-Path $stage 'AppxManifest.xml')
 $version=$manifest.Package.Identity.Version
 $package=Join-Path $projectRoot "artifacts\CopilotReel_${version}_x64.msix"

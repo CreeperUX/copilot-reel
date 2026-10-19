@@ -1,52 +1,63 @@
-"""Generate the English VI PDF, SVG masters, and renderer tokens.
-
-Run with Python + reportlab on Windows. PNG review snapshots are rendered from
-the PDF with Poppler and are never used as the application's UI substrate.
-"""
+"""Generate the English radial VI PDF, editable SVG scenes, and semantic tokens."""
 from scene import *
-from osd_pages import build_pages, osd
+from radial_pages import build_pages, radial, MAIN, SETTINGS
+
 
 def main():
-    VECTORS.mkdir(parents=True,exist_ok=True)
-    PDF_DIR.mkdir(parents=True,exist_ok=True)
-    pages=build_pages()
-    path=PDF_DIR/'copilot-reel-vi-v0.5.pdf'
-    document=canvas.Canvas(str(path),pagesize=(PAGE_W*PDF_SCALE,PAGE_H*PDF_SCALE),pageCompression=1)
-    document.setTitle('Copilot Reel - Unified Orbit and Native OSD v0.5')
+    VECTORS.mkdir(parents=True, exist_ok=True)
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    pages = build_pages()
+    path = PDF_DIR / 'copilot-reel-vi-v0.6.pdf'
+    document = canvas.Canvas(str(path), pagesize=(PAGE_W*PDF_SCALE, PAGE_H*PDF_SCALE), pageCompression=1)
+    document.setTitle('Copilot Reel - Radial OSD and Official App Identity v0.6')
     document.setAuthor('Copilot Reel')
     for page in pages:
-        page.draw_pdf(document);document.showPage()
+        page.draw_pdf(document)
+        document.showPage()
     document.save()
-    for code,name,_ in SCHEMES:
-        for theme in PALETTES:
-            scene=Scene(420,420);wheel(scene,code,theme,1,210,210)
-            (VECTORS/f'{code}-{theme}.svg').write_text(scene.svg(name+' / '+theme),encoding='utf-8',newline='\n')
-        scene=Scene(128,128);logo(scene,code,0,0,128)
-        (VECTORS/f'{code}-brand.svg').write_text(scene.svg(name+' / brand direction'),encoding='utf-8',newline='\n')
-    for theme in ['light','dark']:
-        for material in ['solid','frosted']:
-            scene=Scene(420,420);wheel(scene,'orbit',theme,1,210,210,material=material)
-            (VECTORS/f'orbit-{theme}-{material}.svg').write_text(scene.svg('Soft Orbit / '+theme+' / '+material+' tonal concept'),encoding='utf-8',newline='\n')
-        for screen in ['home','settings','apps','editor','appearance']:
-            scene=Scene(600,432);osd(scene,20,52,theme,screen)
-            (VECTORS/f'osd-{screen}-{theme}.svg').write_text(scene.svg('OSD / '+screen+' / '+theme),encoding='utf-8',newline='\n')
+
+    # Retire the rejected rectangular primary-menu masters from the active set.
+    for stale in VECTORS.glob('osd-*.svg'):
+        stale.unlink()
+    for theme in ['light', 'dark', 'contrast']:
+        scene = Scene(420, 420)
+        radial(scene, 210, 210, theme, selected=7)
+        (VECTORS / f'orbit-{theme}.svg').write_text(scene.svg('Soft Orbit / radial main / '+theme), encoding='utf-8', newline='\n')
+        if theme == 'contrast': continue
+        for material in ['solid', 'frosted']:
+            scene=Scene(420,420)
+            radial(scene,210,210,theme,selected=7,material=material)
+            (VECTORS/f'orbit-{theme}-{material}.svg').write_text(scene.svg('Soft Orbit / '+theme+' / '+material),encoding='utf-8',newline='\n')
+        screens=[('main',MAIN,'Copilot Reel',7,False),
+                 ('settings',SETTINGS,'Settings',0,False),
+                 ('language',SETTINGS,'Settings',0,True),
+                 ('preferred',MAIN[:6],'Preferred agent',0,False),
+                 ('manage',['chatgpt','claude','vscode','add'],'Manage apps',3,False),
+                 ('presets',['chatgpt','claude','science','antigravity','zcode','custom','next'],'Agent presets',0,False)]
+        for name,items,title,selected,language in screens:
+            scene=Scene(420,420)
+            radial(scene,210,210,theme,items,title,selected,language=language,preferred=0 if name in ['main','preferred'] else None)
+            (VECTORS/f'radial-{name}-{theme}.svg').write_text(scene.svg('Radial OSD / '+name+' / '+theme),encoding='utf-8',newline='\n')
+
     tokens={
-        'schemaVersion':'0.5','status':'implemented-in-application-0.2.0-validation-tracked-separately',
+        'schemaVersion':'0.6','status':'native-implementation-with-runtime-validation-tracked-separately',
         'units':'DIP','defaultScheme':'orbit','defaultLanguage':'en-US','supportedLanguages':['en-US','zh-CN'],
-        'rendering':'native vector geometry and DirectWrite text',
+        'rendering':'native vector geometry and DirectWrite text; official artwork uses source-appropriate SVG or PNG',
         'typography':{'preferred':'Segoe UI Variable','fallback':'Segoe UI','cjk':'system fallback','applicationLabel':14,'statusLabel':12},
-        'interaction':{'systemHoldThresholdMs':300,'centerCancelDiameter':88,'defaultItems':6,'releaseCommitsAtMostOnce':True,'gapsAreNotDeadZones':True},
-        'motion':{'appearanceMs':100,'selectionMs':0,'exitMs':0,'osdPageMs':0,'appearanceScale':[.98,1.0],'reduceMotion':'instant state changes','futureCeilings':{'selectionMs':80,'osdPageMs':120},'note':'Only the appearance animation is implemented; selection and navigation are immediate.'},
-        'colorPolicy':{'surface':'follow Windows app light/dark neutral theme','accent':'follow Windows accent for selected items','sampleLight':'#005FB8','sampleDark':'#60CDFF','highContrast':'use actual system colors; black/yellow previews are illustrative'},
-        'systemAppearance':{'followSystem':True,'materialPriority':['high-contrast-system-solid','transparency-disabled-or-unavailable-theme-solid','transparency-enabled-and-supported-frosted'],'solid':{'surfaceAlpha':1.0,'backgroundSampling':False,'backgroundBlur':False},'frosted':{'surface':'single compositor backdrop layer','preview':'tonal illustration, not a live blur','availability':'validate nonactivating HWND and clipping'},'signals':['UISettings.AdvancedEffectsEnabledChanged','UISettings.ColorValuesChanged','UISettings.AnimationsEnabledChanged','WM_SETTINGCHANGE','WM_SYSCOLORCHANGE','WM_THEMECHANGED'],'delivery':'coalesce on UI thread; preserve the active gesture'},
+        'interaction':{'systemHoldThresholdMs':300,'singleTap':'launch saved preferred agent directly','hold':'open pointer-led reel; release commits a target or opens a radial submenu','centerCancelDiameter':88,'releaseCommitsAtMostOnce':True,'gapsAreNotDeadZones':True,'menuContinuation':'secondary settings remain open for deliberate adjustment','back':'center or Esc returns one level'},
+        'motion':{'appearanceMs':230,'tetherMs':70,'revealMs':160,'exitMs':190,'selectionMs':0,'menuPageMs':0,'appearanceScale':[.85,1.0],'outlineSweepDegrees':360,'iconsRotate':False,'reduceMotion':'instant state changes','implementation':'Windows Composition opacity, scale, clip radius, and geometry TrimEnd; one-shot exit completion only','hidden':'detach composition tree; stop active animations'},
+        'colorPolicy':{'surface':'Windows app light/dark neutral theme','accent':'Windows accent for selection outlines and indicators','vendorArtwork':'preserve official proportions and recognizable colors','sampleLight':'#005FB8','sampleDark':'#60CDFF','highContrast':'actual system surfaces and readable outlines; preview colors illustrative'},
+        'systemAppearance':{'followSystem':True,'materialPriority':['high-contrast-system-solid','transparency-disabled-or-unavailable-theme-solid','transparency-enabled-and-supported-frosted'],'solid':{'surfaceAlpha':1.0,'backgroundSampling':False,'backgroundBlur':False},'frosted':{'surface':'single compositor backdrop layer','preview':'tonal illustration; native backdrop requires runtime validation'},'delivery':'coalesce on UI thread; preserve menu context and selection'},
         'palettes':PALETTES,
-        'schemes':{'halo':{'name':'Fluent Halo','status':'comparison','diameter':320},'petals':{'name':'Command Petals','status':'comparison','designBounds':360},'orbit':{'name':'Soft Orbit','status':'selected','diameter':336,'icon':40,'orbitRadius':112,'selectionSeat':[60,64],'selectedScaleMax':1.03}},
-        'iconography':{'status':'implemented','renderer':'shared DrawAppSymbol Direct2D geometry','tileSize':40,'tileRadius':10,'symbolSize':28,'strokeWidth':1.75,'highContrastStrokeWidth':2,'selectedColor':'Windows accent; system highlighted text in high contrast','identity':'visible app name first, then launch target','unknown':'neutral application-window symbol','shellBitmaps':False,'initialsFallback':False,'osdListSymbolSize':22},
-        'osd':{'status':'implemented','logicalClientSize':[560,360],'frame':'native Windows caption and frame','contentInset':24,'rowHeight':47,'nativeControls':['button','listbox','edit','combobox','overflow-scrollbars'],'primary':['Apps','Appearance','Settings'],'languageLocation':'Settings / Language','settingsItems':['Language','About Copilot Reel'],'applicationVersion':'0.2.0','autostartSetting':False,'editorAdvancedSheet':['launchMethod','arguments','workingDirectory'],'placement':'center within the current monitor work area','smallWorkArea':'scrollable logical client area; do not shrink text'},
-        'edgeLayout':{'status':'implemented','interior':'full pointer-centered orbit','edge':'minimal whole-circle translation inside monitor work area','corner':'minimal whole-circle translation on both axes','origin':'relocated visual center is the only armed hit-test origin','cursorWarp':False,'guard':'if the original pointer is outside the relocated center zone, remain unselected until it enters; early release cancels','timerRecenter':False,'smallWorkArea':'open the scrollable OSD when the complete wheel cannot fit','invariants':['item order','item angles','orbit radius','icon size'],'layoutContract':'rendering and hit testing share the same center and geometry','tradeoff':'edge activation may require an inward movement before direction selection'},
-        'handoff':{'appSymbols':'shared monochrome native vector symbols; unknown targets use a neutral app-window mark','svgText':'editable text with system-font references','pdf':'embedded fonts and vector shapes','png':'review snapshots only','osdScenes':'layout illustration; native caption and input-control details vary with Windows','backdrop':'independent native compositor effect','architecture':'single process; input/state/shared-layout/theme-policy/renderer/services separation'}
+        'schemes':{'orbit':{'name':'Soft Orbit','status':'selected','diameter':336,'icon':40,'orbitRadius':112,'selectionSeat':[60,64]},'halo':{'status':'historical comparison'},'petals':{'status':'historical comparison'}},
+        'iconography':{'renderer':'verified vendor artwork plus native command vectors','tileSize':40,'tileRadius':10,'artworkSize':28,'commandStrokeWidth':1.75,'highContrastCommandStrokeWidth':2,'identity':'preserve official artwork and use consistent container geometry','unknown':'neutral application-window symbol','initialsFallback':False,'sourceManifest':'assets/brands/provenance.json','rasterException':'official PNG or same-artwork PNG when SVG unavailable or unsupported; never UI animation frames'},
+        'osd':{'surface':'nested radial menus','primary':['configured agents','Add / change apps','Settings'],'settings':['Language','Preferred agent','Windows appearance'],'language':{'location':'Settings / Language','input':['left chevron','right chevron','A','D'],'arrowHitSize':[44,44],'arrowVisibleSize':[30,30],'arrowCentersFromCenter':[[-60,0],[60,0]],'default':'English','persistence':'immediate'},'management':['existing apps','presets with five items per page','custom app','previous/next when available'],'editor':'focused native task sheet for name and actual launch target','missingPreset':'open focused editor; do not silently change intended application','autostartSetting':False,'primaryRectangularPanel':False},
+        'edgeLayout':{'interior':'place a complete reel near the actual pointer with nominal 168 DIP tether','nominalTetherLength':168,'edge':'clamp complete footprint to current monitor work area','corner':'preserve circle and clamp both axes; tether may exceed nominal length','origin':'final visible center is the armed hit-test origin','cursorWarp':False,'guard':'keep selection empty until center entry when pointer begins outside center zone; early release cancels','smallWorkArea':'scale the complete canvas uniformly; validate reduced text and target sizes','invariants':['item order','item angles','orbit radius','icon size'],'layoutContract':'rendering and hit testing share final center and geometry'},
+        'handoff':{'svg':'editable vector UI scenes with embedded verified source artwork','pdf':'embedded fonts and vector UI; official PNG sources retained for review','png':'review snapshots only','architecture':'one process; input/state/layout/theme/renderer/platform services separated','validation':'docs/validation.md'}
     }
     (VI/'tokens.json').write_text(json.dumps(tokens,indent=2)+'\n',encoding='utf-8',newline='\n')
     print(json.dumps({'pdf':str(path),'pages':len(pages),'svgFiles':len(list(VECTORS.glob('*.svg')))}))
 
-if __name__=='__main__':main()
+
+if __name__=='__main__':
+    main()

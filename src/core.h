@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <optional>
 #include <string_view>
+#include <cstdint>
 
 namespace reel {
 constexpr double kPi = 3.14159265358979323846;
@@ -31,8 +32,47 @@ inline WheelPlacement PlaceWheel(int pointerX, int pointerY, WorkArea work,
     return result;
 }
 
+// Choose an inward-facing spoke near the pointer. Keep the complete circle on
+// screen; at corners this necessarily lengthens the requested radius tether.
+inline WheelPlacement PlaceOrbit(int x, int y, WorkArea work, int size, double deadZone) {
+    const double radius=size*168.0/384.0;
+    constexpr double directions[][2]={{.70710678,-.70710678},{-.70710678,-.70710678},
+        {.70710678,.70710678},{-.70710678,.70710678},{1,0},{-1,0},{0,-1},{0,1}};
+    WheelPlacement best;
+    double score=1e30;
+    for(const auto& direction:directions) {
+        const int desiredX=x+static_cast<int>(std::round(radius*direction[0]));
+        const int desiredY=y+static_cast<int>(std::round(radius*direction[1]));
+        auto candidate=PlaceWheel(desiredX,desiredY,work,size,deadZone);
+        if(!candidate.fits) return candidate;
+        const double dx=candidate.centerX-desiredX,dy=candidate.centerY-desiredY;
+        const double deviation=dx*dx+dy*dy;
+        if(deviation<score) {best=candidate;score=deviation;}
+        if(deviation<1) break;
+    }
+    const double dx=x-best.centerX,dy=y-best.centerY;
+    best.awaitingCenter=dx*dx+dy*dy>deadZone*deadZone;
+    return best;
+}
+
+// URI activations can arrive out of process-creation order. An Up tombstone
+// rejects a delayed Down from the same older physical gesture.
+class HoldOrdering {
+public:
+    bool Start(uint64_t stamp) {
+        if(stamp<=lastStop_ || stamp<=lastStart_) return false;
+        lastStart_=stamp;return true;
+    }
+    bool Stop(uint64_t stamp) {
+        lastStop_=std::max(lastStop_,stamp);
+        return stamp>=lastStart_;
+    }
+private:
+    uint64_t lastStart_=0,lastStop_=0;
+};
+
 inline int HitTest(double dx, double dy, unsigned count, double deadZone = 44.0) {
-    if (count == 0 || count > 8 || !std::isfinite(dx) || !std::isfinite(dy) ||
+    if (count == 0 || count > 12 || !std::isfinite(dx) || !std::isfinite(dy) ||
         dx * dx + dy * dy <= deadZone * deadZone) return -1;
     double angle = std::atan2(dy, dx) + kPi / 2;
     if (angle < 0) angle += 2 * kPi;

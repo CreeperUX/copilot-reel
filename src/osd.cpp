@@ -55,7 +55,7 @@ struct State {
     std::map<int, HWND> controls;
     int selected = 0, nextLabel = FirstLabel;
     AppTarget draft;
-    bool adding = false, dirty = false, creating = false;
+    bool adding = false, dirty = false, creating = false, focusedEditor = false;
     bool updatingScroll = false;
     int scrollX = 0, scrollY = 0;
     std::wstring status;
@@ -250,7 +250,7 @@ void Paint(State& state) {
         } else if (state.page == Page::About) {
             DrawText(state,target,L"Copilot Reel",D2D1::RectF(24,86,width-24,127),state.appearance.foreground,28,true);
             DrawText(state,target,Tr(L"Soft Orbit / native Windows launcher",L"柔光轨道 / Windows 原生启动器"),D2D1::RectF(24,136,width-24,164),state.appearance.secondary,14);
-            DrawText(state,target,Tr(L"Version 0.2.0",L"版本 0.2.0"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Version 0.3.0",L"版本 0.3.0"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
             DrawText(state,target,Tr(L"Hold the Copilot key, choose an app, then release.",L"按住 Copilot 键，选择应用，然后松开。"),D2D1::RectF(24,194,width-24,220),state.appearance.foreground,14);
             DrawText(state,target,Tr(L"Windows controls the theme, transparency and motion.",L"主题、透明效果和动画均遵循 Windows 设置。"),D2D1::RectF(24,233,width-24,259),state.appearance.secondary,13);
         }
@@ -582,14 +582,23 @@ void NavigateBack(State& state) {
     if(state.page==Page::Home) {SendMessageW(state.window,WM_CLOSE,0,0);return;}
     if(state.page==Page::Advanced) {ChangePage(state,Page::Editor);return;}
     if(state.page==Page::Editor) {
-        if(MayLeaveEditor(state))ChangePage(state,Page::Apps);
+        if(MayLeaveEditor(state)) {
+            if(state.focusedEditor)DestroyWindow(state.window);
+            else ChangePage(state,Page::Apps);
+        }
     } else if(state.page==Page::About)ChangePage(state,Page::Settings);
     else ChangePage(state,Page::Home);
 }
-void StartEdit(State& state,bool adding) {
+void StartEdit(State& state,bool adding,const AppTarget* preset=nullptr) {
     state.adding=adding; state.dirty=false;
     state.draft=adding?AppTarget{}:state.apps.at(static_cast<size_t>(state.selected));
+    if(adding && preset)state.draft=*preset;
     ChangePage(state,Page::Editor);
+}
+void CompleteEdit(State& state) {
+    if(!SaveDraft(state))return;
+    if(state.focusedEditor)DestroyWindow(state.window);
+    else ChangePage(state,Page::Apps);
 }
 void BrowseTarget(State& state) {
     wchar_t path[32768]{};
@@ -648,7 +657,7 @@ void Command(State& state,int id,int notification) {
     switch(id) {
     case IDCANCEL:case Back:NavigateBack(state);break;
     case IDOK:
-        if(state.page==Page::Editor) {if(SaveDraft(state))ChangePage(state,Page::Apps);}
+        if(state.page==Page::Editor)CompleteEdit(state);
         else if(state.page==Page::Advanced)ChangePage(state,Page::Editor);
         else if(state.page==Page::Apps)StartEdit(state,false);
         break;
@@ -662,7 +671,7 @@ void Command(State& state,int id,int notification) {
     case Advanced:ChangePage(state,Page::Advanced);break;
     case Done:ChangePage(state,Page::Editor);break;
     case Browse:BrowseTarget(state);break;
-    case Save:if(SaveDraft(state))ChangePage(state,Page::Apps);break;
+    case Save:CompleteEdit(state);break;
     case Remove:
         if(state.apps.size()>1 && MessageBoxW(state.window,
             (std::wstring(Tr(L"Remove ",L"移除 "))+state.apps.at(static_cast<size_t>(state.selected)).name+L"?").c_str(),
@@ -741,6 +750,8 @@ LRESULT CALLBACK OsdProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
         case WM_CLOSE:if(MayLeaveEditor(*state))DestroyWindow(window);return 0;
         case WM_NCDESTROY:
             if(gOsd==window)gOsd=nullptr;
+            if(state->focusedEditor && IsWindow(state->notifyOwner))
+                PostMessageW(state->notifyOwner,kTargetEditorClosedMessage,0,0);
             SetWindowLongPtrW(window,GWLP_USERDATA,0);delete state;
             return DefWindowProcW(window,message,wParam,lParam);
         }
@@ -753,11 +764,24 @@ LRESULT CALLBACK OsdProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
 }
 } // namespace
 
-void ShowOsd(HWND owner) {
+void ShowOsdAt(HWND owner,int editorIndex,bool focusedEditor,const AppTarget* preset=nullptr) {
     try {
         if(gOsd&&IsWindow(gOsd)) {
             auto* state=reinterpret_cast<State*>(GetWindowLongPtrW(gOsd,GWLP_USERDATA));
-            if(state)state->notifyOwner=owner;
+            if(state) {
+                if(focusedEditor) {
+                    if(!MayLeaveEditor(*state))return;
+                    std::wstring error;
+                    auto apps=LoadTargets(error);
+                    if(editorIndex < -1 || editorIndex >= static_cast<int>(apps.size()) ||
+                        (editorIndex == -1 && apps.size() >= 8))return;
+                    state->apps=std::move(apps);
+                    state->focusedEditor=true;
+                    state->selected=std::max(0,editorIndex);
+                    StartEdit(*state,editorIndex == -1,preset);
+                }
+                state->notifyOwner=owner;
+            }
             ShowWindow(gOsd,SW_RESTORE);SetForegroundWindow(gOsd);return;
         }
         WNDCLASSEXW cls{sizeof(cls)};
@@ -770,6 +794,16 @@ void ShowOsd(HWND owner) {
         }
         auto state=std::make_unique<State>();state->notifyOwner=owner;
         std::wstring error;state->apps=LoadTargets(error);
+        if(focusedEditor) {
+            if(editorIndex < -1 || editorIndex >= static_cast<int>(state->apps.size()) ||
+                (editorIndex == -1 && state->apps.size() >= 8))return;
+            state->focusedEditor=true;
+            state->adding=editorIndex == -1;
+            state->selected=std::max(0,editorIndex);
+            state->page=Page::Editor;
+            state->draft=state->adding?AppTarget{}:state->apps.at(static_cast<size_t>(editorIndex));
+            if(state->adding && preset)state->draft=*preset;
+        }
         // A real caption preserves drag, taskbar, system-menu and keyboard accessibility.
         // The 560 x 360 client area holds the visual OSD and secondary task sheets.
         POINT pointer{};GetCursorPos(&pointer);
@@ -798,6 +832,9 @@ void ShowOsd(HWND owner) {
         MessageBoxW(owner,Tr(L"The quick menu could not be opened.",L"无法打开快捷菜单。"),kAppName,MB_OK|MB_ICONERROR);
     }
 }
+void ShowOsd(HWND owner) { ShowOsdAt(owner,-1,false); }
+void ShowTargetEditor(HWND owner,int index) { ShowOsdAt(owner,index,true); }
+void ShowPresetTargetEditor(HWND owner,const AppTarget& preset) { ShowOsdAt(owner,-1,true,&preset); }
 void RefreshOsdAppearance() {
     if(gOsd&&IsWindow(gOsd))PostMessageW(gOsd,kAppearanceMessage,0,0);
 }

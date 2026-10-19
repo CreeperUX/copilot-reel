@@ -1,0 +1,260 @@
+{
+  "version": 1,
+  "retrievedOn": "2026-10-19",
+  "purpose": "Application identification inside the launcher. Vendor ownership is preserved; no endorsement is implied.",
+  "rendering": "Supported SVGs use Direct2D. Official PNGs or same-artwork PNG fallbacks are used where Direct2D SVG lacks masks or filters. Source files remain unchanged.",
+  "assets": [
+    {
+      "file": "air.png",
+      "sha256": "78930f803464e222c261b9fbd83d3d9433596a7f8b08d4f34fb882fbec402b5c",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/air/air.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "air.svg",
+      "sha256": "4de230f7e462f4e3b9b579be690dbcc388b37718e7dd80f05157a4c4a1d6b263",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/air/air.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "antigravity.png",
+      "sha256": "e0cd08ccd10cd8d08ccf0ba449823ee88495825c0841619618100d3ab089f51e",
+      "owner": "Google",
+      "source": "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "antigravity.svg",
+      "sha256": "d775965ea1f8060538c15f758a3e22487317211fcb6051333b5e023f35aa726f",
+      "owner": "Google",
+      "source": "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "chatgpt-dark.png",
+      "sha256": "2b001fb1f4e7d76e4d459c2ad8f9739e963ffc1c2137abcfffe8da3ee7775f7c",
+      "owner": "OpenAI",
+      "source": "Installed OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0/assets/Square44x44Logo.targetsize-256_altform-unplated.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "chatgpt-light.png",
+      "sha256": "b45359d98553406d60c45e699cbe80de6fe733d51661a317ca37b41632b58823",
+      "owner": "OpenAI",
+      "source": "Installed OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0/assets/Square44x44Logo.targetsize-256_altform-lightunplated.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "claude.png",
+      "sha256": "28f6dfd7bc66bffe9ac40dac94dc90b7bae9b4a60b123f687c90ab2b86a63eb0",
+      "owner": "Anthropic",
+      "source": "Installed Claude_2.42304.2.0_x64__pzs8sxrjxfjjc/Assets/Square44x44Logo.targetsize-256_altform-unplated.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "clion.png",
+      "sha256": "0cb9758e280cf6fcddb6ee57f524084324f0f74e9fcabebb1a4dcc40fff78e06",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/clion/clion.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "clion.svg",
+      "sha256": "14b0856f56a2e5b5795d2fa90204c90d060b5bdca37038c0aca343bb0faca86b",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/clion/clion.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "dsh.png",
+      "sha256": "12064ff340e65872715cb18e56cfa9d3afe294fed98c81807d39e230a030d972",
+      "owner": "DeepSeek",
+      "source": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/687f282e8625c6b8d11ff58211a90524be2e4317/apps/desktop/resources/icon-windows.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "dsh.svg",
+      "sha256": "0799d196151083f123a8ae28979471da2276f29664b21c562c82a4b789d2104e",
+      "owner": "DeepSeek",
+      "source": "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/687f282e8625c6b8d11ff58211a90524be2e4317/apps/desktop/resources/icon-windows.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "goland.png",
+      "sha256": "aeee2142d0f9c6834067ec826af650eb67647cb2fc86c41a575d718704e46040",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/goland/goland.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "goland.svg",
+      "sha256": "0f9d1c377262c48e1d81ec8b21c823b5e09e195930e8d490396e692387b9a7f5",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/goland/goland.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "intellij-idea.png",
+      "sha256": "e2cf251eeb0539ba37622413918775e5c2be017c55deb8b53945e4819abfbd00",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/intellij-idea/intellij-idea.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "intellij-idea.svg",
+      "sha256": "5ee273a204c3c5b3a33a39269c6cefd87890bdafa64797580daeaf8ea32346c7",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/intellij-idea/intellij-idea.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "jetbrains.png",
+      "sha256": "b2f20e1e7b5bc5115a4c633f6da7f6a0e77c4e55ac58b0d24b11376f6bbdd640",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/jetbrains/icon-512.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "jetbrains.svg",
+      "sha256": "275ecf05c0367efeb2fb75610a045308184e66385e64aaf96b1e9d833e61dee5",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/jetbrains/icon.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "junie.png",
+      "sha256": "0a41d7b5759ba3ca3a612884ed9f449d562cb79c360d27df686d3ac018592a35",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/junie/junie.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "junie.svg",
+      "sha256": "8d1ba3853ded6c6dc44995b0b23ab1319cab5e766ddb019e2096a1e9410b532f",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/junie/junie.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "phpstorm.png",
+      "sha256": "11da0fbe83b6e5c2ed3c3b95e5756b642df9f86925807186ff2d589ba5d53f61",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/phpstorm/phpstorm.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "phpstorm.svg",
+      "sha256": "f11a1e7d4a905e25e968f59417864c7fee2eb75809a7f05948bf8c53c7560895",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/phpstorm/phpstorm.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "pycharm.png",
+      "sha256": "1fb35bb74922433abd6e5d8a4a50e712b1d9b5c9b0815d7be864f15bfd6ce4f6",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/pycharm/pycharm.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "pycharm.svg",
+      "sha256": "1c5ff65221384eabfd7f96853a383d224ac52c6180006e3bf67c10cf4304c671",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/pycharm/pycharm.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "rider.png",
+      "sha256": "a863a9db3e954f3266dee8795a237812fbadbf6ad15ef1666c098c0cadeb4f56",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/rider/rider.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "rider.svg",
+      "sha256": "bffb49d57ae471b45ad85840339b219f0b356c1908038e5bed13be0c0421015a",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/rider/rider.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "rubymine.png",
+      "sha256": "91666889b7c47d728c3f726b8f6c71ff1bedca86d4c2c44714137a30e64d944c",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/rubymine/rubymine.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "rubymine.svg",
+      "sha256": "ed32c22d8da98e8a2888c63f13a9713922be031daf3d6a988ba7c25465eb579a",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/rubymine/rubymine.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "rustrover.png",
+      "sha256": "fb8bf13a7ab0779c679a3b634bb4723445c8e3ce422439fa93b14167b8590204",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/rustrover/rustrover.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "rustrover.svg",
+      "sha256": "d1774fc469c4bf663fd568bc7fa5fbc6e194759584cb3acdd3a01d5ab47aecb2",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/rustrover/rustrover.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "toolbox.png",
+      "sha256": "83675b8836ebe33a9758066cf5ab07445d7fd925f4742904580b16cccbcdca7e",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/toolbox/icon-512.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "toolbox.svg",
+      "sha256": "064f557678557421dbbc65b2b3447df04646f370db87dcc2befa493ff729ea26",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/toolbox/icon.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "vscode.png",
+      "sha256": "7ac29e00cd66e549acc2ea6a99a813f92cb23a6d165293be6959845670f0c5a4",
+      "owner": "Microsoft",
+      "source": "https://code.visualstudio.com/assets/branding/visual-studio-code-icons.zip#visual-studio-code-icons/vscode.png",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "vscode.svg",
+      "sha256": "74ad401c6487a0dc5af1f6b2935556ab2d3553ae45effc7e1697b4d117d046b6",
+      "owner": "Microsoft",
+      "source": "https://code.visualstudio.com/assets/branding/visual-studio-code-icons.zip#visual-studio-code-icons/vscode.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "webstorm.png",
+      "sha256": "f5967e72bb60b7d5dceef99ce3a4ce562fa8ff25433fc1e0299ba7dc5f15b369",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/webstorm/webstorm.svg",
+      "processing": "PNG fallback rasterized at 256 x 256 from the unmodified adjacent official SVG using sharp; no artwork edits"
+    },
+    {
+      "file": "webstorm.svg",
+      "sha256": "23d59d35c6de4f13e5836c93da0e9ea06f2fbe52c7ca1751a23d3dd0fb48cb92",
+      "owner": "JetBrains",
+      "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/webstorm/webstorm.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "zcode.png",
+      "sha256": "ae8cc4ca59180441ce3ba60a572ee9a5ee802f9ab9e7de1177ae5e0027c36a7a",
+      "owner": "Z.ai",
+      "source": "Installed ZCode/resources/icon_windows.png",
+      "processing": "Unmodified upstream file"
+    }
+  ]
+}

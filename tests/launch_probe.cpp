@@ -20,7 +20,7 @@ bool AbsoluteDirectory(std::wstring_view path) {
 }
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int) {
     try {
         std::array<wchar_t, 32768> buffer{};
         const DWORD copied = GetEnvironmentVariableW(L"COPILOT_REEL_DATA_DIR", buffer.data(), static_cast<DWORD>(buffer.size()));
@@ -40,6 +40,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         const DWORD failure = okay ? ERROR_SUCCESS : GetLastError();
         const DWORD code = okay ? ERROR_SUCCESS : (failure != ERROR_SUCCESS ? failure : ERROR_WRITE_FAULT);
         CloseHandle(file);
+        if(okay) {
+            const std::wstring argumentPath=directory+L"launch-probe-args.txt";
+            HANDLE argumentFile=CreateFileW(argumentPath.c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,
+                nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if(argumentFile!=INVALID_HANDLE_VALUE) {
+                const std::wstring line=std::wstring(arguments)+L"\n";
+                const int length=WideCharToMultiByte(CP_UTF8,0,line.data(),static_cast<int>(line.size()),nullptr,0,nullptr,nullptr);
+                std::string utf8(length,'\0');
+                WideCharToMultiByte(CP_UTF8,0,line.data(),static_cast<int>(line.size()),utf8.data(),length,nullptr,nullptr);
+                WriteFile(argumentFile,utf8.data(),static_cast<DWORD>(utf8.size()),&written,nullptr);CloseHandle(argumentFile);
+            }
+        }
         return static_cast<int>(code);
     } catch (...) {
         return ERROR_NOT_ENOUGH_MEMORY;

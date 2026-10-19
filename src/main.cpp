@@ -5,6 +5,10 @@
 #include "settings.h"
 #include "localization.h"
 #include "osd.h"
+#include "behavior.h"
+#include "presets.h"
+#include "official_icons.h"
+#include "radial_menu.h"
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -13,10 +17,12 @@
 #include <sddl.h>
 #include <wtsapi32.h>
 #include <commctrl.h>
+#include <imm.h>
 #include <winrt/base.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -25,10 +31,21 @@
 
 namespace reel {
 namespace {
-constexpr UINT kSmokeTimer=101, kIdleTimer=102;
+constexpr UINT kSmokeTimer=101, kIdleTimer=102, kCloseTimer=103;
 constexpr UINT kCommandPreview=201,kCommandSettings=202,kCommandDiagnostics=203,kCommandExit=204;
 constexpr ULONG_PTR kIpcMagic=0x5245454c;
 constexpr PROPERTYKEY kFastPathKey={{0x38652bca,0x4329,0x4e74,{0x86,0xf9,0x39,0xcf,0x29,0x34,0x5e,0xea}},2};
+
+struct CommandPacket { unsigned version=1; Command command=Command::Invalid; uint64_t stamp=0; POINT pointer{}; };
+uint64_t EventStamp(bool processCreation=false) {
+    FILETIME time{},exit{},kernel{},user{};
+    if(!processCreation || !GetProcessTimes(GetCurrentProcess(),&time,&exit,&kernel,&user))
+        GetSystemTimePreciseAsFileTime(&time);
+    return (static_cast<uint64_t>(time.dwHighDateTime)<<32)|time.dwLowDateTime;
+}
+CommandPacket CaptureCommand(Command command,bool cold=false) {
+    CommandPacket result;result.command=command;result.stamp=EventStamp(cold);GetCursorPos(&result.pointer);return result;
+}
 
 std::wstring DataDirectory() {
     wchar_t overridePath[32768]{};
@@ -71,6 +88,7 @@ Command CommandLine() {
         const std::wstring_view arg=args[1];
         if(arg==L"--background") result=Command::Background;
         else if(arg==L"--preview") result=Command::Preview;
+        else if(arg==L"--tap") result=Command::Tap;
         else if(arg==L"--settings") result=Command::Settings;
         else if(arg==L"--hold-start") result=Command::HoldStart;
         else if(arg==L"--hold-stop") result=Command::HoldStop;
@@ -127,6 +145,9 @@ public:
         if(window) { WTSUnRegisterSessionNotification(window); RemoveTray(); }
     }
     bool Initialize() {
+        // The reel accepts commands, not text. Leave the separate native editor's
+        // IME intact while ensuring A/D also work under Chinese input layouts.
+        ImmAssociateContextEx(window,nullptr,0);
         appearance_=std::make_unique<AppearanceSource>(window);
         renderer_=std::make_unique<OrbitRenderer>(window);
         std::wstring error;
@@ -134,97 +155,256 @@ public:
             Log(L"Renderer initialization failed: "+error);
             MessageBoxW(nullptr,(std::wstring(Tr(L"Could not initialize native Windows rendering.\n",L"无法初始化 Windows 原生绘制。\n"))+error).c_str(),kAppName,MB_OK|MB_ICONERROR); return false;
         }
-        RegisterFastPath(window);
         WTSRegisterSessionNotification(window,NOTIFY_FOR_THIS_SESSION);
+        PreloadOfficialIconAssets();
+        presets_=AgentPresets();
         RefreshAppearance(); Reload(); AddTray();
         // This ordinary optional shortcut opens click-to-select preview; it never intercepts Copilot.
         hotkey_=RegisterHotKey(window,1,MOD_CONTROL|MOD_ALT|MOD_NOREPEAT,'R')!=FALSE;
         ready_=true;
+        RegisterFastPath(window);
         Log(L"Ready; fast-path HWND registered; Ctrl+Alt+R "+std::wstring(hotkey_?L"available":L"unavailable"));
         return true;
     }
-    void CommandReceived(Command command) {
-        switch(command) {
+    void CommandReceived(Command command) { CommandReceived(CaptureCommand(command)); }
+    bool QueueCommand(const CommandPacket& event) {
+        pending_.push_back(event);
+        if(PostMessageW(window,WM_APP+20,0,0))return true;
+        pending_.pop_back();return false;
+    }
+    void DispatchQueued() {
+        if(pending_.empty())return;
+        const auto event=pending_.front();pending_.pop_front();CommandReceived(event);
+    }
+    void CommandReceived(const CommandPacket& event) {
+        switch(event.command) {
         case Command::Background: break;
-        case Command::Settings: Cancel();ShowOsd(window);break;
-        case Command::Preview: case Command::Tap: Start(true);break;
-        case Command::HoldStart: Start(false);break;
-        case Command::HoldStop: if(!preview_) Release();break;
+        case Command::Settings: Cancel();Start(true,event.pointer,MenuPage::Settings);break;
+        case Command::Preview: Start(true,event.pointer);break;
+        case Command::Tap: {
+            Cancel();const int preferred=PreferredTargetIndex(items_);
+            if(preferred>=0)LaunchTarget(items_[preferred]);break;
+        }
+        case Command::HoldStart:
+            if(!gesture_.Active() && ordering_.Start(event.stamp))Start(false,event.pointer);break;
+        case Command::HoldStop:
+            if(ordering_.Stop(event.stamp) && !preview_)Release();break;
         case Command::Cancel: Cancel();break;
-        case Command::Quit: if(CloseOsd()) DestroyWindow(window);break;
+        case Command::Quit:
+            quitting_=true;
+            if(CloseOsd())DestroyWindow(window);else quitting_=false;break;
         case Command::Diagnostics: SaveDiagnostics();break;
         case Command::SmokeTest: BeginSmoke();break;
         default: break;
         }
     }
-    void Start(bool preview) {
-        if(gesture_.Active()) return;
-        preview_=preview;
-        GetCursorPos(&anchor_);
+    void Start(bool preview,POINT pointer,MenuPage page=MenuPage::Main) {
+        if(gesture_.Active() || editorOpen_)return;
+        KillTimer(window,kCloseTimer);closing_=false;
+        previousForeground_=GetForegroundWindow();
+        preview_=preview;page_=page;anchor_=pointer;
         const HMONITOR monitor=MonitorFromPoint(anchor_,MONITOR_DEFAULTTONEAREST);
         UINT xDpi=96,yDpi=96;
-        // GetDpiForMonitor supplies the selected display DPI for the initial placement.
         using GetDpiForMonitorFn=HRESULT(WINAPI*)(HMONITOR,int,UINT*,UINT*);
         HMODULE shcore=LoadLibraryExW(L"shcore.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);
         if(shcore) {
             auto getDpi=reinterpret_cast<GetDpiForMonitorFn>(GetProcAddress(shcore,"GetDpiForMonitor"));
-            if(getDpi) getDpi(monitor,0,&xDpi,&yDpi);
+            if(getDpi)getDpi(monitor,0,&xDpi,&yDpi);
             FreeLibrary(shcore);
         }
         dpi_=xDpi;
-        const int size=MulDiv(static_cast<int>(kCanvasDip),dpi_,96);
-        MONITORINFO info{sizeof(info)};
-        if(!GetMonitorInfoW(monitor,&info)) return;
+        MONITORINFO info{sizeof(info)};if(!GetMonitorInfoW(monitor,&info))return;
         const auto& work=info.rcWork;
-        const auto placement=PlaceWheel(anchor_.x,anchor_.y,{work.left,work.top,work.right,work.bottom},size,kDeadZoneDip*dpi_/96.0);
-        if(!placement.fits) {
-            Log(L"Wheel footprint exceeds monitor work area; opening compact controls instead.");
-            ShowOsd(window);return;
+        int size=MulDiv(static_cast<int>(kCanvasDip),dpi_,96);
+        // A tiny work area reduces the complete canvas uniformly, never opens a
+        // different settings dashboard and never places buttons off screen.
+        if(size>work.right-work.left || size>work.bottom-work.top) {
+            size=std::min(work.right-work.left,work.bottom-work.top);
+            dpi_=std::max(1,MulDiv(size,96,static_cast<int>(kCanvasDip)));
+            size=MulDiv(static_cast<int>(kCanvasDip),dpi_,96);
         }
+        const auto placement=PlaceOrbit(anchor_.x,anchor_.y,{work.left,work.top,work.right,work.bottom},size,kDeadZoneDip*dpi_/96.0);
+        if(!placement.fits)return;
         centerX_=placement.centerX;centerY_=placement.centerY;
+        placing_=true;
         SetWindowPos(window,HWND_TOPMOST,placement.left,placement.top,size,size,SWP_NOACTIVATE);
-        gesture_.Start(placement.awaitingCenter);
-        renderer_->Resize(dpi_);renderer_->SetAppearance(currentAppearance_);renderer_->SetSelection(-1);
-        renderer_->SetAwaitCenter(placement.awaitingCenter);
+        placing_=false;
+        gesture_.Start(!preview && placement.awaitingCenter);
+        renderer_->Resize(dpi_);renderer_->SetAppearance(currentAppearance_);
+        renderer_->SetAnchorOffset(static_cast<float>((anchor_.x-centerX_)*96/dpi_),
+            static_cast<float>((anchor_.y-centerY_)*96/dpi_));
+        languageFocus_=page==MenuPage::Settings;
+        RenderMenu();
         ShowWindow(window,SW_SHOWNOACTIVATE);renderer_->Show();
         RegisterRawInput(true);
-        // Only a one-shot abandonment timeout; animations and mouse tracking have no polling timer.
-        SetTimer(window,kIdleTimer,preview?15000:60000,nullptr);
+        if(preview)ActivateMenu();
+        SetTimer(window,kIdleTimer,preview?60000:60000,nullptr);
         RECT bounds{};GetWindowRect(window,&bounds);
         Log(std::wstring(preview?L"Preview opened":L"Hold started")+L"; pointer="+std::to_wstring(anchor_.x)+L","+std::to_wstring(anchor_.y)+L"; window="+std::to_wstring(bounds.left)+L","+std::to_wstring(bounds.top)+L","+std::to_wstring(bounds.right)+L","+std::to_wstring(bounds.bottom)+L"; awaitingCenter="+(gesture_.AwaitingCenter()?L"true":L"false"));
     }
+    void ActivateMenu() {
+        SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)&~WS_EX_NOACTIVATE);
+        SetForegroundWindow(window);SetFocus(window);
+    }
+    std::wstring MenuTitle() const {
+        switch(page_) {
+        case MenuPage::Manage:return Tr(L"Your apps",L"管理应用");
+        case MenuPage::Presets:return Tr(L"Add an agent",L"添加应用");
+        case MenuPage::Settings:return Tr(L"Settings",L"设置");
+        case MenuPage::Preferred:return Tr(L"Preferred agent",L"首选应用");
+        case MenuPage::Entry:return editing_>=0 && static_cast<size_t>(editing_)<items_.size()?items_[editing_].name:L"";
+        default:return L"Copilot Reel";
+        }
+    }
+    void RenderMenu() {
+        if(page_==MenuPage::Entry && (editing_<0 || static_cast<size_t>(editing_)>=items_.size()))page_=MenuPage::Manage;
+        menu_=BuildMenu(page_,items_,presets_,presetOffset_,editing_);
+        std::vector<AppTarget> visuals;for(const auto& entry:menu_)visuals.push_back(entry.visual);
+        renderer_->SetItems(visuals);
+        renderer_->SetPreferredIndex(page_==MenuPage::Main || page_==MenuPage::Preferred || page_==MenuPage::Manage?PreferredTargetIndex(items_):-1);
+        renderer_->SetMenuContext(MenuTitle(),page_!=MenuPage::Main,languageFocus_);
+        renderer_->SetAwaitCenter(gesture_.AwaitingCenter());renderer_->SetSelection(gesture_.Selected());
+        Log(L"Radial menu: "+MenuTitle()+L"; entries="+std::to_wstring(menu_.size()));
+    }
+    void Navigate(MenuPage page) {
+        page_=page;preview_=true;languageFocus_=page==MenuPage::Settings;
+        gesture_.Cancel();gesture_.Start();
+        RenderMenu();ActivateMenu();SetTimer(window,kIdleTimer,60000,nullptr);
+    }
+    void Back() {
+        if(!gesture_.Active())return;
+        switch(page_) {
+        case MenuPage::Presets:case MenuPage::Entry:Navigate(MenuPage::Manage);break;
+        case MenuPage::Preferred:Navigate(MenuPage::Settings);break;
+        case MenuPage::Main:Cancel();break;
+        default:Navigate(MenuPage::Main);break;
+        }
+    }
+    POINT LocalPointer() const {
+        POINT point{};GetCursorPos(&point);ScreenToClient(window,&point);
+        point.x=MulDiv(point.x,96,dpi_);point.y=MulDiv(point.y,96,dpi_);return point;
+    }
+    bool OnLanguageArrow(POINT point) const {
+        if(!languageFocus_)return false;
+        auto bounds=renderer_->LanguageArrowBounds();
+        for(const auto& r:{bounds.first,bounds.second})
+            if(point.x>=r.left && point.x<=r.right && point.y>=r.top && point.y<=r.bottom)return true;
+        return false;
+    }
     void MovePointer() {
-        if(!gesture_.Active()) return;
+        if(!gesture_.Active())return;
+        const POINT local=LocalPointer();
+        if(OnLanguageArrow(local))return;
         POINT p{};GetCursorPos(&p);
         const bool wasAwaiting=gesture_.AwaitingCenter();
-        if(gesture_.ObservePointer((p.x-centerX_)*96.0/dpi_,(p.y-centerY_)*96.0/dpi_,static_cast<unsigned>(items_.size()))) {
-            renderer_->SetAwaitCenter(gesture_.AwaitingCenter());
-            renderer_->SetSelection(gesture_.Selected());
-            if(wasAwaiting && !gesture_.AwaitingCenter()) Log(L"Center entered; direction selection armed");
+        if(gesture_.ObservePointer((p.x-centerX_)*96.0/dpi_,(p.y-centerY_)*96.0/dpi_,static_cast<unsigned>(menu_.size()))) {
+            renderer_->SetAwaitCenter(gesture_.AwaitingCenter());renderer_->SetSelection(gesture_.Selected());
+            if(wasAwaiting && !gesture_.AwaitingCenter())Log(L"Center entered; direction selection armed");
         }
+    }
+    void SwitchLanguage() {
+        const auto language=CurrentLanguage()==Language::English?Language::SimplifiedChinese:Language::English;
+        if(!SaveLanguage(language)) {Log(L"Language save failed");return;}
+        SetLanguage(language);RenderMenu();RemoveTray();AddTray();RefreshOsdAppearance();
+        Log(language==Language::English?L"Language changed: English":L"Language changed: Simplified Chinese");
+    }
+    void KeyDown(WPARAM key) {
+        if(!preview_ || !gesture_.Active())return;
+        if(key==VK_ESCAPE || key==VK_BACK) {Back();return;}
+        if(page_==MenuPage::Settings && (key=='A'||key=='D'||key==VK_LEFT||key==VK_RIGHT)) {
+            languageFocus_=true;SwitchLanguage();return;
+        }
+        if(key==VK_TAB || key==VK_LEFT || key==VK_RIGHT) {
+            const int count=static_cast<int>(menu_.size());if(!count)return;
+            const int delta=key==VK_LEFT?-1:1;
+            const int selected=gesture_.Selected();
+            gesture_.Select(selected<0?(delta<0?count-1:0):(selected+delta+count)%count,count);
+            languageFocus_=page_==MenuPage::Settings;
+            renderer_->SetSelection(gesture_.Selected());renderer_->SetMenuContext(MenuTitle(),page_!=MenuPage::Main,languageFocus_);
+        }
+        if(key==VK_RETURN || key==VK_SPACE) {
+            const int index=gesture_.Selected();if(index>=0)Choose(index);
+        }
+    }
+    void Click() {
+        if(!preview_ || !gesture_.Active())return;
+        const auto point=LocalPointer();
+        if(OnLanguageArrow(point)) {SwitchLanguage();return;}
+        const int selected=HitTest(point.x-kCenterDip,point.y-kCenterDip,static_cast<unsigned>(menu_.size()));
+        if(selected<0)Back();else Choose(selected);
     }
     void Release() {
-        if(!gesture_.Active()) return;
-        MovePointer();
-        const auto selected=gesture_.Release();
-        Hide();
-        if(selected && static_cast<size_t>(*selected)<items_.size()) {
-            if(smoke) Log(L"Smoke simulated launch: "+items_[*selected].name);
-            else Launch(items_[*selected],window);
+        if(!gesture_.Active())return;
+        MovePointer();const auto selected=gesture_.Release();
+        if(selected)Choose(*selected);else {Hide();Log(L"Gesture canceled before selection");}
+    }
+    void LaunchTarget(const AppTarget& target) {
+        if(smoke)Log(L"Smoke simulated launch: "+target.name);else Launch(target,window);
+    }
+    void Choose(int selected) {
+        if(selected<0 || static_cast<size_t>(selected)>=menu_.size())return;
+        const auto entry=menu_[selected];
+        switch(entry.action) {
+        case MenuAction::Launch:gesture_.Cancel();Hide(false);LaunchTarget(entry.visual);Log(L"Gesture committed");break;
+        case MenuAction::Manage:Navigate(MenuPage::Manage);break;
+        case MenuAction::Settings:Navigate(MenuPage::Settings);break;
+        case MenuAction::Language:languageFocus_=true;renderer_->SetMenuContext(MenuTitle(),true,true);break;
+        case MenuAction::Preferred:Navigate(MenuPage::Preferred);break;
+        case MenuAction::Appearance:
+            gesture_.Cancel();Hide(false);LaunchTarget({L"Windows appearance",TargetKind::Shell,L"ms-settings:colors",L"",L""});break;
+        case MenuAction::Entry:editing_=entry.index;Navigate(MenuPage::Entry);break;
+        case MenuAction::Edit:OpenEditor(entry.index);break;
+        case MenuAction::SetPreferred:
+            if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size() && SavePreferredTarget(items_[entry.index])) {
+                Log(L"Preferred agent saved: "+items_[entry.index].name);Navigate(MenuPage::Settings);
+            }break;
+        case MenuAction::Remove:
+            if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size() && items_.size()>1) {
+                auto candidate=items_;candidate.erase(candidate.begin()+entry.index);std::wstring error;
+                if(SaveTargets(candidate,error)){items_=std::move(candidate);Navigate(MenuPage::Manage);}
+                else MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);
+            }break;
+        case MenuAction::Presets:presetOffset_=0;Navigate(MenuPage::Presets);break;
+        case MenuAction::Previous:presetOffset_=presetOffset_>=5?presetOffset_-5:0;Navigate(MenuPage::Presets);break;
+        case MenuAction::Next:presetOffset_+=5;Navigate(MenuPage::Presets);break;
+        case MenuAction::Custom:OpenEditor(-1);break;
+        case MenuAction::Preset:
+            if(entry.index>=0 && static_cast<size_t>(entry.index)<presets_.size() && items_.size()<8) {
+                const auto preset=presets_[entry.index];
+                if(preset.target.empty())OpenEditor(-1,&preset);
+                else {
+                    auto candidate=items_;candidate.push_back(preset);std::wstring error;
+                    if(SaveTargets(candidate,error)) {items_=std::move(candidate);Navigate(MenuPage::Manage);}
+                    else MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);
+                }
+            }break;
         }
-        Log(selected?L"Gesture committed":L"Gesture canceled at center");
+    }
+    void OpenEditor(int index,const AppTarget* preset=nullptr) {
+        gesture_.Cancel();Hide(false);FinishHide();editorOpen_=true;
+        if(preset)ShowPresetTargetEditor(window,*preset);else ShowTargetEditor(window,index);
+    }
+    void EditorClosed() {
+        editorOpen_=false;if(quitting_)return;
+        std::wstring error;items_=LoadTargets(error);
+        Start(true,anchor_,MenuPage::Manage);
     }
     void Cancel() {
-        if(!gesture_.Active()) return;
+        if(!gesture_.Active())return;
         gesture_.Cancel();Hide();Log(L"Canceled");
     }
-    void Hide() {
-        KillTimer(window,kIdleTimer);
-        RegisterRawInput(false);
-        renderer_->Hide();ShowWindow(window,SW_HIDE);
-        preview_=false;
+    void Hide(bool restoreFocus=true) {
+        KillTimer(window,kIdleTimer);RegisterRawInput(false);preview_=false;
+        if(restoreFocus && GetForegroundWindow()==window && IsWindow(previousForeground_))SetForegroundWindow(previousForeground_);
+        SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)|WS_EX_NOACTIVATE);
+        const unsigned duration=renderer_->BeginHide();closing_=true;
+        if(duration)SetTimer(window,kCloseTimer,duration,nullptr);else FinishHide();
+    }
+    void FinishHide() {
+        KillTimer(window,kCloseTimer);closing_=false;renderer_->Hide();ShowWindow(window,SW_HIDE);
     }
     void RefreshAppearance() {
+        if(!appearance_ || !renderer_)return;
         MSG ignored{};
         while(PeekMessageW(&ignored,window,kAppearanceMessage,kAppearanceMessage,PM_REMOVE)) {}
         currentAppearance_=appearance_->Read();
@@ -233,9 +413,8 @@ public:
         Log(L"Appearance: "+std::wstring(currentAppearance_.dark?L"dark":L"light")+L", transparency="+(currentAppearance_.transparency?L"on":L"off"));
     }
     void Reload() {
-        Cancel();
         std::wstring error;items_=LoadTargets(error);
-        renderer_->SetItems(items_);
+        if(gesture_.Active())Navigate(page_);else RenderMenu();
         if(!error.empty()) {
             Log(L"Configuration validation failed; original file preserved, fallback targets loaded.");
             // Never block initialization in a modal message loop. Settings shows the full error.
@@ -258,7 +437,7 @@ public:
         if(GetRawInputData(input,RID_INPUT,data.data(),&size,sizeof(RAWINPUTHEADER))!=size) return;
         auto raw=reinterpret_cast<const RAWINPUT*>(data.data());
         if(raw->header.dwType==RIM_TYPEMOUSE) MovePointer();
-        else if(raw->header.dwType==RIM_TYPEKEYBOARD && raw->data.keyboard.VKey==VK_ESCAPE && !(raw->data.keyboard.Flags&RI_KEY_BREAK)) Cancel();
+        else if(!preview_ && raw->header.dwType==RIM_TYPEKEYBOARD && raw->data.keyboard.VKey==VK_ESCAPE && !(raw->data.keyboard.Flags&RI_KEY_BREAK)) Cancel();
     }
     void AddTray() {
         NOTIFYICONDATAW data{sizeof(data)};data.hWnd=window;data.uID=1;
@@ -283,8 +462,11 @@ public:
     }
     void SaveDiagnostics() {
         std::wostringstream text;
-        text<<L"Copilot Reel 0.2.0\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
-            <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()<<L"\r\n"<<renderer_->Diagnostics();
+        text<<L"Copilot Reel 0.3.0\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+            <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
+            <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
+            <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
+            <<L"\r\npreview="<<preview_<<L"\r\neditorOpen="<<editorOpen_<<L"\r\n"<<renderer_->Diagnostics();
         const auto bytes=winrt::to_string(text.str());
         const auto path=DataDirectory()+L"\\diagnostics.txt";
         HANDLE file=CreateFileW(path.c_str(),GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
@@ -292,7 +474,7 @@ public:
         Log(L"Diagnostics written");
     }
     void BeginSmoke() {
-        smokeStep_=0;Start(true);SetTimer(window,kSmokeTimer,1000,nullptr);
+        smokeStep_=0;POINT pointer{};GetCursorPos(&pointer);Start(true,pointer);SetTimer(window,kSmokeTimer,1000,nullptr);
     }
     void SmokeStep() {
         ++smokeStep_;
@@ -305,12 +487,24 @@ public:
     bool Ready() const {return ready_;}
     bool Active() const {return gesture_.Active();}
     UINT Dpi() const {return dpi_;}
-    void DpiChanged(UINT dpi) {dpi_=dpi;if(renderer_)renderer_->Resize(dpi_);}
+    void DpiChanged(UINT dpi) {
+        if(placing_)return;
+        if(renderer_ && gesture_.Active()) {Cancel();FinishHide();}
+        dpi_=dpi;if(renderer_)renderer_->Resize(dpi_);
+    }
 private:
     std::unique_ptr<AppearanceSource> appearance_;
     std::unique_ptr<OrbitRenderer> renderer_;
     Appearance currentAppearance_;
-    std::vector<AppTarget> items_;
+    std::vector<AppTarget> items_,presets_;
+    std::vector<MenuEntry> menu_;
+    MenuPage page_=MenuPage::Main;
+    size_t presetOffset_=0;
+    int editing_=-1;
+    bool languageFocus_=false,closing_=false,editorOpen_=false,quitting_=false,placing_=false;
+    HWND previousForeground_=nullptr;
+    HoldOrdering ordering_;
+    std::deque<CommandPacket> pending_;
     GestureState gesture_;
     POINT anchor_{};
     double centerX_=0,centerY_=0;
@@ -339,21 +533,23 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
         case WM_COPYDATA: {
             if(!self->Ready()) return FALSE;
             auto copy=reinterpret_cast<const COPYDATASTRUCT*>(lParam);
-            if(!copy || copy->dwData!=kIpcMagic || copy->cbData!=sizeof(unsigned) || !copy->lpData) return FALSE;
-            unsigned command=0;memcpy(&command,copy->lpData,sizeof(command));
-            if(command>=static_cast<unsigned>(Command::Invalid)) return FALSE;
+            if(!copy || copy->dwData!=kIpcMagic || copy->cbData!=sizeof(CommandPacket) || !copy->lpData) return FALSE;
+            CommandPacket event;memcpy(&event,copy->lpData,sizeof(event));
+            if(event.version!=1 || event.command>=Command::Invalid || !event.stamp) return FALSE;
             // Queue after acknowledging the client. No rendering or Shell activation inside SendMessage.
-            PostMessageW(hwnd,WM_APP+20,command,0);return TRUE;
+            return self->QueueCommand(event);
         }
-        case WM_APP+20:self->CommandReceived(static_cast<Command>(wParam));return 0;
+        case WM_APP+20:self->DispatchQueued();return 0;
         case kAppearanceMessage:case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:self->RefreshAppearance();return 0;
         case kConfigChangedMessage:self->Reload();return 0;
+        case kTargetEditorClosedMessage:self->EditorClosed();return 0;
         case kLanguageChangedMessage:self->RefreshAppearance();self->RemoveTray();self->AddTray();return 0;
         case WM_INPUT:self->RawInput(reinterpret_cast<HRAWINPUT>(lParam));break;
         case WM_MOUSEMOVE:self->MovePointer();return 0;
-        case WM_LBUTTONUP:if(self->IsPreview())self->Release();return 0;
-        case WM_RBUTTONUP:self->Cancel();return 0;
-        case WM_MOUSEACTIVATE:return MA_NOACTIVATE;
+        case WM_LBUTTONUP:self->Click();return 0;
+        case WM_RBUTTONUP:self->Back();return 0;
+        case WM_KEYDOWN:if(!(lParam&(1LL<<30)))self->KeyDown(wParam);return 0;
+        case WM_MOUSEACTIVATE:return self->IsPreview()?MA_ACTIVATE:MA_NOACTIVATE;
         case WM_NCHITTEST: {
             POINT p{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};ScreenToClient(hwnd,&p);
             const double x=p.x*96.0/self->Dpi()-kCenterDip,y=p.y*96.0/self->Dpi()-kCenterDip;
@@ -374,6 +570,7 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
         case WM_TIMER:
             if(wParam==kSmokeTimer)self->SmokeStep();
             else if(wParam==kIdleTimer)self->Cancel();
+            else if(wParam==kCloseTimer)self->FinishHide();
             return 0;
         case WM_DPICHANGED:self->DpiChanged(HIWORD(wParam));return 0;
         case WM_WTSSESSION_CHANGE:if(wParam==WTS_SESSION_LOCK || wParam==WTS_CONSOLE_DISCONNECT || wParam==WTS_REMOTE_DISCONNECT)self->Cancel();return 0;
@@ -396,11 +593,13 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
     using namespace reel;
     try {
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        const Command command=CommandLine();
+        // Capture before COM, icon decode, preset discovery, and GPU startup.
+        const CommandPacket initialEvent=CaptureCommand(command,true);
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         LoadLanguage();
-        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
-        const Command command=CommandLine();
         if(command==Command::Invalid) {MessageBoxW(nullptr,Tr(L"Usage: CopilotReel.exe [--settings | --preview | --background | --diagnostics | --quit]",L"用法：CopilotReel.exe [--settings | --preview | --background | --diagnostics | --quit]"),kAppName,MB_OK|MB_ICONINFORMATION);return 2;}
         const bool smoke=command==Command::SmokeTest;
         const std::wstring suffix=UserSuffix()+(smoke?L".Smoke":L"");
@@ -417,8 +616,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
             bool forwarded=false;
             if(prior) {
                 DWORD pid=0;GetWindowThreadProcessId(prior,&pid);AllowSetForegroundWindow(pid);
-                const unsigned value=static_cast<unsigned>(command);
-                COPYDATASTRUCT copy{kIpcMagic,sizeof(value),const_cast<unsigned*>(&value)};
+                COPYDATASTRUCT copy{kIpcMagic,sizeof(initialEvent),const_cast<CommandPacket*>(&initialEvent)};
                 DWORD_PTR result=0;
                 forwarded=SendMessageTimeoutW(prior,WM_COPYDATA,0,reinterpret_cast<LPARAM>(&copy),SMTO_ABORTIFHUNG,2000,&result) && result;
             }
@@ -426,7 +624,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
         }
         HANDLE ready=CreateEventW(nullptr,TRUE,FALSE,readyName.c_str());
         if(ready) ResetEvent(ready);
-        if(command==Command::Quit || command==Command::Cancel || command==Command::HoldStop) {
+        if(command==Command::Quit || command==Command::Cancel) {
             if(ready)CloseHandle(ready);CloseHandle(mutex);return 0;
         }
         WNDCLASSEXW cls{sizeof(cls)};cls.lpfnWndProc=WindowProcedure;cls.hInstance=instance;cls.lpszClassName=kWindowClass;cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
@@ -435,10 +633,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
         HWND hwnd=CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,kWindowClass,smoke?L"Copilot Reel Smoke":kAppName,WS_POPUP,0,0,384,384,nullptr,nullptr,instance,&controller);
         if(!hwnd || !controller.Initialize()) {if(hwnd)DestroyWindow(hwnd);if(ready)CloseHandle(ready);CloseHandle(mutex);return 5;}
         if(ready)SetEvent(ready);
-        if(command==Command::HoldStart) {
-            // URI cold activation has no gesture sequence ID. First cold hold only warms the receiver.
-            Log(L"Cold URI hold: resident initialized; first gesture suppressed to avoid stale release races");
-        } else controller.CommandReceived(command);
+        controller.CommandReceived(initialEvent);
         MSG message{};int status;
         while((status=GetMessageW(&message,nullptr,0,0))>0) {
             HWND active=GetActiveWindow();

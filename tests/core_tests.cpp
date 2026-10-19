@@ -1,4 +1,5 @@
 #include "core.h"
+#include "radial_menu.h"
 #include <iostream>
 #include <limits>
 #include <cstdlib>
@@ -10,7 +11,7 @@ int main() {
     using namespace reel;
     Check(HitTest(0,0,6)==-1, "center cancels");
     Check(HitTest(44,0,6)==-1, "dead zone boundary cancels");
-    for (unsigned count=1; count<=8; ++count) {
+    for (unsigned count=1; count<=12; ++count) {
         for (unsigned i=0; i<count; ++i) {
             const double angle=-kPi/2 + i*2*kPi/count;
             Check(HitTest(112*std::cos(angle),112*std::sin(angle),count)==static_cast<int>(i), "sector centers match shared layout");
@@ -18,7 +19,17 @@ int main() {
         }
     }
     Check(HitTest(10,100,0)==-1, "empty targets");
+    Check(HitTest(10,100,13)==-1, "unsupported sector count rejected");
     Check(HitTest(std::numeric_limits<double>::quiet_NaN(),100,6)==-1, "invalid pointer rejected");
+    Check(HitTest(100,std::numeric_limits<double>::infinity(),12)==-1, "infinite pointer rejected");
+    for(unsigned count=2;count<=12;++count) {
+        const double step=2*kPi/count;
+        for(unsigned i=0;i<count;++i) {
+            const double boundary=-kPi/2+(i+.5)*step;
+            Check(HitTest(112*std::cos(boundary-1e-7),112*std::sin(boundary-1e-7),count)==static_cast<int>(i),"sector boundary preserves earlier side");
+            Check(HitTest(112*std::cos(boundary+1e-7),112*std::sin(boundary+1e-7),count)==static_cast<int>((i+1)%count),"sector boundary advances to next side");
+        }
+    }
     for(const WorkArea work : {WorkArea{0,0,1920,1040},WorkArea{-2560,-200,0,1240}}) {
         for(int size : {384,576,768}) {
             const int xs[]={work.left,work.right-1,(work.left+work.right)/2};
@@ -35,6 +46,46 @@ int main() {
     Check(!PlaceWheel(0,0,{0,0,300,300},384,44).fits,"undersized display never clips silently");
     const auto interior=PlaceWheel(600,400,{0,0,1920,1040},384,44);
     Check(interior.centerX==600 && interior.centerY==400 && !interior.awaitingCenter,"interior stays pointer-centered");
+    for(const WorkArea work : {WorkArea{0,0,1920,1040},WorkArea{-3840,-2160,0,0},WorkArea{1920,-1080,5760,2160}}) {
+        for(int dpi : {96,120,144,168,192,288,384}) {
+            const int size=384*dpi/96;
+            const double deadZone=44.0*dpi/96;
+            const int xs[]={work.left,work.left+1,(work.left+work.right)/2,work.right-2,work.right-1};
+            const int ys[]={work.top,work.top+1,(work.top+work.bottom)/2,work.bottom-2,work.bottom-1};
+            for(int x:xs)for(int y:ys) {
+                const auto placement=PlaceOrbit(x,y,work,size,deadZone);
+                const bool shouldFit=work.right-work.left>=size && work.bottom-work.top>=size;
+                Check(placement.fits==shouldFit,"orbit fit respects the complete physical footprint at every DPI");
+                if(!shouldFit)continue;
+                Check(placement.size==size && placement.left>=work.left && placement.top>=work.top &&
+                    placement.left+size<=work.right && placement.top+size<=work.bottom,
+                    "orbit and shadow stay inside all monitor edges and corners");
+                Check(placement.centerX==placement.left+size/2.0 && placement.centerY==placement.top+size/2.0,
+                    "orbit hit-test origin equals its rendered center");
+                const double dx=x-placement.centerX,dy=y-placement.centerY;
+                Check(placement.awaitingCenter==(dx*dx+dy*dy>deadZone*deadZone),
+                    "orbit arms only when the original pointer is inside the displayed cancel zone");
+                constexpr int offsetX=-5000,offsetY=777;
+                const auto translated=PlaceOrbit(x+offsetX,y+offsetY,
+                    {work.left+offsetX,work.top+offsetY,work.right+offsetX,work.bottom+offsetY},size,deadZone);
+                Check(translated.left==placement.left+offsetX && translated.top==placement.top+offsetY &&
+                    translated.awaitingCenter==placement.awaitingCenter,
+                    "orbit placement is invariant under monitor-origin translation");
+            }
+        }
+    }
+    for(int dpi : {96,120,144,192,288,384}) {
+        const int size=384*dpi/96;
+        const auto placement=PlaceOrbit(0,0,{-5000,-5000,5000,5000},size,44.0*dpi/96);
+        const double length=std::hypot(placement.centerX,placement.centerY);
+        Check(std::abs(length-168.0*dpi/96)<1.0,"unconstrained orbit connector has one outer-radius length");
+        Check(placement.awaitingCenter,"displaced hold cannot preselect the sector under the opening pointer");
+    }
+    Check(!PlaceOrbit(0,0,{0,0,300,300},384,44).fits,"orbit rejects a screen smaller than its footprint");
+    Check(!PlaceOrbit(0,0,{0,0,1920,1080},0,44).fits,"orbit rejects an empty canvas");
+    const auto corner=PlaceOrbit(-3840,-2160,{-3840,-2160,0,0},768,88);
+    Check(std::hypot(corner.centerX+3840,corner.centerY+2160)>336,
+        "corner containment can lengthen the connector instead of clipping the circle");
     GestureState g;
     Check(!g.Release(), "orphan stop cannot launch");
     Check(g.Start(), "start arms");
@@ -55,10 +106,90 @@ int main() {
     Check(g.ObservePointer(0,-112,6) && g.Release()==0,"armed selection uses visual center");
     g.Start(true);g.ObservePointer(0,0,6);g.ObservePointer(112,0,6);g.ObservePointer(0,0,6);
     Check(!g.Release(),"returning to center cancels after arming");
+    HoldOrdering ordering;
+    Check(ordering.Start(100),"first Down is accepted");
+    Check(!ordering.Start(100) && !ordering.Start(99),"duplicate and stale Down are rejected");
+    Check(!ordering.Stop(99),"older Up cannot close a newer hold");
+    Check(ordering.Stop(101),"matching later Up closes the hold");
+    Check(!ordering.Start(100) && !ordering.Start(101),"Up tombstone rejects an equal or earlier Down");
+    Check(ordering.Start(102) && !ordering.Stop(101) && ordering.Stop(103),"next hold is independent of stale prior Up");
+    HoldOrdering cold;
+    Check(cold.Stop(200),"orphan cold Up records a tombstone");
+    Check(!cold.Start(199) && !cold.Start(200),"cold Up arriving first suppresses a delayed older Down");
+    Check(cold.Start(201) && cold.Stop(202),"later deliberate hold remains usable after a cold tombstone");
+    HoldOrdering once;
+    GestureState onceGesture;
+    int launches=0;
+    if(once.Start(500))onceGesture.Start();
+    onceGesture.Select(11,12);
+    if(once.Stop(501) && onceGesture.Release())++launches;
+    if(once.Stop(501) && onceGesture.Release())++launches;
+    Check(launches==1,"duplicate release packets cannot launch an agent twice");
+
+    SetLanguage(Language::English);
+    std::vector<AppTarget> presets;
+    for(int i=0;i<13;++i)presets.push_back({L"Preset "+std::to_wstring(i),TargetKind::Shell,L"",L"",L""});
+    for(size_t count=1;count<=8;++count) {
+        std::vector<AppTarget> apps;
+        for(size_t i=0;i<count;++i)apps.push_back({L"App "+std::to_wstring(i),TargetKind::Shell,
+            L"C:\\Apps\\App"+std::to_wstring(i)+L".exe",L"",L""});
+        const auto main=BuildMenu(MenuPage::Main,apps,presets);
+        Check(main.size()==count+2 && main.size()<=12,"main wheel reserves separate manage and settings sectors");
+        for(size_t i=0;i<count;++i) {
+            Check(main[i].action==MenuAction::Launch && main[i].index==static_cast<int>(i) &&
+                main[i].visual.target==apps[i].target,"launch sectors preserve target identity and index");
+        }
+        Check(main[count].action==MenuAction::Manage && main[count+1].action==MenuAction::Settings,
+            "main internal routes never become launch targets");
+        const auto manage=BuildMenu(MenuPage::Manage,apps,presets);
+        Check(manage.size()==count+(count<8?1:0),"manage wheel exposes Add only below the saved-app limit");
+        for(size_t i=0;i<count;++i)
+            Check(manage[i].action==MenuAction::Entry && manage[i].index==static_cast<int>(i),"manage opens the selected entry submenu");
+        if(count<8)Check(manage.back().action==MenuAction::Presets,"Add opens the preset wheel");
+        const auto preferred=BuildMenu(MenuPage::Preferred,apps,presets);
+        Check(preferred.size()==count,"preferred wheel lists every saved app");
+        for(size_t i=0;i<count;++i) {
+            Check(preferred[i].action==MenuAction::SetPreferred && preferred[i].index==static_cast<int>(i),
+                "preferred choice changes preference without launching");
+            const auto entry=BuildMenu(MenuPage::Entry,apps,presets,0,static_cast<int>(i));
+            Check(entry.size()==(count>1?3u:2u) && entry[0].action==MenuAction::Edit &&
+                entry[1].action==MenuAction::SetPreferred,"entry wheel provides edit and preferred actions");
+            for(const auto& command:entry)Check(command.index==static_cast<int>(i) && command.action!=MenuAction::Launch,
+                "entry submenu preserves its app index and cannot launch");
+            if(count>1)Check(entry[2].action==MenuAction::Remove,"remove is available only while another app remains");
+        }
+    }
+    const std::vector<AppTarget> noApps;
+    const auto settings=BuildMenu(MenuPage::Settings,noApps,presets);
+    Check(settings.size()==3 && settings[0].action==MenuAction::Language &&
+        settings[1].action==MenuAction::Preferred && settings[2].action==MenuAction::Appearance,
+        "settings remains a wheel with language, preferred agent, and system appearance routes");
+    for(const auto& command:settings)Check(command.visual.target.starts_with(L"reel:") && command.action!=MenuAction::Launch,
+        "settings metadata cannot be mistaken for an app-launch action");
+    for(size_t offset : {0u,5u,10u}) {
+        const auto page=BuildMenu(MenuPage::Presets,noApps,presets,offset);
+        const size_t shown=std::min(size_t{5},presets.size()-offset);
+        Check(page.size()==shown+1+(offset>0?1:0)+(offset+5<presets.size()?1:0) && page.size()<=8,
+            "preset page budgets room for custom and navigation sectors");
+        for(size_t i=0;i<shown;++i)Check(page[i].action==MenuAction::Preset &&
+            page[i].index==static_cast<int>(offset+i) && page[i].visual.target.empty(),
+            "preset page preserves absolute indices and missing desktop targets");
+        Check(page[shown].action==MenuAction::Custom,"custom executable selection is always available");
+        size_t navigation=shown+1;
+        if(offset>0)Check(page[navigation++].action==MenuAction::Previous,"later preset pages provide a previous route");
+        if(offset+5<presets.size())Check(page[navigation].action==MenuAction::Next,"nonfinal preset pages provide a next route");
+    }
+    Check(BuildMenu(MenuPage::Presets,noApps,noApps).size()==1,"empty preset catalog still permits a custom app");
+    SetLanguage(Language::SimplifiedChinese);
+    const auto translatedSettings=BuildMenu(MenuPage::Settings,noApps,presets);
+    Check(translatedSettings[0].visual.name!=settings[0].visual.name &&
+        translatedSettings[0].action==settings[0].action && translatedSettings[0].visual.target==settings[0].visual.target,
+        "language changes labels without changing action identity");
+    SetLanguage(Language::English);
     Check(ParseUri(L"copilot-reel://?state=Down")==Command::HoldStart, "protocol down");
     Check(ParseUri(L"copilot-reel://?state=Up")==Command::HoldStop, "protocol up");
     Check(ParseUri(L"copilot-reel://?state=Tap")==Command::Tap, "protocol tap");
     Check(ParseUri(L"copilot-reel://?state=Up&target=evil.exe")==Command::Invalid, "URI cannot inject target");
     Check(ParseUri(L"https://example.com/?state=Down")==Command::Invalid, "foreign URI rejected");
-    std::cout << "Core tests passed: 1-8 sector geometry, center/outer regions, gesture lifetime, exactly-once release, protocol validation.\n";
+    std::cout << "Core tests passed: 1-12 sectors, orbit placement at 96-384 DPI and negative monitor origins, cold gesture ordering, exactly-once release, radial routes, preset pagination, and protocol validation.\n";
 }
