@@ -1,6 +1,6 @@
-# VI source package v0.3
+# VI source package v0.4
 
-The selected scheme is `orbit` (Soft Orbit). The OSD extension provides a primary quick menu, secondary Settings, and focused app editing. Edge half-orbit/fan layouts are specifications awaiting implementation.
+The selected scheme is `orbit` (Soft Orbit). The OSD extension provides a primary quick menu, secondary Settings, and focused app editing. The revised edge proposal preserves the full circle, applies minimal translation, and waits for center entry when necessary. It is not implemented yet.
 
 - `vectors/`: 26 SVGs; 12 comparison/brand variants, 4 Soft Orbit material variants, and 10 OSD screen/theme variants.
 - `tokens.json`: English semantic design tokens and explicit implementation status.
@@ -8,7 +8,7 @@ The selected scheme is `orbit` (Soft Orbit). The OSD extension provides a primar
 - `source/scene.py`: shared vector drawing primitives.
 - `source/osd_pages.py`: English OSD and edge-layout specification pages.
 - `source/build_vi.py`: PDF, SVG, and token generator.
-- [Review PDF](../../output/pdf/copilot-reel-vi-v0.3.pdf): 10 pages.
+- [Review PDF](../../output/pdf/copilot-reel-vi-v0.4.pdf): 12 pages.
 
 ## Rebuild
 

@@ -326,9 +326,9 @@ def desktop(s,x,y,w,h,dark=False):
         s.rect(px+20,py+61+i*27,(pw-44)*[.7,.92,.86,.54,.8,.63][i],5,edge,r=2.5,alpha=.55)
 
 
-def footer(s,page,total=10):
+def footer(s,page,total=12):
     s.line(64,835,1376,835,LINE)
-    s.text(64,852,'COPILOT REEL  /  SOFT ORBIT + OSD CONTROLS  /  v0.3',12,MUTED)
+    s.text(64,852,'COPILOT REEL  /  SOFT ORBIT + OSD CONTROLS  /  v0.4',12,MUTED)
     s.text(1376,852,f'{page:02d} / {total:02d}',12,MUTED,align='right')
 
 

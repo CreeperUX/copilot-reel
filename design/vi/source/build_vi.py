@@ -10,9 +10,9 @@ def main():
     VECTORS.mkdir(parents=True,exist_ok=True)
     PDF_DIR.mkdir(parents=True,exist_ok=True)
     pages=build_pages()
-    path=PDF_DIR/'copilot-reel-vi-v0.3.pdf'
+    path=PDF_DIR/'copilot-reel-vi-v0.4.pdf'
     document=canvas.Canvas(str(path),pagesize=(PAGE_W*PDF_SCALE,PAGE_H*PDF_SCALE),pageCompression=1)
-    document.setTitle('Copilot Reel - Soft Orbit and OSD Controls v0.3')
+    document.setTitle('Copilot Reel - Stable Orbit and OSD Controls v0.4')
     document.setAuthor('Copilot Reel')
     for page in pages:
         page.draw_pdf(document);document.showPage()
@@ -31,7 +31,7 @@ def main():
             scene=Scene(600,400);osd(scene,20,20,theme,screen)
             (VECTORS/f'osd-{screen}-{theme}.svg').write_text(scene.svg('OSD / '+screen+' / '+theme),encoding='utf-8',newline='\n')
     tokens={
-        'schemaVersion':'0.3','status':'selected-direction-and-osd-specification',
+        'schemaVersion':'0.4','status':'selected-direction-and-osd-specification',
         'units':'DIP','defaultScheme':'orbit','defaultLanguage':'en-US','supportedLanguages':['en-US','zh-CN'],
         'rendering':'native vector geometry and DirectWrite text',
         'typography':{'preferred':'Segoe UI Variable','fallback':'Segoe UI','cjk':'system fallback','applicationLabel':14,'statusLabel':12},
@@ -42,7 +42,7 @@ def main():
         'palettes':PALETTES,
         'schemes':{'halo':{'name':'Fluent Halo','status':'comparison','diameter':320},'petals':{'name':'Command Petals','status':'comparison','designBounds':360},'orbit':{'name':'Soft Orbit','status':'selected','diameter':336,'icon':40,'orbitRadius':112,'selectionSeat':[60,64],'selectedScaleMax':1.03}},
         'osd':{'status':'design-not-yet-implemented','panelSize':[560,360],'outerRadius':16,'contentInset':24,'rowHeight':47,'primary':['Apps','Appearance','Settings'],'languageLocation':'Settings / Language','editorAdvancedFields':['arguments','workingDirectory','AUMID'],'placement':'center within the current monitor work area'},
-        'edgeLayout':{'status':'design-not-yet-implemented','interior':'full pointer-centered orbit','edge':'inward half orbit','corner':'inward staggered fan','origin':'original pointer position remains cancellation origin','cursorWarp':False,'layoutContract':'rendering and hit testing share the same geometry; preserve item order'},
+        'edgeLayout':{'status':'revised-proposal-not-yet-implemented','interior':'full pointer-centered orbit','edge':'minimal whole-circle translation inside monitor work area','corner':'minimal whole-circle translation on both axes','origin':'relocated visual center is the only armed hit-test origin','cursorWarp':False,'guard':'if the original pointer is outside the relocated center zone, remain unselected until it enters; early release cancels','timerRecenter':False,'invariants':['item order','item angles','orbit radius','icon size'],'layoutContract':'rendering and hit testing share the same center and geometry','tradeoff':'edge activation may require an inward movement before direction selection'},
         'handoff':{'appSymbols':'illustrative; preserve installed-app icons','svgText':'editable text with system-font references','pdf':'embedded fonts and vector shapes','png':'review snapshots only','backdrop':'independent native compositor effect','architecture':'single process; input/state/shared-layout/theme-policy/renderer/services separation'}
     }
     (VI/'tokens.json').write_text(json.dumps(tokens,indent=2)+'\n',encoding='utf-8',newline='\n')

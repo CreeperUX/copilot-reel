@@ -6,7 +6,7 @@ Copilot Reel uses the official Windows Copilot hardware key provider contract an
 
 The implementation is one native C++20 process with a Win32 message loop. Windows Composition owns the visual tree and property animations; Direct2D and DirectWrite render geometry, icons, and text into reusable surfaces. The first visual scheme is Soft Orbit.
 
-VI v0.3 specifies an OSD quick menu with second-level Settings and focused app task sheets. The current functional editor is transitional. Ordinary launch opens the pointer-centered reel. Inward half-orbit/corner fan adaptations are designed but still require a shared native layout/hit-test implementation.
+VI v0.4 specifies an OSD quick menu with second-level Settings and focused app task sheets. The current functional editor is transitional. Ordinary launch opens the pointer-centered reel. The edge proposal preserves the full circle, minimally shifts it inside the monitor work area, and waits for center entry when the pointer begins outside its relocated cancellation zone. This behavior still requires native implementation; the earlier half-orbit/fan proposals are rejected.
 
 Only the wheel registers as a provider. Its targets are ordinary executables, shortcuts, URIs, or applicable packaged application AUMIDs.
 

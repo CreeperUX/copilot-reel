@@ -26,7 +26,7 @@ Local evidence is in ignored `artifacts/qa` and `artifacts/signing` directories.
 - URI cold activation and release during startup, with ordering and cancellation.
 - Real frosted-background appearance, circular clipping, and solid fallback; high contrast, disabled animations, and live changes.
 - Multiple monitors, mixed DPI, display boundaries, and mixed refresh rates.
-- OSD navigation and inward half-orbit/corner fan designs from VI v0.3 are specified but not implemented.
+- OSD navigation and guarded full-circle edge placement from VI v0.4 are specified but not implemented. The earlier half-orbit/fan designs are rejected.
 - Measured presentation/resource use at 60/144/240 Hz, static/hidden states, and battery/energy saver.
 - Existing, minimized, and cold instances of each supported target application, including foreground activation.
 

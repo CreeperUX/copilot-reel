@@ -3,7 +3,7 @@
 #set text(font: "Segoe UI", size: 10pt)
 #set page(margin: 24mm)
 = Copilot Reel / Soft Orbit and OSD Controls
-Version 0.3. All dimensions are design proposals in DIP.
+Version 0.4. All dimensions are design proposals in DIP.
 
 #table(
   columns: (2fr, 1fr, 3fr),
@@ -32,7 +32,10 @@ Primary menu: Apps, Appearance, Settings. Language is a secondary Settings item.
 Advanced launch fields belong in the app task sheet, collapsed by default.
 
 == Pointer placement
-The reel follows the pointer. At an edge use an inward half orbit; at a corner
-use an inward staggered fan. Keep the original pointer as the cancellation
-origin and share all geometry with hit testing. These edge adaptations are
-specified designs and still require native implementation and validation.
+Keep the full circle, preserving slot order, angles, radius, and icon size. Apply
+the smallest translation needed to fit the monitor work area. Do not warp the
+system pointer by default. If it starts outside the relocated center zone,
+keep selection empty until center entry; release before entry cancels. Once
+armed, use the visual center for all hit testing. No timer changes the origin.
+This proposed guard adds an inward movement at edges and still requires native
+implementation and usability validation. Half-orbit and fan layouts are rejected.

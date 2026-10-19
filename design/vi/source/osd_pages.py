@@ -1,7 +1,7 @@
 """English OSD design extension. All layouts are editable vector scenes."""
 from scene import *
 
-TOTAL = 10
+TOTAL = 12
 
 def chevron(s,x,y,color,back=False):
     d=-1 if back else 1
@@ -102,7 +102,7 @@ def page(number,tag,title,subtitle=''):
 
 def build_pages():
     pages=[]
-    s=page(1,'SELECTED DIRECTION / OSD EXTENSION','Soft Orbit. Less interface.','Copilot Reel visual identity v0.3 - native Windows styling, progressive disclosure.')
+    s=page(1,'SELECTED DIRECTION / OSD EXTENSION','Soft Orbit. Less interface.','Copilot Reel visual identity v0.4 - native Windows styling, stable radial layouts.')
     wheel(s,'orbit','light',1,350,490,1.2,True)
     osd(s,736,298,'dark','home',1.07)
     s.text(64,742,'Hold to launch. Open the menu to configure.',25,INK,True)
@@ -147,29 +147,25 @@ def build_pages():
     s.wrap(760,710,'A small anchored language menu replaces an always-visible configuration field. Selection is persisted independently of app targets.',600,19,30,MUTED)
     pages.append(s)
 
-    s=page(7,'POINTER PLACEMENT / EDGE LAYOUT','The reel follows the pointer. The OSD does not.','The original pointer position is always the cancellation origin. Never silently warp the pointer.')
-    for i,(title,detail) in enumerate([('Interior','Full orbit'),('Screen edge','Inward half orbit'),('Screen corner','Inward fan')]):
+    s=page(7,'POINTER PLACEMENT / REVISED EDGE DESIGN','Keep the circle. Move only what must move.','Preserve every slot, angle, radius, and icon size. Shift the complete reel only enough to fit.')
+    for i,(title,detail) in enumerate([('Interior','Open around the pointer.'),('Screen edge','Shift the whole circle inward.'),('Screen corner','Shift the same circle on both axes.')]):
         x=64+i*448
         s.rect(x,218,416,400,'#F1F5F9',LINE,1,12)
+        s.text(x+16,236,'MONITOR WORK AREA',11,MUTED)
         if i==0:
-            wheel(s,'orbit','light',1,x+208,420,.8)
+            wheel(s,'orbit','light',None,x+208,420,.8)
+            pointer(s,x+188,400,False,.8)
         else:
-            origin=(x+394,420) if i==1 else (x+394,594)
-            ox,oy=origin
-            start,end=(112,248) if i==1 else (196,254)
-            with s.group(ox,oy):
-                s.path(wedge(240 if i==2 else 190,30,start-10,end+10),'#E7EDF5','#CCD3DC',1)
-                for j in range(6):
-                    r=(210 if j%2 else 140) if i==2 else 152
-                    a=start+(end-start)*j/5
-                    gx,gy=point(r,a)
-                    s.rect(gx-21,gy-21,42,42,'#FCFCFD','#CCD3DC',1,10)
-                    glyph(s,j,gx,gy,25,'#4A515D')
-                s.circle(0,0,8,BLUE)
-            pointer(s,ox,oy,False,.8)
+            cx,cy=x+260,420 if i==1 else 454
+            wheel(s,'orbit','light',None,cx,cy,.8)
+            with s.group(cx,cy,.8):
+                s.circle(0,0,44,'#FFFFFF',BLUE,1.6)
+                s.text(0,-16,'Move',14,INK,True,'center')
+                s.text(0,6,'here',12,MUTED,align='center')
+            pointer(s,x+394,420 if i==1 else 594,False,.8)
         s.text(x+24,645,title,22,INK,True)
         s.text(x+24,683,detail,17,MUTED)
-    s.wrap(64,743,'Edge layouts are a proposed adaptation: use one shared layout for rendering and hit testing. Preserve item order, expand toward free space, and validate spacing for 1-8 items.',1312,18,28,INK)
+    s.wrap(64,743,'If the pointer starts outside the relocated center zone, keep every item unselected until the pointer enters that zone. Releasing before entry cancels. No timer silently changes the hit-test origin.',1312,18,28,INK)
     pages.append(s)
 
     s=page(8,'DESIGN TOKENS / GEOMETRY','One visual system across the reel and OSD.','All sizes are proposal values in DIP. They are not official Windows radial-menu specifications.')
@@ -197,12 +193,49 @@ def build_pages():
     s.text(64,214,'Implemented prototype',23,INK,True)
     s.wrap(64,258,'Native Soft Orbit rendering; Windows appearance events; app launching and configuration; signed Copilot provider registration. Settings recognition has been verified on the development machine.',610,18,30,MUTED)
     s.text(790,214,'Specified in this revision',23,INK,True)
-    s.wrap(790,258,'OSD quick menu; second-level Settings; app task sheets; compact language selection; pointer-edge fan layouts. These drawings do not claim that the new screens are already implemented.',570,18,30,MUTED)
+    s.wrap(790,258,'OSD quick menu; second-level Settings; app task sheets; compact language selection; stable full-circle edge placement with an explicit center-entry guard. These are specifications, not completed native screens.',570,18,30,MUTED)
     s.line(64,406,1376,406,LINE)
     refs=[('Windows materials','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials'),('Windows geometry','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/geometry'),('Windows typography','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/typography'),('Windows motion','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/motion'),('Windows theme support','learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-windows-themes'),('Apple materials','developer.apple.com/design/human-interface-guidelines/materials')]
     for i,(label,url) in enumerate(refs):
         col=i//3;rowIndex=i%3;xx=64+col*672;yy=443+rowIndex*96
         s.text(xx,yy,label,18,INK,True);s.wrap(xx,yy+32,url,630,13,20,MUTED)
     s.text(64,774,'Review date: 2026-10-19. Native UI supports English and Simplified Chinese; all development specifications use English.',15,MUTED)
+    pages.append(s)
+
+    s=page(11,'PRECEDENTS / EVIDENCE','Preserve the layout. Be explicit about the pointer.','Research favors a complete radial layout; the input-origin policy is a separate design decision.')
+    precedents=[
+        ('Kando + Fly-Pie','Whole-menu repositioning','Both clamp the complete radial menu inside the display. Their implementations can move the system pointer by the same offset. This aligns the visible and logical centers, but the pointer moves.'),
+        ('Blender','Recenter timeout','Blender keeps the complete pie inside the window. A temporary original-center phase supports quick gestures before using the relocated center. A time-driven center change needs care for release-to-launch.'),
+        ('Maya','Direction memory','Autodesk documents fast selection through familiar item positions. This supports stable slots. It does not establish a specific screen-edge algorithm, so none is attributed here.')]
+    for i,(name,title,body) in enumerate(precedents):
+        x=64+i*448
+        s.text(x,220,name,25,INK,True);s.text(x,267,title,18,BLUE)
+        s.wrap(x,312,body,390,18,30,MUTED)
+    s.line(64,536,1376,536,LINE)
+    s.text(64,565,'What we adopt',23,INK,True)
+    s.wrap(64,608,'The full circle stays intact and receives the smallest translation needed to fit the current monitor work area. No half-circle, fan, rotation, or per-item radius change.',610,18,29,MUTED)
+    s.text(790,565,'What we change',23,INK,True)
+    s.wrap(790,608,'Default to no cursor warping. When needed, explicitly wait for center entry before arming direction selection. This guard is our proposal, not a claimed Kando or Blender feature.',570,18,29,MUTED)
+    s.text(64,744,'References: kando.menu/config-files/#warpmouse  |  github.com/Schneegans/Fly-Pie',13,MUTED)
+    s.text(64,775,'Blender Manual: Interface / Pie Menus / Recenter Timeout  |  Autodesk Maya: Marking Menus',13,MUTED)
+    pages.append(s)
+
+    s=page(12,'INPUT SAFETY / PROPOSED CENTER-ENTRY GUARD','No surprise selection after repositioning.','Only require center entry when the initial pointer falls outside the relocated cancellation zone.')
+    stages=[('Await center','Release cancels. Nothing is selected.'),('Armed at center','The center is still a cancellation zone.'),('Choose a direction','Release opens the chosen application.')]
+    for i,(title,description) in enumerate(stages):
+        x=64+i*448
+        s.rect(x,218,416,376,'#F1F5F9',LINE,1,12)
+        wheel(s,'orbit','light',1 if i==2 else None,x+208,407,.88)
+        if i==0:
+            with s.group(x+208,407,.88):
+                s.circle(0,0,44,'#FFFFFF',BLUE,1.6)
+                s.text(0,-16,'Move',14,INK,True,'center');s.text(0,6,'here',12,MUTED,align='center')
+            pointer(s,x+389,559,False,.8)
+        elif i==1:pointer(s,x+188,387,False,.8)
+        else:pointer(s,x+272,369,False,.8)
+        s.text(x+24,619,title,22,INK,True)
+        s.wrap(x+24,660,description,365,17,27,MUTED)
+    s.wrap(64,738,'Trade-off: at a physical edge or corner, the user first moves inward to the center, then toward the target. This is more predictable than an invisible origin switch, but slower than a single blind flick.',1312,18,28,INK)
+    s.text(64,807,'Optional pointer recentering remains a separately disclosed alternative. This revision changes the specification only.',14,MUTED)
     pages.append(s)
     return pages

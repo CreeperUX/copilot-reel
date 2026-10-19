@@ -1,10 +1,10 @@
-# Visual identity v0.3: Soft Orbit and OSD controls
+# Visual identity v0.4: Stable Orbit and OSD controls
 
 Soft Orbit is the selected reel design. Fluent Halo and Command Petals remain comparison assets. The OSD extension replaces the large configuration form as the target interface, with a compact primary menu and focused secondary pages.
 
 ## Deliverables
 
-- [English VI PDF](../output/pdf/copilot-reel-vi-v0.3.pdf): 10 pages covering the reel, OSD hierarchy, app editing, system appearance, pointer-edge concepts, and vector handoff.
+- [English VI PDF](../output/pdf/copilot-reel-vi-v0.4.pdf): 12 pages covering the reel, OSD hierarchy, app editing, system appearance, revised edge handling, precedents, and vector handoff.
 - [SVG masters](../design/vi/vectors): 26 editable vector assets.
 - [Design tokens](../design/vi/tokens.json): semantic colors, geometry, timing, and implementation status.
 - [Style specification table](../design/vi/stylesheet.typ): English Typst source. The PDF is built by the Python scene generator, not this Typst file.
@@ -58,13 +58,13 @@ The material follows system changes without altering app order, pointer origin, 
 
 ## Pointer-edge adaptation
 
-The reel should appear around the current pointer, not at the display center. The original pointer is the cancellation origin and is never silently warped.
+The reel opens around the pointer whenever the complete footprint fits. Near an edge or corner, preserve the complete circle and move it the minimum distance needed to fit the current monitor work area. Item order, angles, radius, and icon size remain unchanged. The previous half-orbit and staggered-fan proposals are rejected.
 
-- Interior: full orbit.
-- Near an edge: inward half orbit.
-- Near a corner: inward fan with staggered radii where necessary.
+Default input policy: do not warp the system pointer. If the initial pointer lies outside the relocated center cancellation zone, enter `AwaitCenter`: no item highlights, crossing an outer icon does not select it, and release cancels. Entering the visible center changes the state to `Armed`; subsequent selection uses that same visible center. There is no timer-driven switch of logical origin. If the initial pointer is already inside the relocated center zone, arm normally.
 
-These edge layouts are specified designs, not yet implemented. Rendering and hit testing must consume the same slot geometry. Preserve item order and validate spacing for 1-8 targets. Simply clamping the visible wheel while keeping a different logical center is not acceptable.
+The cost is explicit: edge/corner activation can require an inward movement followed by the selection stroke. Pointer recentering can be considered as a separately disclosed, opt-in alternative; it is not enabled by this design revision. Relative virtual-cursor behavior is not the default.
+
+These behaviors are specifications, not yet implemented. Rendering and hit testing must consume the same geometry and center. Very small work areas require a separately evaluated compact fallback, rather than silently squeezing the layout. See [edge-placement research](edge-placement-research.md) for primary sources and the distinction between observed behavior and this project's proposal.
 
 ## Motion and rendering
 
@@ -74,7 +74,7 @@ Cache geometry, text layouts, icons, and DPI-dependent drawing surfaces. Animate
 
 ## Implementation status
 
-The native reel, appearance synchronization, provider registration, app launching, and functional settings editor exist. The OSD navigation and edge fan layouts in this revision are the next UI implementation specification. The functional editor remains available during that transition.
+The native reel, appearance synchronization, provider registration, app launching, and functional settings editor exist. The OSD navigation and guarded full-circle edge placement in this revision are the next UI implementation specification. The functional editor remains available during that transition.
 
 ## Primary references
 

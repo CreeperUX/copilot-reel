@@ -4,7 +4,7 @@ A native Windows application wheel that appears around the pointer when the Copi
 
 The first native prototype builds and runs. Soft Orbit rendering, Windows appearance synchronization, application configuration, single-instance activation, and launching are implemented. Core tests, 48 configuration checks, and the automated controller-to-launcher integration flow have passed. A signed development MSIX is installed and Windows Settings has been verified to recognize Copilot Reel. The key route remains a user-controlled setting. Physical Copilot-key delivery and the remaining display/performance matrix are still being validated.
 
-The interface defaults to English and offers a native Simplified Chinese switch with persistent preferences. Ordinary launch opens the pointer-centered reel; the functional settings editor is an explicit action. VI v0.3 specifies a compact OSD replacement with second-level Settings and inward edge/corner layouts. Those new OSD screens and adaptive layouts are not implemented yet.
+The interface defaults to English and offers a native Simplified Chinese switch with persistent preferences. Ordinary launch opens the pointer-centered reel; the functional settings editor is an explicit action. VI v0.4 specifies a compact OSD replacement with second-level Settings and guarded full-circle edge placement. Those new OSD screens and edge behavior are not implemented yet.
 
 ## Behavior
 
