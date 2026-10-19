@@ -6,7 +6,7 @@ Copilot Reel uses the official Windows Copilot hardware key provider contract an
 
 The implementation is one native C++20 process with a Win32 message loop. Windows Composition owns the visual tree and property animations; Direct2D and DirectWrite render geometry, icons, and text into reusable surfaces. The first visual scheme is Soft Orbit.
 
-VI v0.4 specifies an OSD quick menu with second-level Settings and focused app task sheets. The current functional editor is transitional. Ordinary launch opens the pointer-centered reel. The edge proposal preserves the full circle, minimally shifts it inside the monitor work area, and waits for center entry when the pointer begins outside its relocated cancellation zone. This behavior still requires native implementation; the earlier half-orbit/fan proposals are rejected.
+Application v0.2.0 and VI v0.5 implement an OSD quick menu with second-level Settings and focused app task sheets. Ordinary launch opens the pointer-centered reel. Placement preserves the full circle, minimally shifts it inside the monitor work area, and waits for center entry when the pointer begins outside its relocated cancellation zone. The earlier half-orbit/fan proposals are rejected.
 
 Only the wheel registers as a provider. Its targets are ordinary executables, shortcuts, URIs, or applicable packaged application AUMIDs.
 
@@ -29,7 +29,8 @@ A named mutex and resident controller window provide single-instance behavior. S
 | State and event | Result |
 | --- | --- |
 | Idle + hold start | Capture the cursor anchor, start a gesture, show |
-| Visible + pointer movement | Calculate direction; center means cancellation |
+| AwaitCenter + pointer movement | Keep selection empty until entry into the visible center |
+| Armed + pointer movement | Calculate direction from the visible center; center means cancellation |
 | Visible + hold stop | Resolve once, hide, then activate |
 | Idle + hold stop | Ignore without launching |
 | Duplicate hold start | Preserve the current gesture |
@@ -42,7 +43,7 @@ Release is independent of animation completion. Gesture state owns deduplication
 
 The wheel is a non-activating tool popup. Opening preserves keyboard focus and records one cursor anchor. Raw Input is registered only while visible; pointer messages can also update hit testing. Movement within the same sector does not trigger selection repaint. Production code never warps the pointer.
 
-Layout and hit testing share DIP geometry. The process is Per-Monitor DPI aware. Placement preserves the pointer anchor near display boundaries; fully visible edge placement and mixed-DPI transitions require further validation.
+Layout and hit testing share DIP geometry and the final visible center. The process is Per-Monitor DPI aware. Placement clamps the complete wheel footprint to the monitor work area without moving the pointer. The center-entry guard cancels an early release. Work areas too small to contain the wheel open the OSD instead; its native scrollbars preserve control sizes. Mixed-DPI transitions remain part of the display-validation matrix.
 
 Closing unregisters Raw Input, stops the abandonment timer, hides the HWND, and removes visible composition work. The message loop remains. The timeout is not a frame or pointer-polling timer.
 
@@ -56,9 +57,9 @@ UI and logic are separated within one process. The design currently needs neithe
 | GestureState and hit testing | Selection, cancellation, release, deduplication, angular geometry |
 | AppearanceSource | Windows colors, effects, animations, high contrast, power settings |
 | OrbitRenderer | Direct2D/DirectWrite, composition visuals, backdrop, animation |
-| Configuration/settings | Native editor, validation, persistence |
+| Configuration/settings | OSD hierarchy, native semantic controls, focused editor, validation, persistence |
 | Platform activation | Shell and packaged-app activation |
-| Icon worker | Load icons off the interaction path and post results to the UI thread |
+| Shared iconography | Deterministic monochrome Direct2D symbols for both wheel and OSD |
 
 The renderer consumes state and cannot decide what to launch. Appearance changes preserve anchor and selection. Configuration reload cancels a gesture before replacing targets.
 
@@ -78,7 +79,7 @@ The frosted path uses a host backdrop brush and Gaussian blur clipped to the cir
 
 ## Animation and resources
 
-Device resources, text formats, icons, and surfaces are reused. Content redraws on relevant selection, appearance, target, DPI, or device changes. Opening uses a 100 ms compositor opacity/scale animation when enabled; otherwise it sets the final state.
+Device resources, text formats, and surfaces are reused. Content redraws on relevant selection, center-gate, appearance, target, DPI, or device changes. The wheel uses consistent 40 DIP tiles, 28 DIP vector symbols, and a 1.75 DIP stroke. Selected symbols follow the accent; high contrast uses system highlighted text. Unknown apps use a neutral application-window symbol. Shell bitmap extraction and initials fallback are removed. Opening uses a 100 ms compositor opacity/scale animation when enabled; otherwise it sets the final state. Selection and OSD page transitions are immediate.
 
 There is no pre-rendered frame sequence or fixed 60 Hz application timer. The compositor evaluates animation at presentation cadence without application redraws on every refresh. This reduces work but does not guarantee frame rate or GPU cost.
 
@@ -86,7 +87,7 @@ Performance validation must cover 60/144/240 Hz, mixed refresh rates, different 
 
 ## Configuration and activation
 
-The native editor supports 1–8 targets. App data stores names, types, identifiers, arguments, and working directories. See [configuration and isolation](configuration.md).
+The native editor supports 1-8 targets. The OSD home contains Apps, Appearance, and Settings. Language and About belong inside Settings. The editor exposes name and target; a separate compact Advanced sheet contains launch method, arguments, and working directory. The 560 x 360 DIP logical client area sits inside a native Windows caption and frame. Buttons, list boxes, edits, and the language combo retain native semantics. There is no autostart setting. App data stores names, types, identifiers, arguments, and working directories. See [configuration and isolation](configuration.md).
 
 Shell targets use `ShellExecuteExW`; AUMIDs use `IApplicationActivationManager`. Existing instances should use each target's activation contract. Windows foreground rules apply; cold, running, and minimized states need per-application verification.
 

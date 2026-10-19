@@ -1,10 +1,10 @@
-# Visual identity v0.4: Stable Orbit and OSD controls
+# Visual identity v0.5: Unified Orbit and native OSD controls
 
-Soft Orbit is the selected reel design. Fluent Halo and Command Petals remain comparison assets. The OSD extension replaces the large configuration form as the target interface, with a compact primary menu and focused secondary pages.
+Soft Orbit is the selected reel design. Fluent Halo and Command Petals remain comparison assets. Application v0.2.0 implements the OSD hierarchy, shared vector symbols, and guarded edge placement. The compact primary menu replaces the large configuration form; focused secondary pages retain native control semantics.
 
 ## Deliverables
 
-- [English VI PDF](../output/pdf/copilot-reel-vi-v0.4.pdf): 12 pages covering the reel, OSD hierarchy, app editing, system appearance, revised edge handling, precedents, and vector handoff.
+- [English VI PDF](../output/pdf/copilot-reel-vi-v0.5.pdf): 12 pages covering the reel, OSD hierarchy, app editing, system appearance, edge handling, precedents, and vector handoff.
 - [SVG masters](../design/vi/vectors): 26 editable vector assets.
 - [Design tokens](../design/vi/tokens.json): semantic colors, geometry, timing, and implementation status.
 - [Style specification table](../design/vi/stylesheet.typ): English Typst source. The PDF is built by the Python scene generator, not this Typst file.
@@ -13,35 +13,37 @@ Earlier Chinese review drafts have been archived outside the active repository. 
 
 ## Navigation
 
-The configuration OSD is a compact 560 x 360 DIP panel centered within the current monitor work area. The launch reel remains anchored to the pointer. These are different surfaces with different placement rules.
+The configuration OSD has a 560 x 360 DIP logical client area inside a native Windows caption and frame. It is centered within the current monitor work area. Small work areas use native overflow scrollbars, preserving readable control sizes. The launch reel remains anchored to the pointer. These are different surfaces with different placement rules.
 
 | Level | Page | Content |
 | --- | --- | --- |
 | Primary | Quick menu | Apps, Appearance, Settings |
-| Secondary | Apps | Familiar app names and icons; add, reorder, edit, remove |
+| Secondary | Apps | Familiar app names and shared vector symbols; add, reorder, edit, remove |
 | Secondary | Appearance | Windows-controlled theme, material, and accent; link to Windows appearance |
-| Secondary | Settings | Language, proposed startup preference, About |
-| Task sheet | Edit app | Display name and target picker; Advanced collapsed by default |
+| Secondary | Settings | Native language selector and About |
+| Task sheet | Edit app | Display name and target; browse for a file or shortcut |
+| Task sheet | Advanced | Launch method, arguments, and working directory; returns to the same draft |
 
 Language belongs in Settings rather than the primary panel. English is the default; the native application also supports Simplified Chinese. Changing the interface language must not rename user-defined targets.
 
 Back or Esc returns one level while preserving context. Close dismisses the OSD. The hold-to-launch gesture never opens an app editor. The primary menu does not show raw Shell types, AUMIDs, command-line arguments, or working directories.
 
-The startup preference shown in the OSD is a design proposal. It must not silently enable autostart.
+There is no autostart preference in this release. Native buttons, list boxes, edit controls, and the language combo retain keyboard, focus, and accessibility semantics while custom drawing supplies the OSD styling.
 
 ## Appearance
 
-Use Segoe UI Variable with Segoe UI and system CJK fallback. Retain the original app icons at runtime; the neutral symbols in the VI are placeholders.
+Use Segoe UI Variable with Segoe UI and system CJK fallback. Every app uses the same monochrome vector treatment. The wheel and OSD share `DrawAppSymbol`: recognized targets receive the VI symbol associated with their visible identity; unknown targets receive a neutral application-window symbol. The selected symbol uses the Windows accent, or highlighted-text color in high contrast. Full-color shell bitmaps and initials are not used.
 
-| Token | Proposed value |
+| Token | Value |
 | --- | --- |
 | Reel diameter | 336 DIP |
 | Center cancellation diameter | 88 DIP |
-| App icon | 40 DIP |
+| Wheel icon tile | 40 DIP, 10 DIP corner radius |
+| Wheel symbol / stroke | 28 DIP / 1.75 DIP; 2 DIP stroke in high contrast |
 | Icon orbit radius | 112 DIP |
 | Selected item seat | 60 x 64 DIP |
 | OSD panel | 560 x 360 DIP |
-| OSD outer radius | 16 DIP |
+| OSD outer frame | Native Windows caption and corner treatment |
 | OSD content inset | 24 DIP |
 | Secondary row height | 47 DIP |
 | App label / status hint | 14 / 12 DIP |
@@ -62,19 +64,19 @@ The reel opens around the pointer whenever the complete footprint fits. Near an 
 
 Default input policy: do not warp the system pointer. If the initial pointer lies outside the relocated center cancellation zone, enter `AwaitCenter`: no item highlights, crossing an outer icon does not select it, and release cancels. Entering the visible center changes the state to `Armed`; subsequent selection uses that same visible center. There is no timer-driven switch of logical origin. If the initial pointer is already inside the relocated center zone, arm normally.
 
-The cost is explicit: edge/corner activation can require an inward movement followed by the selection stroke. Pointer recentering can be considered as a separately disclosed, opt-in alternative; it is not enabled by this design revision. Relative virtual-cursor behavior is not the default.
+The cost is explicit: edge/corner activation can require an inward movement followed by the selection stroke. Pointer recentering is not implemented or enabled. Relative virtual-cursor behavior is not used.
 
-These behaviors are specifications, not yet implemented. Rendering and hit testing must consume the same geometry and center. Very small work areas require a separately evaluated compact fallback, rather than silently squeezing the layout. See [edge-placement research](edge-placement-research.md) for primary sources and the distinction between observed behavior and this project's proposal.
+These behaviors are implemented. Rendering and hit testing consume the same geometry and center. A work area too small to fit the wheel opens the scrollable OSD instead of squeezing or clipping the radial layout. See [edge-placement research](edge-placement-research.md) for primary sources and the distinction between observed behavior and this project's policy.
 
 ## Motion and rendering
 
-Proposed durations are 100 ms for reel appearance, 80 ms for selection, and at most 120 ms for OSD page transitions. Reduced motion applies the final state immediately. Release commits the chosen target independently of any exit animation.
+The implemented appearance animation is 100 ms, using compositor opacity and scale. Selection and OSD page changes are immediate in v0.2.0. Future transitions may use up to 80 ms for selection and 120 ms for OSD navigation; these are design ceilings, not implemented animations. Reduced motion applies the final state immediately. Release commits the chosen target independently of animation completion.
 
-Cache geometry, text layouts, icons, and DPI-dependent drawing surfaces. Animate compositor properties rather than pre-rendering an image sequence. Stop application rendering work while hidden. Keep optional blur and shadows separate from readable vector content.
+Reuse device resources, text formats, and DPI-dependent drawing surfaces. Symbols are vector drawing commands, rendered only when content changes. Animate compositor properties rather than pre-rendering an image sequence. Stop application rendering work while hidden. Keep optional blur and shadows separate from readable vector content.
 
 ## Implementation status
 
-The native reel, appearance synchronization, provider registration, app launching, and functional settings editor exist. The OSD navigation and guarded full-circle edge placement in this revision are the next UI implementation specification. The functional editor remains available during that transition.
+The native reel, shared symbols, appearance synchronization, provider registration, app launching, OSD navigation, focused editor, and guarded full-circle edge placement are implemented. The vector OSD scenes illustrate layout and hierarchy; native frame and standard input-control rendering vary with Windows. Current verification results and remaining language, display, physical-key, material, and performance checks belong in [validation](validation.md); this VI is not a blanket test-pass claim.
 
 ## Primary references
 

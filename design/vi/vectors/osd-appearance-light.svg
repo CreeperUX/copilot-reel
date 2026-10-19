@@ -1,11 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="432" viewBox="0 0 600 432" role="img">
 <title>OSD / appearance / light</title>
-<desc>Copilot Reel concept vector master. Application symbols are placeholders. No raster images are embedded.</desc>
-<g transform="translate(20 20) scale(1)">
-<rect x="-8" y="-3" width="576" height="376" rx="24" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.022"/>
-<rect x="-5" y="0" width="570" height="370" rx="21" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.036"/>
-<rect x="-2" y="3" width="564" height="364" rx="18" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.054"/>
-<rect x="0" y="0" width="560" height="360" rx="16" fill="#F4F6F8" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<desc>Copilot Reel vector master with shared monochrome application symbols. No raster images are embedded. Native control details may vary.</desc>
+<g transform="translate(20 52) scale(1)">
+<rect x="-9" y="-35" width="578" height="409" rx="16" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.022"/>
+<rect x="-6" y="-32" width="572" height="403" rx="13" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.036"/>
+<rect x="-3" y="-29" width="566" height="397" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.054"/>
+<rect x="-1" y="-32" width="562" height="393" rx="8" fill="#F4F6F8" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="12" y="-12.92" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="start">Copilot Reel</text>
+<path d="M524 -21 L532 -13" fill="none" stroke="#626B76" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M532 -21 L524 -13" fill="none" stroke="#626B76" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 0 L560 0" fill="none" stroke="#CCD3DC" stroke-width="0.7" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <path d="M35 31 L29 36 L35 41" fill="none" stroke="#20252B" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <text x="52" y="41.28" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="17" font-weight="600" text-anchor="start">Appearance</text>
 <path d="M524 30 L534 40" fill="none" stroke="#626B76" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>

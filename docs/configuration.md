@@ -1,12 +1,12 @@
 # Application configuration and test isolation
 
-The reel reads `%LOCALAPPDATA%\CopilotReel\apps.ini` by default. The native settings window supports 1–8 entries. Each entry requires a name and target. Supported launch methods are Shell (an executable, shortcut, or URI) and an installed application's AUMID. Shell entries can also specify a working directory.
+The reel reads `%LOCALAPPDATA%\CopilotReel\apps.ini` by default. Open the OSD from the tray or `--settings`, then choose **Apps** to manage 1-8 entries. Each entry requires a name and target. The focused editor keeps these common fields together; **Advanced** opens a separate compact sheet for launch method, arguments, and working directory. Supported launch methods are Shell (an executable, shortcut, or URI) and an installed application's AUMID. Shell entries can also specify a working directory. Back and Esc preserve the draft between the editor and Advanced; leaving an unsaved app draft asks before discarding it.
 
 Application configuration uses UTF-16 LE with a BOM and preserves Unicode text. Backslashes are escaped as `\\`; tabs are escaped as `\t`. Quotes and equals signs do not need escaping. The schema version is `Version=1`. Prefer the settings window over manual editing. Saving writes a temporary file in the same directory, flushes it, and then replaces the configuration. When loading detects corruption, it retains the original file and temporarily supplies the default entries.
 
 ## Interface language
 
-English is the default interface language. The **Language** selector in settings switches between English and Simplified Chinese immediately, including the current window's labels, launch-method descriptions, status messages, and subsequent dialogs. Changing the language notifies the controller so it can refresh the reel and tray UI. Entry names are user data and are never translated or renamed. Built-in default entry names remain `Notepad` and `Windows Settings`.
+English is the default interface language. Open **Quick menu > Settings > Language** to switch the native combo between English and Simplified Chinese. The change updates window labels, launch-method descriptions, status messages, and subsequent dialogs. Changing the language notifies the controller so it can refresh the reel and tray UI. Entry names are user data and are never translated or renamed. Built-in default entry names remain `Notepad` and `Windows Settings`. **About Copilot Reel** shares the secondary Settings page; this release has no autostart preference.
 
 Language preference is stored independently in `%LOCALAPPDATA%\CopilotReel\preferences.ini`:
 

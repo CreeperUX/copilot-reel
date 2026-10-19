@@ -1,46 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="420" height="420" viewBox="0 0 420 420" role="img">
 <title>Soft Orbit / contrast</title>
-<desc>Copilot Reel concept vector master. Application symbols are placeholders. No raster images are embedded.</desc>
+<desc>Copilot Reel vector master with shared monochrome application symbols. No raster images are embedded. Native control details may vary.</desc>
 <g transform="translate(210 210) scale(1)">
 <circle cx="0" cy="0" r="168" fill="#000000" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <rect x="-20" y="-132" width="40" height="40" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(0 -112) scale(1.208)">
-<circle cx="-4" cy="0" r="6" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<circle cx="4" cy="0" r="6" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(0 -112) scale(1.167)">
+<circle cx="-4" cy="0" r="6" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<circle cx="4" cy="0" r="6" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 </g>
 <rect x="66.995" y="-86" width="60" height="64" rx="14" fill="#222200" stroke="#FFFF00" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <circle cx="96.995" cy="-31" r="2" fill="#FFFF00" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <rect x="76.995" y="-76" width="40" height="40" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(96.995 -56) scale(1.208)">
-<path d="M4 0 L10 0" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M2.828 2.828 L7.071 7.071" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M0 4 L0 10" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-2.828 2.828 L-7.071 7.071" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-4 0 L-10 0" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-2.828 -2.828 L-7.071 -7.071" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-0 -4 L-0 -10" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M2.828 -2.828 L7.071 -7.071" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(96.995 -56) scale(1.167)">
+<path d="M4 0 L10 0" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M2.828 2.828 L7.071 7.071" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 4 L0 10" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-2.828 2.828 L-7.071 7.071" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-4 0 L-10 0" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-2.828 -2.828 L-7.071 -7.071" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-0 -4 L-0 -10" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M2.828 -2.828 L7.071 -7.071" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 </g>
 <rect x="76.995" y="36" width="40" height="40" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(96.995 56) scale(1.208)">
+<g transform="translate(96.995 56) scale(1.167)">
 <path d="M0 -10 C2 -3 3 -2 10 0 C3 2 2 3 0 10 C-2 3 -3 2 -10 0 C-3 -2 -2 -3 0 -10 Z" fill="#FFFFFF" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 </g>
 <rect x="-20" y="92" width="40" height="40" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(0 112) scale(1.208)">
-<path d="M-4 -7 L-10 0 L-4 7" fill="none" stroke="#FFFFFF" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M4 -7 L10 0 L4 7" fill="none" stroke="#FFFFFF" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M2 -9 L-2 9" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(0 112) scale(1.167)">
+<path d="M-4 -7 L-10 0 L-4 7" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M4 -7 L10 0 L4 7" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M2 -9 L-2 9" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 </g>
 <rect x="-116.995" y="36" width="40" height="40" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(-96.995 56) scale(1.208)">
-<rect x="-8" y="-8" width="16" height="16" rx="3" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M0 -10 L0 10" fill="none" stroke="#FFFFFF" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-10 0 L10 0" fill="none" stroke="#FFFFFF" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(-96.995 56) scale(1.167)">
+<rect x="-8" y="-8" width="16" height="16" rx="2.5" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 -10 L0 10" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-10 0 L10 0" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 </g>
 <rect x="-116.995" y="-76" width="40" height="40" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(-96.995 -56) scale(1.208)">
-<path d="M-7 0 L7 0" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M0 -7 L0 7" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<g transform="translate(-96.995 -56) scale(1.167)">
+<rect x="-10" y="-9" width="20" height="18" rx="3" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-10 -3 L10 -3" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-5 -6 L-4 -6" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-1 -6 L0 -6" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M-3 3 L3 3" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 0 L0 6" fill="none" stroke="#FFFFFF" stroke-width="1.714" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 </g>
 <circle cx="0" cy="0" r="44" fill="#000000" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <text x="0" y="-4.24" fill="#FFFFFF" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="600" text-anchor="middle">Claude</text>

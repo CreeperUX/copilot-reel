@@ -4,6 +4,7 @@
 #include "renderer.h"
 #include "settings.h"
 #include "localization.h"
+#include "osd.h"
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -24,7 +25,6 @@
 
 namespace reel {
 namespace {
-constexpr UINT kIconsReady=WM_APP+5;
 constexpr UINT kSmokeTimer=101, kIdleTimer=102;
 constexpr UINT kCommandPreview=201,kCommandSettings=202,kCommandDiagnostics=203,kCommandExit=204;
 constexpr ULONG_PTR kIpcMagic=0x5245454c;
@@ -117,21 +117,12 @@ void Launch(const AppTarget& target,HWND owner) {
     }
 }
 
-struct IconMailbox {
-    std::atomic<HWND> window{nullptr};
-    std::mutex mutex;
-    std::vector<HICON> icons;
-    ~IconMailbox() { for(auto icon:icons) if(icon) DestroyIcon(icon); }
-};
-
 class Controller {
 public:
     HWND window=nullptr;
     bool smoke=false;
     explicit Controller(bool isSmoke):smoke(isSmoke) {}
     ~Controller() {
-        if(mailbox_) mailbox_->window.store(nullptr);
-        if(iconWorker_.joinable()) { iconWorker_.request_stop(); iconWorker_.join(); }
         appearance_.reset(); renderer_.reset();
         if(window) { WTSUnRegisterSessionNotification(window); RemoveTray(); }
     }
@@ -155,12 +146,12 @@ public:
     void CommandReceived(Command command) {
         switch(command) {
         case Command::Background: break;
-        case Command::Settings: Cancel();ShowSettings(window);break;
+        case Command::Settings: Cancel();ShowOsd(window);break;
         case Command::Preview: case Command::Tap: Start(true);break;
         case Command::HoldStart: Start(false);break;
         case Command::HoldStop: if(!preview_) Release();break;
         case Command::Cancel: Cancel();break;
-        case Command::Quit: DestroyWindow(window);break;
+        case Command::Quit: if(CloseOsd()) DestroyWindow(window);break;
         case Command::Diagnostics: SaveDiagnostics();break;
         case Command::SmokeTest: BeginSmoke();break;
         default: break;
@@ -168,7 +159,6 @@ public:
     }
     void Start(bool preview) {
         if(gesture_.Active()) return;
-        if(!gesture_.Start()) return;
         preview_=preview;
         GetCursorPos(&anchor_);
         const HMONITOR monitor=MonitorFromPoint(anchor_,MONITOR_DEFAULTTONEAREST);
@@ -182,22 +172,36 @@ public:
             FreeLibrary(shcore);
         }
         dpi_=xDpi;
-        int size=MulDiv(static_cast<int>(kCanvasDip),dpi_,96);
-        // Preserve pointer origin even near the display edge. Never warp the user's cursor.
-        SetWindowPos(window,HWND_TOPMOST,anchor_.x-size/2,anchor_.y-size/2,size,size,SWP_NOACTIVATE);
+        const int size=MulDiv(static_cast<int>(kCanvasDip),dpi_,96);
+        MONITORINFO info{sizeof(info)};
+        if(!GetMonitorInfoW(monitor,&info)) return;
+        const auto& work=info.rcWork;
+        const auto placement=PlaceWheel(anchor_.x,anchor_.y,{work.left,work.top,work.right,work.bottom},size,kDeadZoneDip*dpi_/96.0);
+        if(!placement.fits) {
+            Log(L"Wheel footprint exceeds monitor work area; opening compact controls instead.");
+            ShowOsd(window);return;
+        }
+        centerX_=placement.centerX;centerY_=placement.centerY;
+        SetWindowPos(window,HWND_TOPMOST,placement.left,placement.top,size,size,SWP_NOACTIVATE);
+        gesture_.Start(placement.awaitingCenter);
         renderer_->Resize(dpi_);renderer_->SetAppearance(currentAppearance_);renderer_->SetSelection(-1);
+        renderer_->SetAwaitCenter(placement.awaitingCenter);
         ShowWindow(window,SW_SHOWNOACTIVATE);renderer_->Show();
         RegisterRawInput(true);
         // Only a one-shot abandonment timeout; animations and mouse tracking have no polling timer.
         SetTimer(window,kIdleTimer,preview?15000:60000,nullptr);
-        RECT placement{};GetWindowRect(window,&placement);
-        Log(std::wstring(preview?L"Preview opened":L"Hold started")+L"; pointer="+std::to_wstring(anchor_.x)+L","+std::to_wstring(anchor_.y)+L"; window="+std::to_wstring(placement.left)+L","+std::to_wstring(placement.top)+L","+std::to_wstring(placement.right)+L","+std::to_wstring(placement.bottom));
+        RECT bounds{};GetWindowRect(window,&bounds);
+        Log(std::wstring(preview?L"Preview opened":L"Hold started")+L"; pointer="+std::to_wstring(anchor_.x)+L","+std::to_wstring(anchor_.y)+L"; window="+std::to_wstring(bounds.left)+L","+std::to_wstring(bounds.top)+L","+std::to_wstring(bounds.right)+L","+std::to_wstring(bounds.bottom)+L"; awaitingCenter="+(gesture_.AwaitingCenter()?L"true":L"false"));
     }
     void MovePointer() {
         if(!gesture_.Active()) return;
         POINT p{};GetCursorPos(&p);
-        const int selected=HitTest((p.x-anchor_.x)*96.0/dpi_,(p.y-anchor_.y)*96.0/dpi_,static_cast<unsigned>(items_.size()));
-        if(gesture_.Select(selected,static_cast<unsigned>(items_.size()))) renderer_->SetSelection(selected);
+        const bool wasAwaiting=gesture_.AwaitingCenter();
+        if(gesture_.ObservePointer((p.x-centerX_)*96.0/dpi_,(p.y-centerY_)*96.0/dpi_,static_cast<unsigned>(items_.size()))) {
+            renderer_->SetAwaitCenter(gesture_.AwaitingCenter());
+            renderer_->SetSelection(gesture_.Selected());
+            if(wasAwaiting && !gesture_.AwaitingCenter()) Log(L"Center entered; direction selection armed");
+        }
     }
     void Release() {
         if(!gesture_.Active()) return;
@@ -225,6 +229,7 @@ public:
         while(PeekMessageW(&ignored,window,kAppearanceMessage,kAppearanceMessage,PM_REMOVE)) {}
         currentAppearance_=appearance_->Read();
         renderer_->SetAppearance(currentAppearance_);
+        RefreshOsdAppearance();
         Log(L"Appearance: "+std::wstring(currentAppearance_.dark?L"dark":L"light")+L", transparency="+(currentAppearance_.transparency?L"on":L"off"));
     }
     void Reload() {
@@ -239,44 +244,6 @@ public:
             wcscpy_s(notice.szInfo,Tr(L"The original file is preserved. Default targets are temporarily loaded. Open App settings to review the error.",L"原配置已保留，暂时使用默认入口。请从托盘打开应用设置查看错误。"));
             notice.dwInfoFlags=NIIF_WARNING;Shell_NotifyIconW(NIM_MODIFY,&notice);
         }
-        LoadIcons();
-    }
-    void LoadIcons() {
-        if(iconWorker_.joinable()) {iconWorker_.request_stop();iconWorker_.join();}
-        mailbox_=std::make_shared<IconMailbox>();mailbox_->window.store(window);
-        auto mailbox=mailbox_;auto items=items_;
-        iconWorker_=std::jthread([mailbox,items](std::stop_token stop) {
-            const HRESULT apartment=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
-            std::vector<HICON> result;
-            for(const auto& item:items) {
-                if(stop.stop_requested()) break;
-                SHFILEINFOW info{};
-                if(item.kind==TargetKind::Aumid) {
-                    PIDLIST_ABSOLUTE pidl=nullptr;
-                    const std::wstring path=L"shell:AppsFolder\\"+item.target;
-                    if(SUCCEEDED(SHParseDisplayName(path.c_str(),nullptr,&pidl,0,nullptr))) {
-                        SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl),0,&info,sizeof(info),SHGFI_PIDL|SHGFI_ICON|SHGFI_LARGEICON);
-                        CoTaskMemFree(pidl);
-                    }
-                } else if(item.target.find(L"://")==std::wstring::npos && item.target.find(L"ms-settings:")!=0) {
-                    wchar_t resolved[32768]{};
-                    const wchar_t* path=item.target.c_str();
-                    if(SearchPathW(nullptr,path,nullptr,32768,resolved,nullptr)) path=resolved;
-                    SHGetFileInfoW(path,0,&info,sizeof(info),SHGFI_ICON|SHGFI_LARGEICON);
-                }
-                result.push_back(info.hIcon);
-            }
-            if(!stop.stop_requested()) {
-                {std::lock_guard lock(mailbox->mutex);mailbox->icons=std::move(result);}
-                if(HWND target=mailbox->window.load()) PostMessageW(target,kIconsReady,0,0);
-            }
-            for(auto icon:result) if(icon) DestroyIcon(icon);
-            if(SUCCEEDED(apartment)) CoUninitialize();
-        });
-    }
-    void ApplyIcons() {
-        if(!mailbox_) return;
-        std::lock_guard lock(mailbox_->mutex);renderer_->SetIcons(mailbox_->icons);
     }
     void RegisterRawInput(bool enable) {
         RAWINPUTDEVICE devices[2]{};
@@ -305,7 +272,7 @@ public:
     void TrayMenu() {
         HMENU menu=CreatePopupMenu();
         AppendMenuW(menu,MF_STRING,kCommandPreview,Tr(L"Preview reel (click to open)",L"预览轮盘（点击打开）"));
-        AppendMenuW(menu,MF_STRING,kCommandSettings,Tr(L"App settings...",L"应用设置…"));
+        AppendMenuW(menu,MF_STRING,kCommandSettings,Tr(L"Quick menu...",L"快捷菜单…"));
         AppendMenuW(menu,MF_STRING,kCommandDiagnostics,Tr(L"Write diagnostics",L"写出诊断信息"));
         AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
         AppendMenuW(menu,MF_STRING,kCommandExit,Tr(L"Exit",L"退出"));
@@ -316,7 +283,7 @@ public:
     }
     void SaveDiagnostics() {
         std::wostringstream text;
-        text<<L"Copilot Reel 0.1.1\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.2.0\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()<<L"\r\n"<<renderer_->Diagnostics();
         const auto bytes=winrt::to_string(text.str());
         const auto path=DataDirectory()+L"\\diagnostics.txt";
@@ -346,11 +313,10 @@ private:
     std::vector<AppTarget> items_;
     GestureState gesture_;
     POINT anchor_{};
+    double centerX_=0,centerY_=0;
     UINT dpi_=96;
     bool preview_=false,hotkey_=false,ready_=false;
     int smokeStep_=0;
-    std::shared_ptr<IconMailbox> mailbox_;
-    std::jthread iconWorker_;
 };
 
 LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
@@ -383,7 +349,6 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
         case kAppearanceMessage:case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:self->RefreshAppearance();return 0;
         case kConfigChangedMessage:self->Reload();return 0;
         case kLanguageChangedMessage:self->RefreshAppearance();self->RemoveTray();self->AddTray();return 0;
-        case kIconsReady:self->ApplyIcons();return 0;
         case WM_INPUT:self->RawInput(reinterpret_cast<HRAWINPUT>(lParam));break;
         case WM_MOUSEMOVE:self->MovePointer();return 0;
         case WM_LBUTTONUP:if(self->IsPreview())self->Release();return 0;

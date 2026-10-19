@@ -4,7 +4,7 @@ A native Windows application wheel that appears around the pointer when the Copi
 
 The first native prototype builds and runs. Soft Orbit rendering, Windows appearance synchronization, application configuration, single-instance activation, and launching are implemented. Core tests, 48 configuration checks, and the automated controller-to-launcher integration flow have passed. A signed development MSIX is installed and Windows Settings has been verified to recognize Copilot Reel. The key route remains a user-controlled setting. Physical Copilot-key delivery and the remaining display/performance matrix are still being validated.
 
-The interface defaults to English and offers a native Simplified Chinese switch with persistent preferences. Ordinary launch opens the pointer-centered reel; the functional settings editor is an explicit action. VI v0.4 specifies a compact OSD replacement with second-level Settings and guarded full-circle edge placement. Those new OSD screens and edge behavior are not implemented yet.
+Application v0.2.0 implements a compact OSD home with Apps, Appearance, and Settings; Language and About live inside Settings. The interface defaults to English and offers a native Simplified Chinese switch with persistent preferences. Ordinary launch opens the pointer-centered reel. At screen edges, the complete wheel moves inward and waits for center entry before arming selection when necessary. VI v0.5 documents the shared monochrome vector symbols and the implemented navigation/placement behavior.
 
 ## Behavior
 
@@ -12,7 +12,9 @@ The interface defaults to English and offers a native Simplified Chinese switch 
 - The wheel opens without taking keyboard focus. Moving outside its center cancellation zone selects a direction.
 - Releasing commits at most one target and hides the wheel before activation.
 - A short tap or optional `Ctrl+Alt+R` opens a click-to-select preview. Right-click cancels.
-- The native settings window manages 1–8 targets: executables, shortcuts, URIs, and applicable packaged-app AUMIDs.
+- The native OSD manages 1-8 targets: executables, shortcuts, URIs, and applicable packaged-app AUMIDs. Advanced launch fields live in a separate task sheet.
+- Every entry uses a consistent vector symbol and tile. Recognized apps receive their VI symbol; unknown targets use a neutral app symbol. Selected symbols use the system accent or high-contrast highlighted text.
+- Near monitor edges, entering the relocated center arms selection; release before entry cancels. A work area too small for the wheel opens the scrollable OSD.
 - The Soft Orbit base follows Windows light/dark appearance. Transparency effects request a frosted backdrop when supported; otherwise the base is opaque. Selection uses the system accent. High contrast, disabled animations, and energy saver take precedence where applicable.
 
 Targets inside the wheel do not need to register as Copilot providers. Only Copilot Reel registers with Windows.

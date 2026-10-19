@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "iconography.h"
 #include "localization.h"
 
 #include <d2d1_1.h>
@@ -21,9 +22,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
 #include <cwchar>
-#include <cwctype>
 #include <functional>
 #include <numbers>
 #include <utility>
@@ -109,62 +108,12 @@ D2D1_COLOR_F Color(Rgba c, float alpha = -1.0f) {
     return {c.r, c.g, c.b, alpha < 0.0f ? c.a : alpha};
 }
 
-std::wstring Initials(const std::wstring& name) {
-    if (name.empty()) return L"?";
-    // Keep non-Latin names to one glyph. DirectWrite handles font fallback.
-    if (name.front() > 127) return name.substr(0, 1);
-    std::wstring text(1, static_cast<wchar_t>(std::towupper(name.front())));
-    auto space = name.find_last_of(L" -_");
-    if (space != std::wstring::npos && space + 1 < name.size())
-        text += static_cast<wchar_t>(std::towupper(name[space + 1]));
-    return text;
-}
-
-struct IconPixels {
-    UINT size = 0;
-    std::vector<std::uint32_t> pixels;
-    winrt::com_ptr<ID2D1Bitmap1> bitmap;
-};
-
-IconPixels CopyIconPixels(HICON icon) {
-    IconPixels result;
-    if (!icon) return result;
-    constexpr UINT size = 128;
-    BITMAPINFO info{};
-    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    info.bmiHeader.biWidth = size;
-    info.bmiHeader.biHeight = -static_cast<LONG>(size);
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    info.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    HDC dc = CreateCompatibleDC(nullptr);
-    if (!dc) return result;
-    HBITMAP dib = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-    if (!dib) { DeleteDC(dc); return result; }
-    HGDIOBJ old = SelectObject(dc, dib);
-    auto* values = static_cast<std::uint32_t*>(bits);
-    std::fill_n(values, size * size, 0u);
-    if (DrawIconEx(dc, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL)) {
-        GdiFlush();
-        result.size = size;
-        result.pixels.assign(values, values + size * size);
-        const bool hasAlpha = std::any_of(result.pixels.begin(), result.pixels.end(),
-            [](auto p) { return (p & 0xff000000u) != 0; });
-        if (!hasAlpha) {
-            // Classic mask icons do not contain an alpha channel.
-            std::fill_n(values, size * size, 0xffffffffu);
-            DrawIconEx(dc, 0, 0, icon, size, size, 0, nullptr, DI_MASK);
-            GdiFlush();
-            for (size_t i = 0; i < result.pixels.size(); ++i)
-                result.pixels[i] = (values[i] & 0x00ffffffu) == 0
-                    ? (result.pixels[i] | 0xff000000u) : 0;
-        }
-    }
-    SelectObject(dc, old);
-    DeleteObject(dib);
-    DeleteDC(dc);
-    return result;
+Rgba TileColor(const Appearance& appearance) {
+    const float amount = appearance.dark ? 0.30f : 0.24f;
+    const auto a = appearance.surface;
+    const auto b = appearance.outline;
+    return {a.r + (b.r - a.r) * amount, a.g + (b.g - a.g) * amount,
+            a.b + (b.b - a.b) * amount, 1.0f};
 }
 } // namespace
 
@@ -176,11 +125,11 @@ struct OrbitRenderer::Impl {
     bool visible = false;
     bool backdrop = false;
     bool softwareDevice = false;
+    bool awaitCenter = false;
     unsigned surfaceDraws = 0;
     int selection = -1;
     Appearance appearance;
     std::vector<AppTarget> items;
-    std::vector<IconPixels> icons;
     std::wstring lastError;
     std::wstring backdropStatus = L"solid (transparency disabled)";
     winrt::Windows::System::DispatcherQueueController queueController{nullptr};
@@ -200,7 +149,6 @@ struct OrbitRenderer::Impl {
     winrt::com_ptr<IDWriteTextFormat> labelFormat;
     winrt::com_ptr<IDWriteTextFormat> centerFormat;
     winrt::com_ptr<IDWriteTextFormat> hintFormat;
-    winrt::com_ptr<IDWriteTextFormat> initialsFormat;
 
     void Safe(const std::function<void()>& operation) noexcept {
         try { operation(); }
@@ -247,7 +195,6 @@ struct OrbitRenderer::Impl {
         labelFormat = TextFormat(14.0f, DWRITE_FONT_WEIGHT_NORMAL);
         centerFormat = TextFormat(14.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD);
         hintFormat = TextFormat(12.0f, DWRITE_FONT_WEIGHT_NORMAL);
-        initialsFormat = TextFormat(17.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD);
         ready = true;
         ResizeSurface();
         ApplyAppearance();
@@ -392,7 +339,7 @@ struct OrbitRenderer::Impl {
                     2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / static_cast<float>(count);
                 const float x = kCenterDip + 112.0f * std::cos(angle);
                 const float y = kCenterDip + 112.0f * std::sin(angle);
-                const bool selected = static_cast<int>(i) == selection;
+                const bool selected = !awaitCenter && static_cast<int>(i) == selection;
                 if (selected) {
                     const auto seat = D2D1::RoundedRect(D2D1::RectF(x - 30, y - 32, x + 30, y + 32), 16, 16);
                     brush->SetColor(Color(appearance.selection, 1.0f));
@@ -400,41 +347,37 @@ struct OrbitRenderer::Impl {
                     brush->SetColor(Color(appearance.accent, 1.0f));
                     context->DrawRoundedRectangle(seat, brush.get(), appearance.highContrast ? 2.5f : 1.5f);
                 }
-                const float iconRadius = 20.0f;
-                bool drawn = false;
-                if (i < icons.size() && !icons[i].pixels.empty()) {
-                    auto& icon = icons[i];
-                    if (!icon.bitmap) {
-                        auto properties = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_NONE,
-                            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
-                        winrt::check_hresult(context->CreateBitmap(D2D1::SizeU(icon.size, icon.size),
-                            icon.pixels.data(), icon.size * 4, &properties, icon.bitmap.put()));
-                    }
-                    context->DrawBitmap(icon.bitmap.get(), D2D1::RectF(x - iconRadius, y - iconRadius,
-                        x + iconRadius, y + iconRadius), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
-                    drawn = true;
-                }
-                if (!drawn) {
-                    brush->SetColor(Color(appearance.outline, appearance.highContrast ? 1.0f : 0.22f));
-                    context->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x - 20, y - 20, x + 20, y + 20), 10, 10), brush.get());
+                // Every target uses the same vector tile. No shell bitmaps or
+                // font-dependent initials can leak a different visual language.
+                const auto tile = D2D1::RoundedRect(D2D1::RectF(x - 20, y - 20, x + 20, y + 20), 10, 10);
+                brush->SetColor(Color(appearance.highContrast
+                    ? (selected ? appearance.selection : appearance.surface) : TileColor(appearance)));
+                context->FillRoundedRectangle(tile, brush.get());
+                if (appearance.highContrast) {
                     brush->SetColor(Color(selected ? appearance.selectionText : appearance.foreground));
-                    Text(context.get(), Initials(items[i].name), D2D1::RectF(x - 20, y - 20, x + 20, y + 20), initialsFormat.get(), brush.get());
+                    context->DrawRoundedRectangle(tile, brush.get(), 1.0f);
                 }
+                brush->SetColor(Color(selected ? (appearance.highContrast
+                    ? appearance.selectionText : appearance.accent) : appearance.foreground));
+                DrawAppSymbol(context.get(), items[i], D2D1::RectF(x - 14, y - 14, x + 14, y + 14),
+                    brush.get(), appearance.highContrast ? 2.0f : 1.75f);
                 // Full names live in the centre; tiles remain icon-first and do
                 // not shift or collide when the user configures eight targets.
                 if (selected) {
-                    brush->SetColor(Color(appearance.accent));
+                    brush->SetColor(Color(appearance.highContrast ? appearance.selectionText : appearance.accent));
                     context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, y + 26), 2.0f, 2.0f), brush.get());
                 }
             }
-            const bool selected = selection >= 0 && static_cast<size_t>(selection) < items.size();
+            const bool selected = !awaitCenter && selection >= 0 && static_cast<size_t>(selection) < items.size();
             brush->SetColor(Color(appearance.foreground));
-            Text(context.get(), selected ? items[selection].name : Tr(L"Cancel",L"松开取消"),
-                D2D1::RectF(kCenterDip - 65, kCenterDip - 17, kCenterDip + 65, kCenterDip + 5),
+            Text(context.get(), awaitCenter ? Tr(L"Move", L"移入") :
+                selected ? items[selection].name : Tr(L"Cancel",L"松开取消"),
+                D2D1::RectF(kCenterDip - 40, kCenterDip - 17, kCenterDip + 40, kCenterDip + 5),
                 centerFormat.get(), brush.get());
             brush->SetColor(Color(appearance.secondary));
-            Text(context.get(), selected ? Tr(L"Release",L"松开打开") : Tr(L"Move to select",L"移向应用"),
-                D2D1::RectF(kCenterDip - 65, kCenterDip + 7, kCenterDip + 65, kCenterDip + 25),
+            Text(context.get(), awaitCenter ? Tr(L"to center", L"中心后选择") :
+                selected ? Tr(L"Release",L"松开打开") : Tr(L"Choose app",L"移向应用"),
+                D2D1::RectF(kCenterDip - 40, kCenterDip + 7, kCenterDip + 40, kCenterDip + 25),
                 hintFormat.get(), brush.get());
         } catch (...) { drawResult = winrt::to_hresult(); }
         HRESULT endResult = interop->EndDraw();
@@ -453,7 +396,6 @@ struct OrbitRenderer::Impl {
             // target ordering and the gesture remain owned by the controller.
             surface = nullptr;
             graphicsDevice = nullptr;
-            for (auto& icon : icons) icon.bitmap = nullptr;
             d2d = nullptr;
             d2dFactory = nullptr;
             d3d = nullptr;
@@ -526,13 +468,13 @@ void OrbitRenderer::SetItems(const std::vector<AppTarget>& items) {
         if (impl_->ready) impl_->Draw();
     });
 }
-void OrbitRenderer::SetIcons(const std::vector<HICON>& icons) {
-    impl_->Safe([&] {
-        impl_->icons.clear();
-        impl_->icons.reserve(icons.size());
-        for (auto icon : icons) impl_->icons.push_back(CopyIconPixels(icon));
-        if (impl_->ready) impl_->Draw();
-    });
+void OrbitRenderer::SetIcons(const std::vector<HICON>&) {
+    // Retained for existing callers. The vector symbol set is authoritative.
+}
+void OrbitRenderer::SetAwaitCenter(bool awaitCenter) {
+    if (impl_->awaitCenter == awaitCenter) return;
+    impl_->awaitCenter = awaitCenter;
+    if (impl_->ready) impl_->Safe([&] { impl_->Draw(); });
 }
 void OrbitRenderer::SetSelection(int index) {
     if (index < -1 || index >= static_cast<int>(impl_->items.size())) index = -1;
@@ -548,7 +490,8 @@ void OrbitRenderer::Hide() {
 }
 bool OrbitRenderer::UsesBackdrop() const { return impl_->backdrop; }
 std::wstring OrbitRenderer::Diagnostics() const {
-    return L"Windows Composition + Direct2D/DirectWrite; " + impl_->backdropStatus +
+    return L"Windows Composition + Direct2D/DirectWrite; icons=unified-vector; " + impl_->backdropStatus +
+        L"; center gate=" + (impl_->awaitCenter ? L"waiting" : L"armed") +
         L"; DPI=" + std::to_wstring(impl_->dpi) + L"; surface draws=" + std::to_wstring(impl_->surfaceDraws) +
         L"; device=" + (impl_->softwareDevice ? L"WARP" : L"hardware") +
         (impl_->lastError.empty() ? L"" : L"; last error=" + impl_->lastError);

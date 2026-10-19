@@ -1,36 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="432" viewBox="0 0 600 432" role="img">
 <title>OSD / editor / light</title>
-<desc>Copilot Reel concept vector master. Application symbols are placeholders. No raster images are embedded.</desc>
-<g transform="translate(20 20) scale(1)">
-<rect x="-8" y="-3" width="576" height="376" rx="24" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.022"/>
-<rect x="-5" y="0" width="570" height="370" rx="21" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.036"/>
-<rect x="-2" y="3" width="564" height="364" rx="18" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.054"/>
-<rect x="0" y="0" width="560" height="360" rx="16" fill="#F4F6F8" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<desc>Copilot Reel vector master with shared monochrome application symbols. No raster images are embedded. Native control details may vary.</desc>
+<g transform="translate(20 52) scale(1)">
+<rect x="-9" y="-35" width="578" height="409" rx="16" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.022"/>
+<rect x="-6" y="-32" width="572" height="403" rx="13" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.036"/>
+<rect x="-3" y="-29" width="566" height="397" rx="10" fill="#000000" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="0.054"/>
+<rect x="-1" y="-32" width="562" height="393" rx="8" fill="#F4F6F8" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="12" y="-12.92" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="start">Copilot Reel</text>
+<path d="M524 -21 L532 -13" fill="none" stroke="#626B76" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M532 -21 L524 -13" fill="none" stroke="#626B76" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<path d="M0 0 L560 0" fill="none" stroke="#CCD3DC" stroke-width="0.7" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <path d="M35 31 L29 36 L35 41" fill="none" stroke="#20252B" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <text x="52" y="41.28" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="17" font-weight="600" text-anchor="start">Edit app</text>
 <path d="M524 30 L534 40" fill="none" stroke="#626B76" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <path d="M534 30 L524 40" fill="none" stroke="#626B76" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <text x="24" y="89.08" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="start">Name</text>
-<rect x="24" y="101" width="512" height="40" rx="7" fill="#FFFFFF" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<rect x="24" y="101" width="512" height="31" rx="2" fill="#FFFFFF" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <text x="38" y="124.76" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="400" text-anchor="start">Claude</text>
-<text x="24" y="168.08" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="start">Open with</text>
-<rect x="24" y="180" width="512" height="48" rx="8" fill="#FCFCFD" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<g transform="translate(48 204) scale(0.958)">
-<path d="M4 0 L10 0" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M2.828 2.828 L7.071 7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M0 4 L0 10" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-2.828 2.828 L-7.071 7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-4 0 L-10 0" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-2.828 -2.828 L-7.071 -7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M-0 -4 L-0 -10" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M2.828 -2.828 L7.071 -7.071" fill="none" stroke="#4A515D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-</g>
-<text x="72" y="201.76" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="400" text-anchor="start">Claude</text>
-<text x="72" y="219.24" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="11" font-weight="400" text-anchor="start">Installed desktop app</text>
-<text x="518" y="208.92" fill="#005FB8" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="13" font-weight="400" text-anchor="end">Change...</text>
-<text x="26" y="262.92" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="13" font-weight="400" text-anchor="start">Advanced</text>
-<path d="M106 254 L112 259 L106 264" fill="none" stroke="#626B76" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<text x="24" y="327.92" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="13" font-weight="400" text-anchor="start">Remove app</text>
+<text x="24" y="161.08" fill="#626B76" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="start">Open with - app, shortcut or website</text>
+<rect x="24" y="175" width="390" height="31" rx="2" fill="#FFFFFF" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="36" y="195.76" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="400" text-anchor="start">https://claude.ai</text>
+<rect x="426" y="175" width="110" height="31" rx="6" fill="#FCFCFD" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="481" y="195.08" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="12" font-weight="400" text-anchor="middle">Browse...</text>
+<rect x="24" y="233" width="150" height="34" rx="6" fill="#FCFCFD" stroke="#CCD3DC" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="40" y="253.92" fill="#20252B" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="13" font-weight="400" text-anchor="start">Advanced</text>
+<path d="M146 245 L152 250 L146 255" fill="none" stroke="#626B76" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <rect x="446" y="302" width="90" height="36" rx="7" fill="#005FB8" stroke="none" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <text x="491" y="324.76" fill="#FFFFFF" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="600" text-anchor="middle">Save</text>
 </g>

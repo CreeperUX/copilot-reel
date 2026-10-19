@@ -135,7 +135,7 @@ class Scene:
         def n(v): return f'{v:.3f}'.rstrip('0').rstrip('.') if isinstance(v, (float, int)) else str(v)
         out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" viewBox="0 0 {self.w} {self.h}" role="img">',
                f'<title>{escape(title)}</title>',
-               '<desc>Copilot Reel concept vector master. Application symbols are placeholders. No raster images are embedded.</desc>']
+               '<desc>Copilot Reel vector master with shared monochrome application symbols. No raster images are embedded. Native control details may vary.</desc>']
         for kind, p in self.ops:
             if kind == 'push':
                 out.append(f'<g transform="translate({n(p[0])} {n(p[1])}) scale({n(p[2])})">')
@@ -203,28 +203,41 @@ def shadow_rect(s, x, y, w, h, r=8, alpha=.08):
         s.rect(x-extra, y-extra+5, w+extra*2, h+extra*2, '#000000', r=r+extra, alpha=alpha*opacity)
 
 
-def glyph(s, index, x, y, size, color):
+def glyph(s, index, x, y, size, color, stroke_width=1.75):
+    # Keep symbols aligned with the normalized Direct2D paths in iconography.cpp.
+    # Stroke is 1.75 DIP at the wheel's 28 DIP symbol size.
+    stroke = stroke_width * 24 / size
     with s.group(x, y, size/24):
         if index == 0:
-            s.circle(-4, 0, 6, stroke=color, sw=1.8)
-            s.circle(4, 0, 6, stroke=color, sw=1.8)
+            s.circle(-4, 0, 6, stroke=color, sw=stroke)
+            s.circle(4, 0, 6, stroke=color, sw=stroke)
         elif index == 1:
             for a in range(0, 360, 45):
                 x1,y1 = point(4,a); x2,y2 = point(10,a)
-                s.line(x1,y1,x2,y2,color,1.8)
+                s.line(x1,y1,x2,y2,color,stroke)
         elif index == 2:
             s.path([('M',0,-10),('C',2,-3,3,-2,10,0),('C',3,2,2,3,0,10),('C',-2,3,-3,2,-10,0),('C',-3,-2,-2,-3,0,-10),('Z',)], fill=color)
         elif index == 3:
-            s.path([('M',-4,-7),('L',-10,0),('L',-4,7)], stroke=color, sw=1.9)
-            s.path([('M',4,-7),('L',10,0),('L',4,7)], stroke=color, sw=1.9)
-            s.line(2,-9,-2,9,color,1.5)
+            s.path([('M',-4,-7),('L',-10,0),('L',-4,7)], stroke=color, sw=stroke)
+            s.path([('M',4,-7),('L',10,0),('L',4,7)], stroke=color, sw=stroke)
+            s.line(2,-9,-2,9,color,stroke)
         elif index == 4:
-            s.rect(-8,-8,16,16,stroke=color,sw=1.6,r=3)
-            s.line(0,-10,0,10,color,1.4)
-            s.line(-10,0,10,0,color,1.4)
+            s.rect(-8,-8,16,16,stroke=color,sw=stroke,r=2.5)
+            s.line(0,-10,0,10,color,stroke)
+            s.line(-10,0,10,0,color,stroke)
+        elif index == 6:
+            s.path([('M',-7,-10),('L',3,-10),('L',8,-5),('L',8,10),('L',-7,10),('Z',)],stroke=color,sw=stroke)
+            s.path([('M',3,-10),('L',3,-5),('L',8,-5)],stroke=color,sw=stroke)
+            for yy,end in [(0,4),(4,4),(8,1)]:s.line(-3,yy,end,yy,color,stroke)
+        elif index == 7:
+            for yy,knob in [(-7,-2),(0,4),(7,-3)]:
+                s.line(-10,yy,knob-3,yy,color,stroke);s.line(knob+3,yy,10,yy,color,stroke)
+                s.circle(knob,yy,3,stroke=color,sw=stroke)
         else:
-            s.line(-7,0,7,0,color,1.8)
-            s.line(0,-7,0,7,color,1.8)
+            s.rect(-10,-9,20,18,stroke=color,sw=stroke,r=3)
+            s.line(-10,-3,10,-3,color,stroke)
+            s.line(-5,-6,-4,-6,color,stroke);s.line(-1,-6,0,-6,color,stroke)
+            s.line(-3,3,3,3,color,stroke);s.line(0,0,0,6,color,stroke)
 
 
 def pointer(s, x, y, dark=False, scale=1):
@@ -276,7 +289,7 @@ def wheel(s, scheme, theme='light', selected=1, x=0, y=0, scale=1, show_pointer=
                     s.rect(ix-30,iy-30,60,64,p['active'],p['accent'],2 if hc else 1.5,14)
                     s.circle(ix,iy+25,2,p['accent'])
                 s.rect(ix-20,iy-20,40,40,p['icon'],r=10)
-                glyph(s,i,ix,iy,29,p['glyph'])
+                glyph(s,i,ix,iy,28,p['text'] if hc else p['accent'] if active else p['text'],2 if hc else 1.75)
         s.circle(0,0,44,p['inner'],p['line'],2 if hc else 1)
         if selected is None:
             s.line(-4,-12,4,-4,p['muted'],1.4)
@@ -328,7 +341,7 @@ def desktop(s,x,y,w,h,dark=False):
 
 def footer(s,page,total=12):
     s.line(64,835,1376,835,LINE)
-    s.text(64,852,'COPILOT REEL  /  SOFT ORBIT + OSD CONTROLS  /  v0.4',12,MUTED)
+    s.text(64,852,'COPILOT REEL  /  UNIFIED ORBIT + NATIVE OSD  /  v0.5',12,MUTED)
     s.text(1376,852,f'{page:02d} / {total:02d}',12,MUTED,align='right')
 
 

@@ -14,8 +14,9 @@ public:
     void Resize(UINT dpi);
     void SetAppearance(const Appearance& appearance);
     void SetItems(const std::vector<AppTarget>& items);
-    // Copies caller-owned icon pixels. Empty/missing icons use text initials.
+    // Compatibility no-op: all icons now use the shared vector symbol set.
     void SetIcons(const std::vector<HICON>& icons);
+    void SetAwaitCenter(bool awaitCenter);
     void SetSelection(int index);
     void Show();
     void Hide();
