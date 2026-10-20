@@ -48,7 +48,7 @@ The held wheel is a non-activating tool popup. Opening a hold preserves keyboard
 
 Layout and hit testing share DIP geometry and the final visible center. The process is Per-Monitor DPI aware. Capture the cursor before initialization or placement. If the complete canvas fits, place its center exactly at that pointer with no offset or cursor warping. At a boundary, apply only the minimum complete-footprint translation into the monitor work area. Arm immediately for ordinary interior opening; require center entry only if clamping leaves the pointer outside the center zone. Tiny work areas scale the full circle uniformly, including text and targets. Mixed-DPI and small-display usability remain part of the validation matrix.
 
-Closing resolves input immediately, starts the short reverse compositor animation, and uses a one-shot timer to hide the HWND and detach the visual tree. A new opening cancels pending exit completion. Forced cancellation and reduced motion can hide immediately. The message loop remains; lifecycle timers are not frame timers.
+Closing resolves input immediately, starts the short compositor exit, and uses a one-shot timer (the duration `BeginHide` returns) to hide the HWND and detach the visual tree. While closing, and whenever no gesture is active, the window returns `HTTRANSPARENT` and never acts on a click. Windows forwards `HTTRANSPARENT` only to windows of the same thread, so a click over the plate during the 83-133 ms exit still does not reach another application; true pass-through would need `WS_EX_LAYERED | WS_EX_TRANSPARENT`, which is not yet validated with the composition target. A new opening first finishes a pending exit, then places the window; an opening that cannot be placed leaves it hidden. Launches run on a short-lived COM STA worker, exactly once per commit, so Shell activation never holds the exit; failures return to the UI thread for the message box. Forced cancellation and reduced motion can hide immediately. The message loop remains; lifecycle timers are not frame timers.
 
 ## Responsibility boundaries
 
@@ -59,10 +59,11 @@ UI and logic are separated within one process. The design currently needs neithe
 | Win32 controller | Copilot/URI commands, handoff, pointer input, tray, lifecycle |
 | GestureState and hit testing | Selection, cancellation, release, deduplication, angular geometry |
 | AppearanceSource | Windows colors, effects, animations, high contrast, power settings |
-| OrbitRenderer | Direct2D/DirectWrite, composition visuals, backdrop, animation |
+| OrbitRenderer | Layered composition tree, Direct2D/DirectWrite surfaces, acrylic material, all motion |
+| Artwork (`artwork.cpp`) | Target-based vendor identity, Shell icons, artwork classes, per-DPI raster prescale, Segoe Fluent Icons command glyphs |
+| Design tokens | `design/vi/tokens.json`, generated into `src/vi_tokens.h` |
 | Configuration/settings | Radial hierarchy, preferred-agent and language persistence, focused editor, validation |
 | Platform activation | Shell and packaged-app activation |
-| Shared iconography | Verified official artwork in consistent tiles; native vector command and fallback glyphs |
 
 The renderer consumes state and cannot decide what to launch. Appearance changes preserve anchor and selection. Configuration reload cancels a gesture before replacing targets.
 
@@ -74,17 +75,45 @@ Material precedence:
 2. Transparency disabled, energy saver active, or effects unavailable: opaque light/dark neutral surface.
 3. Transparency enabled and supported: frosted host backdrop.
 
-The base follows app light/dark appearance; selection uses the accent. Solid surfaces have alpha `1` and no background sampling. High contrast uses `GetSysColor` window, text, highlight, and highlighted-text colors.
+The base follows app light/dark appearance with Windows neutrals (`#F9F9F9` / `#2C2C2C`). Selection uses the live accent ramp, never the raw accent: `AccentDark1` in light and `AccentLight2` in dark for fills and strokes, `AccentDark2` / `AccentLight3` for accent text. Solid surfaces have alpha `1` and no background sampling. High contrast uses `GetSysColor` window, text, highlight, and highlighted-text colors. `COPILOT_REEL_VISUAL_OVERRIDE` (theme, material, contrast, motion, DPI) exists only for native captures and is never persisted.
 
 `UISettings` supplies effects/animation preferences and foreground/accent colors. Its change events and energy-saver events post to the UI thread, where updates are coalesced. Win32 setting/theme/color messages also refresh the snapshot; `SPI_GETHIGHCONTRAST` checks high contrast. Exit revokes subscriptions and clears callback access to the HWND. There is no per-frame registry polling.
 
-The frosted path uses a host backdrop brush and Gaussian blur clipped to the circular base. The transparency preference permits effects but does not prove this HWND can display them. Capability/error paths fall back to solids. Successful API setup is not visual proof of correct blur.
+The frosted path (`acrylic.cpp`) follows the WinUI acrylic graph over the shell's host backdrop, which the shell has already blurred: a luminosity blend and a tint blend with the token colors, then a tiled 2% noise layer, through public Direct2D effects described with `IGraphicsEffectD2D1Interop` (no Win2D, no extra blur). The circular visual is clipped to the plate. The transparency preference permits effects but does not prove this HWND can display them; capability changes re-apply the material, and capability or error paths fall back to solids. `SetAppearance` is idempotent, so an unchanged appearance never rebuilds the material on open. Successful API setup is not visual proof of the backdrop.
 
-## Animation and resources
+## Composition tree and resources
 
-Device resources, text formats, and surfaces are reused. Content redraws on selection, center-gate, appearance, menu, target, DPI, or device changes. The wheel uses 40 DIP tiles, 28 DIP official marks, and 1.75 DIP internal command strokes. Selection uses the system accent; official marks retain vendor proportions and colors. SVG sources use Direct2D where supported; official PNGs provide a source-aware fallback. Assets are loaded before a gesture, with device-domain caches cleared after device loss. Unknown identities get a neutral app glyph, never a guessed brand drawing.
+The renderer keeps one composition tree per window, back to front:
 
-Entry lasts 160 ms and animates only opacity from 0 to 1 and scale from 0.96 to 1. Exit reverses these properties over 120 ms, starting from the current presentation values, then detaches the tree. No pointer tether, circular reveal, perimeter sweep, or rotating artwork remains. The base outline is neutral; accent is confined to selection and preferred markers. Reduced motion and high contrast apply the final state directly. Selection and page updates are immediate.
+1. Root: open/close opacity and scale around the plate center.
+2. Acrylic backdrop (frosted only), then the base surface: one baked flyout shadow (Direct2D Shadow effect, knocked out under the plate), the plate fill when solid, and the inset rim.
+3. Center: idle ring, gated ring and gate dot.
+4. Pages: one container per orbit page. Each holds the selection seat (driven by an `Angle` property and an expression along the orbit) and one container per item with its neutral tile fill and its artwork sprite (plus a selected variant where the badge ring or high-contrast glyph color differs), and the language chevrons.
+5. Handoff layer for the tile that travels to the center on drill-in.
+6. Back chevron and two center-label sprites for crossfades.
+
+Every surface has an even device-pixel size and a snapped offset, so items, tiles and hairlines land on the pixel grid at 100-250% scale; hit testing keeps exact geometry. Item artwork is rasterized once per identity, theme and DPI; selection and hover never redraw it. The idle reel produces no surface draws and no running expressions: the seat's expression stops when its travel settles, when the seat hides mid-travel, and on every reset. Updates that arrive during the exit animation are deferred until the next opening. Device loss replaces the rendering device in place and redraws everything once.
+
+## Motion
+
+All motion is compositor-driven with values from `tokens.motion`; interruptions start from presentation values.
+
+| Event | Motion |
+| --- | --- |
+| Open | Opacity 0 to 1 in 83 ms linear; scale 0.96 to 1 in 167 ms decelerate, at the plate center |
+| Cancel | Opacity to 0 in 83 ms linear; scale to 0.98, accelerate |
+| Commit | Everything else fades in 83 ms; the chosen item and seat hold 50 ms with a 1 to 0.975 to 1 press, then fade (133 ms) |
+| Selection | The seat fades in (83 ms, 0.94 to 1 in 167 ms), then travels the shortest arc on a spring (damping 0.85, period 50 ms) as the tile fill crossfades with it |
+| Center | Name crossfade 83 ms; the ring gives way while a name shows; arming the gate relaxes the ring in 167 ms |
+| Drill in / out | The outgoing page scales to 1.04 / 0.96 and fades in 100 ms; the incoming page scales from 0.94 / 1.04 in 250 ms (0.1, 0.9, 0.2, 1) and fades in after 50 ms; the plate never moves |
+| Handoff | On drill-in the tapped tile travels to the center in 200 ms, scaling to 0.5, and hands over to the back chevron |
+| Swap | Preset paging crossfades with a 0.98 to 1 settle in 120 ms |
+
+Reduced motion and high contrast run the same path with 1 ms durations. There is no pointer tether, circular reveal, perimeter sweep, rotating artwork, staggered entrance or hover magnification; easing has no overshoot, and the seat spring (damping 0.85) overshoots by well under one percent.
+
+## Design tokens
+
+`design/vi/tokens.json` is the hand-edited source for geometry, palettes, accent roles, material, motion, typography and per-brand artwork treatment. `tools/gen-vi-tokens.ps1` validates it and writes the committed `src/vi_tokens.h`; `tools/build.ps1` and CMake run the generator before compiling, and `-Check` fails when the header is stale. The Python VI generator reads the same file, so the identity document and the application cannot drift apart silently.
 
 There is no pre-rendered frame sequence or fixed 60 Hz application timer. The compositor evaluates animation at presentation cadence without application redraws on every refresh. This reduces work but does not guarantee frame rate or GPU cost.
 
@@ -92,7 +121,7 @@ Performance validation must cover 60/144/240 Hz, mixed refresh rates, different 
 
 ## Language and identity
 
-`AppDisplayName` localizes recognized Notepad and Windows Settings default labels at the rendering boundary, including historical Chinese names. It does not mutate `AppTarget`, launch fields, or persisted preferences. Both languages pass the same stored target and name into icon identification; menu action labels are localized separately from their invariant `reel:` action IDs. The editor also presents built-in labels in its current language, and its initialization guard prevents presentation changes from becoming edits.
+Text uses the `Segoe UI Variable Text` family (static `Segoe UI` where it is missing) with the interface locale, and one custom DirectWrite fallback maps Han and CJK punctuation to `Microsoft YaHei UI`, so Chinese names never mix Traditional or Japanese faces within a word. `AppDisplayName` localizes recognized Notepad and Windows Settings default labels at the rendering boundary, including historical Chinese names. It does not mutate `AppTarget`, launch fields, or persisted preferences. Both languages pass the same stored target and name into icon identification; menu action labels are localized separately from their invariant `reel:` action IDs. The editor also presents built-in labels in its current language, and its initialization guard prevents presentation changes from becoming edits.
 
 One active profile supplies apps, ordering, favorite, and language. The application and diagnostic paths come from `ConfigPath`; language does not choose a path. Windows packaging can redirect an installed app into its own LocalCache scope, independently of standalone development files.
 
@@ -106,6 +135,6 @@ Shell targets use `ShellExecuteExW`; AUMIDs use `IApplicationActivationManager`.
 
 ## Current milestone
 
-Compilation, core/configuration tests, controller-to-test-launcher integration, and signed development installation succeeded. Actual Windows Settings recognition and the currently selected route were confirmed on build 26200.9711. Physical-key events, pathological cross-process scheduling, and backdrop/performance acceptance remain open. The prototype is not fully validated.
+Compilation, unit tests, controller-to-test-launcher integration, native captures across light/dark, solid, the high-contrast code path and 100/150/200% scale, motion frame strips, and signed development installation succeeded. Actual Windows Settings recognition and the currently selected route were confirmed on build 26200.9711. Physical-key events, pathological cross-process scheduling, the live frosted backdrop over real content, real high-contrast themes, and performance acceptance remain open. The prototype is not fully validated.
 
 References: [Windows themes](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-windows-themes), [composition tailoring](https://learn.microsoft.com/en-us/windows/apps/develop/composition/composition-tailoring), [high contrast](https://learn.microsoft.com/en-us/windows/win32/winauto/high-contrast-parameter).

@@ -352,7 +352,7 @@ def animation_interruptions():
     assert u.PostMessageW(hwnd, 0x8001, 1, 0)
     wait(lambda: 'Hold started;' in read_log()[offset:] and u.IsWindowVisible(hwnd), 'quick opening')
     stop_after = time.perf_counter() - began
-    assert stop_after < .16, 'The test must release during the 160 ms opening animation.'
+    assert stop_after < .167, 'The test must release during the 167 ms opening animation.'
     assert u.PostMessageW(hwnd, 0x8001, 2, 0)
     hidden()
     assert count() == before_count, 'Releasing during opening must cancel without launching.'
@@ -364,11 +364,12 @@ def animation_interruptions():
     wait(lambda: 'Hold started;' in read_log()[offset:] and u.IsWindowVisible(hwnd), 'opening before interruption')
     cancel_offset = len(read_log())
     cancelled = time.perf_counter()
-    command('--cancel')
+    # WM_CLOSE cancels in-process; a --cancel process launch alone outlasts the 83 ms exit.
+    assert u.PostMessageW(hwnd, 0x0010, 0, 0)
     wait(lambda: 'Canceled' in read_log()[cancel_offset:], 'beginning of exit animation')
     reopen_offset = len(read_log())
     reopen_after = time.perf_counter() - cancelled
-    assert reopen_after < .12, 'The test must reopen before the old 120 ms exit finishes.'
+    assert reopen_after < .083, 'The test must reopen before the old 83 ms exit finishes.'
     assert u.PostMessageW(hwnd, 0x8001, 1, 0)
     wait(lambda: 'Hold started;' in read_log()[reopen_offset:], 'replacement gesture')
     time.sleep(.27)

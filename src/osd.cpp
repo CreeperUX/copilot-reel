@@ -4,11 +4,12 @@
 #include "localization.h"
 #include "display_names.h"
 #include "settings.h"
+#include "vi_tokens.h"
 
 #include <commdlg.h>
 #include <commctrl.h>
 #include <d2d1.h>
-#include <dwrite.h>
+#include <dwrite_2.h>
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <wrl/client.h>
@@ -69,6 +70,9 @@ struct State {
     ComPtr<ID2D1HwndRenderTarget> target;
     ComPtr<ID2D1DCRenderTarget> controlTarget;
     std::map<int, ComPtr<IDWriteTextFormat>> formats;
+    Language formatLanguage = Language::English;
+    ComPtr<IDWriteFontFallback> fallback;
+    bool fallbackTried = false;
     ~State() {
         if (font) DeleteObject(font);
         if (surfaceBrush) DeleteObject(surfaceBrush);
@@ -151,14 +155,40 @@ void Scroll(State& state,int bar,int request) {
     RedrawWindow(state.window,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
 }
 
+// Han and CJK punctuation resolve to Microsoft YaHei UI instead of per-glyph JhengHei UI
+// or Yu Gothic UI; the system fallback follows. The mapping has no locale so Chinese
+// app names typed while the interface is English use the same face.
+IDWriteFontFallback* CjkFallback(State& state) {
+    if (state.fallbackTried || !state.textFactory) return state.fallback.Get();
+    state.fallbackTried = true;
+    ComPtr<IDWriteFactory2> factory;
+    ComPtr<IDWriteFontFallbackBuilder> builder;
+    ComPtr<IDWriteFontFallback> system;
+    if (FAILED(state.textFactory.As(&factory)) || FAILED(factory->CreateFontFallbackBuilder(&builder)) ||
+        FAILED(factory->GetSystemFontFallback(&system))) return nullptr;
+    DWRITE_UNICODE_RANGE ranges[std::size(vi::kCjkRanges)]{};
+    for (size_t i = 0; i != std::size(ranges); ++i) ranges[i] = {vi::kCjkRanges[i].first, vi::kCjkRanges[i].last};
+    const wchar_t* family[] = {vi::kCjkFamily};
+    if (SUCCEEDED(builder->AddMapping(ranges, static_cast<UINT32>(std::size(ranges)), family, 1, nullptr, nullptr, nullptr, 1.0f)) &&
+        SUCCEEDED(builder->AddMappings(system.Get())))
+        builder->CreateFontFallback(&state.fallback);
+    return state.fallback.Get();
+}
+
 IDWriteTextFormat* Format(State& state, int size, bool bold = false) {
+    // Formats carry the interface locale (zh-CN selects mainland CJK forms).
+    if (state.formatLanguage != CurrentLanguage()) { state.formats.clear(); state.formatLanguage = CurrentLanguage(); }
     const int key = size + (bold ? 100 : 0);
     auto& format = state.formats[key];
     if (!format && state.textFactory) {
         state.textFactory->CreateTextFormat(L"Segoe UI", nullptr,
             bold ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
-            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, static_cast<float>(size), L"", &format);
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, static_cast<float>(size),
+            LocaleName(state.formatLanguage), &format);
         if (format) {
+            ComPtr<IDWriteTextFormat1> withFallback;
+            if (auto* fallback = CjkFallback(state); fallback && SUCCEEDED(format.As(&withFallback)))
+                withFallback->SetFontFallback(fallback);
             format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
             ComPtr<IDWriteInlineObject> ellipsis;
@@ -251,7 +281,7 @@ void Paint(State& state) {
         } else if (state.page == Page::About) {
             DrawText(state,target,L"Copilot Reel",D2D1::RectF(24,86,width-24,127),state.appearance.foreground,28,true);
             DrawText(state,target,Tr(L"Soft Orbit / native Windows launcher",L"柔光轨道 / Windows 原生启动器"),D2D1::RectF(24,136,width-24,164),state.appearance.secondary,14);
-            DrawText(state,target,Tr(L"Version 0.3.3",L"版本 0.3.3"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Version 0.3.4",L"版本 0.3.4"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
             DrawText(state,target,Tr(L"Hold the Copilot key, choose an app, then release.",L"按住 Copilot 键，选择应用，然后松开。"),D2D1::RectF(24,194,width-24,220),state.appearance.foreground,14);
             DrawText(state,target,Tr(L"Windows controls the theme, transparency and motion.",L"主题、透明效果和动画均遵循 Windows 设置。"),D2D1::RectF(24,233,width-24,259),state.appearance.secondary,13);
         }
@@ -375,8 +405,9 @@ void DrawControl(State& state, const DRAWITEMSTRUCT& item) {
         DrawText(state,target,website?Tr(L"Website",L"网页"):Tr(L"Application",L"应用"),
             D2D1::RectF(width-112,8,width-16,31),selected?state.appearance.selectionText:state.appearance.secondary,12,false,DWRITE_TEXT_ALIGNMENT_TRAILING);
     } else if (tile) {
+        // Accent-colored marks use the text accent; accent itself is reserved for focus outlines.
         ComPtr<ID2D1SolidColorBrush> brush;
-        target->CreateSolidColorBrush(Color(focused?state.appearance.accent:foreground),&brush);
+        target->CreateSolidColorBrush(Color(focused?state.appearance.accentText:foreground),&brush);
         if (brush) CategoryIcon(target,static_cast<int>(item.CtlID),28,33,brush.Get());
         DrawText(state,target,Text(item.hwndItem),D2D1::RectF(16,69,width-12,96),foreground,16,true);
         const auto detail = item.CtlID == Apps ? std::to_wstring(state.apps.size())+Tr(L" entries",L" 个入口") :

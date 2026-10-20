@@ -1,4 +1,5 @@
 #include "appearance.h"
+#include "vi_tokens.h"
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.Power.h>
@@ -9,10 +10,23 @@ namespace reel {
 namespace {
 Rgba Color(COLORREF c) { return {GetRValue(c)/255.f,GetGValue(c)/255.f,GetBValue(c)/255.f,1}; }
 Rgba Color(winrt::Windows::UI::Color c) { return {c.R/255.f,c.G/255.f,c.B/255.f,1}; }
+Rgba Color(const vi::Color& c) { return {c.r,c.g,c.b,c.a}; }
 Rgba Mix(Rgba a,Rgba b,float amount) {
     return {a.r+(b.r-a.r)*amount,a.g+(b.g-a.g)*amount,a.b+(b.b-a.b)*amount,1};
 }
+std::wstring EnvironmentValue(const wchar_t* name) {
+    const DWORD size=GetEnvironmentVariableW(name,nullptr,0);
+    if(!size)return {};
+    std::wstring value(size,L'\0');
+    const DWORD copied=GetEnvironmentVariableW(name,value.data(),size);
+    value.resize(copied<size?copied:0);
+    return value;
+}
 struct CallbackState { std::atomic<HWND> window{nullptr}; };
+}
+const VisualOverride& CurrentVisualOverride() {
+    static const VisualOverride value=ParseVisualOverride(EnvironmentValue(L"COPILOT_REEL_VISUAL_OVERRIDE"));
+    return value;
 }
 struct AppearanceSource::Impl {
     winrt::Windows::UI::ViewManagement::UISettings settings{nullptr};
@@ -43,6 +57,7 @@ struct AppearanceSource::Impl {
 AppearanceSource::AppearanceSource(HWND hwnd):impl_(std::make_unique<Impl>(hwnd)) {}
 AppearanceSource::~AppearanceSource()=default;
 Appearance AppearanceSource::Read() {
+    using winrt::Windows::UI::ViewManagement::UIColorType;
     Appearance out;
     HIGHCONTRASTW hc{sizeof(hc)};
     out.highContrast=SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(hc),&hc,0) && (hc.dwFlags&HCF_HIGHCONTRASTON);
@@ -50,30 +65,50 @@ Appearance AppearanceSource::Read() {
     if(SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&enabled,0)) out.animations=enabled!=FALSE;
     try {
         if(impl_->settings) {
-            using winrt::Windows::UI::ViewManagement::UIColorType;
             auto fg=impl_->settings.GetColorValue(UIColorType::Foreground);
             out.dark=(5*fg.G+2*fg.R+fg.B)>8*128;
             out.transparency=impl_->settings.AdvancedEffectsEnabled();
             out.animations=impl_->settings.AnimationsEnabled();
-            out.accent=Color(impl_->settings.GetColorValue(UIColorType::Accent));
         }
         if(winrt::Windows::System::Power::PowerManager::EnergySaverStatus()==winrt::Windows::System::Power::EnergySaverStatus::On)
             out.transparency=false;
     } catch(...) { out.transparency=false; }
-    if(out.dark) {
-        out.surface={.161f,.176f,.20f,1}; out.foreground={.953f,.961f,.973f,1};
-        out.secondary={.745f,.773f,.808f,1}; out.outline={.329f,.361f,.404f,1};
+    const auto& visual=CurrentVisualOverride();
+    if(visual.dark) out.dark=*visual.dark;
+    if(visual.frosted) out.transparency=*visual.frosted;
+    if(visual.highContrast) out.highContrast=*visual.highContrast;
+    if(visual.animations) out.animations=*visual.animations;
+
+    const auto& palette=out.dark?vi::kDark:vi::kLight;
+    out.surface=Color(palette.plate); out.foreground=Color(palette.foreground);
+    out.secondary=Color(palette.secondary); out.outline=Color(palette.outline);
+    out.tile=Color(palette.tile); out.tileStroke=Color(palette.tileStroke);
+    out.plateStroke=Color(palette.plateStroke); out.ringIdle=Color(palette.ringIdle);
+    out.textOnAccent=Color(palette.textOnAccent);
+    // Fluent fill and text accents come from the live ramp, never the raw Accent.
+    out.accent=Color(palette.accentFallback); out.accentText=Color(palette.accentTextFallback);
+    try {
+        if(impl_->settings) {
+            out.accent=Color(impl_->settings.GetColorValue(out.dark?UIColorType::AccentLight2:UIColorType::AccentDark1));
+            out.accentText=Color(impl_->settings.GetColorValue(out.dark?UIColorType::AccentLight3:UIColorType::AccentDark2));
+        }
+    } catch(...) {
+        out.accent=Color(palette.accentFallback); out.accentText=Color(palette.accentTextFallback);
     }
-    out.selection=Mix(out.surface,out.accent,out.dark?.25f:.13f);
+    if(out.transparency) out.tile.a=palette.frostedTileAlpha;
+    out.selection=Mix(out.surface,out.accent,palette.seatTint);
     out.selectionText=out.foreground;
+    out.shadowOpacity=palette.shadowOpacity;
     if(out.highContrast) {
         out.transparency=false;
-        out.surface=Color(GetSysColor(COLOR_WINDOW));
-        out.foreground=Color(GetSysColor(COLOR_WINDOWTEXT));
-        out.secondary=out.foreground; out.outline=out.foreground;
-        out.accent=Color(GetSysColor(COLOR_HIGHLIGHT));
-        out.selection=out.accent;
-        out.selectionText=Color(GetSysColor(COLOR_HIGHLIGHTTEXT));
+        const auto window=Color(GetSysColor(COLOR_WINDOW)), text=Color(GetSysColor(COLOR_WINDOWTEXT));
+        const auto highlight=Color(GetSysColor(COLOR_HIGHLIGHT)), highlightText=Color(GetSysColor(COLOR_HIGHLIGHTTEXT));
+        out.surface=window; out.tile=window;
+        out.foreground=out.secondary=out.outline=text;
+        out.tileStroke=out.plateStroke=out.ringIdle=text;
+        out.accent=out.accentText=out.selection=highlight;
+        out.textOnAccent=out.selectionText=highlightText;
+        out.shadowOpacity=0;
     }
     return out;
 }

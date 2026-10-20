@@ -1,6 +1,24 @@
 # Validation status
 
-Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.3.0**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.4.0**. This records demonstrated behavior and its limits, not full release acceptance.
+
+## Verified in v0.3.4
+
+| Area | Evidence and scope |
+| --- | --- |
+| Native build and tokens | MSVC `/W4` build of the application, all unit tests and the launch probe passed. `tools/gen-vi-tokens.ps1 -Check` confirms `src/vi_tokens.h` matches `design/vi/tokens.json`. |
+| Unit tests | Core (1-12 sectors, placement, ordering, routes; the hub and Manage keep a disabled Add slot at 8 apps), settings 48, behavior 65, iconography 132 (target-based identity including profile folders and look-alike hosts, artwork classes, plated tile clipping, centered glyph and Shell icons at 96 and 192 DPI), local launch 16, display names 51. |
+| Native end-to-end input | `tests/run-radial.py` passed all 21 groups twice, including both native-picker groups: release 25-48 ms into the 167 ms opening cancels without launching; a cancel by `WM_CLOSE` and re-hold 25.7 ms into the 83 ms exit stays visible after 270 ms; launches remain exactly once. Evidence: `artifacts/qa/radial-20261020-185859-e515d3/`. |
+| Placement | Interior anchors have 0.00 px center displacement; all eight edges and corners clamp minimally and arm only after center entry; no cursor warp. |
+| Rendering at rest | Visible stationary surface draws stayed 51 to 51 and hidden draws 98 to 98 over 350 ms. Selection, hover and transitions never re-rasterize item artwork. |
+| Shared language profile | `tests/run-language-invariance.py` passed twice: Main EN vs ZH and EN vs returned EN differ by 0 pixels; the hub differs by 0 pixels outside the EN/ZH tile. Chinese names render in Microsoft YaHei UI (no per-character JhengHei UI / Yu Gothic UI mix). Evidence: `artifacts/qa/language-invariance-20261020-185651-56cdbd/`. |
+| Native visual states | `tools/capture-v034.py` captured Main idle, a vendor tile selected, the hub idle, a command selected, Language selected and an edge-gated hold for dark/light solid, dark/light frosted, the high-contrast code path, and 96/144/192 DPI into `output/runtime/v0.3.4/` (per-variant contact sheets `sheet-*.png`). The acrylic effect graph is created without error in both frosted variants. |
+| Motion | Frame strips `motion-open-select.png`, `motion-drill.png` and `motion-commit.png` show the 83 ms fade with the 0.96 settle, the seat appearing and travelling along the orbit, the name crossfade with the ring giving way, drill-in with the tile handing off to the back chevron, drill-out, and the commit hold with exactly one probe launch. These are visual evidence, not frame-rate measurements. |
+| Clean installation | The signed 0.3.4.0 package replaced 0.3.3.0 after a backup (`artifacts/backups/20261020-193438`); three configuration files were restored. The installed executable SHA-256 `B20F5456…5D47` equals the final build, all 42 packaged artwork/provenance/license files match source hashes, the provider declaration is valid, and the user's Copilot key selection is unchanged. |
+| Post-review build | An independent code review led to fixes for capability events off the UI thread, a seat expression surviving a mid-travel hide, double-composited selected artwork, permanently cached failed Shell icon lookups, updates during the exit re-showing items, device-loss retry, and late launch-failure dialogs. On this final build (the installed executable) all unit tests pass, `tests/run-radial.py` passed all 21 groups again (`artifacts/qa/radial-20261020-193700-3d0b82/`, stationary draws 51 to 51, hidden 97 to 97), language invariance again showed 0 differing pixels (`artifacts/qa/language-invariance-20261020-193729-021589/`), and the captures in `output/runtime/v0.3.4/` were regenerated from it (`artifacts/qa/visual-v0.3.4-20261020-193740-82c3e9/`). |
+| Official artwork | Plated marks (Claude, Perplexity, ZCode, DeepSeek Harness, Air) fill and are clipped to the 40 DIP tile; glyph marks share the per-brand optical scale; Windows Settings, Notepad and custom executables show their Shell icons; command glyphs come from Segoe Fluent Icons. Native contact sheets were reviewed at 96 and 192 DPI in light and dark. |
+
+The captures use `COPILOT_REEL_VISUAL_OVERRIDE` and an isolated data directory. Window captures contain only the application HWND: the frosted captures do not show the DWM host backdrop or the desktop beneath, and `contrast=on` exercises the high-contrast code path with the current (non-high-contrast) system colors.
 
 ## Verified in v0.3.3
 
@@ -42,7 +60,8 @@ The prior Windows Settings UI Automation check observed a visible, enabled Copil
 
 - Real physical Copilot short-tap/hold/release delivery, including hidden-window discovery and pathological Shell scheduling. Automated commands and messages do not establish hardware timing.
 - Presentation/resource measurements at 60/144/240 Hz, mixed refresh rates, battery/energy saver, and a longer idle baseline. Compositor animation alone does not guarantee smoothness on every GPU.
-- Live frosted-backdrop appearance, high contrast, reduced motion, device loss, mixed-DPI multi-monitor transitions, and small-work-area usability.
+- Live frosted-backdrop appearance over real content (this machine has Windows transparency effects off), real high-contrast themes, reduced motion, device loss, mixed-DPI multi-monitor transitions, and small-work-area usability.
+- Known limits in 0.3.4: during the 83-133 ms exit a click over the plate is ignored but not passed to the application beneath (`HTTRANSPARENT` forwards only within the thread); retargeting the seat twice within one spring settle measures the shortest arc from the previous target, so a 180-degree flick can swing the long way round.
 - Cold, running, and minimized instances of every preset application. Discovery is verified on this machine for ChatGPT/Codex, Claude, ZCode, and VS Code; the remaining presets ask for their actual installed target.
 - Comprehensive accessibility/UI Automation semantics for custom radial controls. The focused text editor uses native controls.
 
@@ -51,6 +70,8 @@ The prior Windows Settings UI Automation check observed a visible, enabled Copil
 ```powershell
 .\tools\build.ps1
 python .\tests\run-radial.py
+uv run --python 3.14 --with pillow python .\tests\run-language-invariance.py
+uv run --python 3.14 --with pillow python .\tools\capture-v034.py
 .\tools\verify-registration.ps1
 ```
 

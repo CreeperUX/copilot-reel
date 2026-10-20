@@ -1,12 +1,25 @@
 cmake_minimum_required(VERSION 3.21)
-project(CopilotReel VERSION 0.3.3 LANGUAGES CXX RC)
+project(CopilotReel VERSION 0.3.4 LANGUAGES CXX RC)
 if(NOT WIN32)
   message(FATAL_ERROR "Copilot Reel requires Windows 11 and a Windows SDK.")
 endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-add_executable(CopilotReel WIN32 src/main.cpp src/appearance.cpp src/renderer.cpp src/settings.cpp src/localization.cpp src/iconography.cpp src/osd.cpp src/behavior.cpp src/presets.cpp src/official_icons.cpp src/local_launch.cpp packaging/app.rc)
+# src/vi_tokens.h is committed and regenerated from design/vi/tokens.json. A stamp is the
+# output so that a clean never deletes the header; the generator rewrites it only on change.
+add_custom_command(
+  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/vi_tokens.stamp"
+  COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen-vi-tokens.ps1"
+    -TokensPath "${CMAKE_CURRENT_SOURCE_DIR}/design/vi/tokens.json"
+    -OutputPath "${CMAKE_CURRENT_SOURCE_DIR}/src/vi_tokens.h"
+  COMMAND ${CMAKE_COMMAND} -E touch "${CMAKE_CURRENT_BINARY_DIR}/vi_tokens.stamp"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/design/vi/tokens.json" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen-vi-tokens.ps1"
+  COMMENT "Generating src/vi_tokens.h from design/vi/tokens.json"
+  VERBATIM)
+add_custom_target(vi_tokens DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/vi_tokens.stamp")
+add_executable(CopilotReel WIN32 src/main.cpp src/appearance.cpp src/renderer.cpp src/settings.cpp src/localization.cpp src/iconography.cpp src/osd.cpp src/behavior.cpp src/presets.cpp src/official_icons.cpp src/local_launch.cpp src/artwork.cpp src/acrylic.cpp src/vi_tokens.h packaging/app.rc)
+add_dependencies(CopilotReel vi_tokens)
 add_custom_command(TARGET CopilotReel POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/brands"
@@ -41,14 +54,15 @@ if(MSVC)
   target_compile_options(behavior_tests PRIVATE /utf-8 /EHsc /W4)
 endif()
 add_test(NAME behavior COMMAND behavior_tests)
-add_executable(iconography_tests tests/iconography_tests.cpp src/iconography.cpp src/official_icons.cpp)
+add_executable(iconography_tests tests/iconography_tests.cpp src/iconography.cpp src/official_icons.cpp src/artwork.cpp)
+add_dependencies(iconography_tests vi_tokens)
 add_custom_command(TARGET iconography_tests POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/brands"
     "$<TARGET_FILE_DIR:iconography_tests>/assets/brands")
 target_include_directories(iconography_tests PRIVATE src)
 target_compile_definitions(iconography_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
-target_link_libraries(iconography_tests PRIVATE d3d11 dxgi d2d1 dwrite windowsapp user32 gdi32 ole32 oleaut32 shlwapi windowscodecs uuid)
+target_link_libraries(iconography_tests PRIVATE d3d11 dxgi d2d1 dwrite windowsapp user32 gdi32 shell32 ole32 oleaut32 shlwapi windowscodecs uuid)
 if(MSVC)
   target_compile_options(iconography_tests PRIVATE /utf-8 /EHsc /W4)
 endif()
@@ -62,6 +76,7 @@ if(MSVC)
 endif()
 add_test(NAME local_launch COMMAND local_launch_tests)
 add_executable(display_names_tests tests/display_names_tests.cpp src/iconography.cpp src/behavior.cpp src/localization.cpp src/settings.cpp)
+add_dependencies(display_names_tests vi_tokens)
 target_include_directories(display_names_tests PRIVATE src)
 target_compile_definitions(display_names_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(display_names_tests PRIVATE d2d1 windowsapp user32 gdi32 comdlg32 shell32 ole32 uuid)

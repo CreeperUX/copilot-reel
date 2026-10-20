@@ -40,7 +40,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXE = ROOT / 'build/Release/CopilotReel.exe'
 CAPTURE = ROOT / 'build/Release/capture-window.exe'
 DATA = ROOT / ('artifacts/qa/language-invariance-' + time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:6])
-OUTPUT = ROOT / 'output/runtime/v0.3.3'
+OUTPUT = ROOT / 'output/runtime/v0.3.4'
 DATA.mkdir(parents=True, exist_ok=True)
 OUTPUT.mkdir(parents=True, exist_ok=True)
 u = ctypes.WinDLL('user32', use_last_error=True)

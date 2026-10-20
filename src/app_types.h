@@ -27,17 +27,27 @@ struct AppTarget {
 };
 
 struct Rgba { float r = 0, g = 0, b = 0, a = 1; };
+// Resolved visual roles. Values come from design/vi/tokens.json (src/vi_tokens.h)
+// and the live Windows accent ramp; defaults are the light solid theme.
+// Roles with alpha < 1 composite over the plate.
 struct Appearance {
     bool dark = false;
-    bool transparency = false;
+    bool transparency = false;   // frosted requested and permitted
     bool animations = true;
     bool highContrast = false;
-    Rgba surface{.957f,.965f,.973f,1};
-    Rgba foreground{.125f,.145f,.169f,1};
-    Rgba secondary{.384f,.42f,.463f,1};
-    Rgba outline{.80f,.827f,.863f,1};
-    Rgba accent{0,.373f,.722f,1};
-    Rgba selection{.87f,.925f,.98f,1};
-    Rgba selectionText{.125f,.145f,.169f,1};
+    Rgba surface{.976f,.976f,.976f,1};        // solid plate
+    Rgba foreground{.106f,.106f,.106f,1};     // primary text and command glyphs
+    Rgba secondary{.365f,.365f,.365f,1};      // chevrons, back chevron, gated ring
+    Rgba outline{.80f,.80f,.80f,1};           // opaque hairline for the native editor
+    Rgba tile{1,1,1,1};                       // neutral tile fill
+    Rgba tileStroke{0,0,0,.08f};              // 1 DIP tile hairline
+    Rgba plateStroke{0,0,0,.08f};             // 1 DIP plate rim, inset
+    Rgba ringIdle{0,0,0,.10f};                // idle center-zone ring
+    Rgba accent{0,.404f,.753f,1};             // AccentDark1 (light) / AccentLight2 (dark)
+    Rgba accentText{0,.243f,.573f,1};         // AccentDark2 (light) / AccentLight3 (dark)
+    Rgba textOnAccent{1,1,1,1};               // white (light) / black (dark)
+    Rgba selection{.878f,.918f,.953f,1};      // seat fill: Mix(surface, accent, seat tint)
+    Rgba selectionText{.106f,.106f,.106f,1};  // glyphs and text on the seat
+    float shadowOpacity = .14f;               // 0 in high contrast
 };
 }

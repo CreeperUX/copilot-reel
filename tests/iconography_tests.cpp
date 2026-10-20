@@ -1,14 +1,19 @@
+#include <unknwn.h>
+#include "artwork.h"
 #include "iconography.h"
 #include "official_icons.h"
-#include <wincodec.h>
-#include <d2d1_3.h>
+#include "vi_tokens.h"
+#include <d2d1_1.h>
+#include <d2d1_1helper.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #include <winrt/base.h>
-#include <array>
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 namespace {
 unsigned checks=0;
@@ -19,84 +24,65 @@ reel::AppTarget Target(const wchar_t* target,const wchar_t* name=L"Renamed entry
                        reel::TargetKind kind=reel::TargetKind::Shell) {
     return {name,kind,target,L"",L""};
 }
-uint64_t Render(ID2D1Factory* factory,IWICImagingFactory* imaging,const reel::AppTarget& app,bool official) {
-    winrt::com_ptr<IWICBitmap> bitmap;
-    winrt::check_hresult(imaging->CreateBitmap(64,64,GUID_WICPixelFormat32bppPBGRA,WICBitmapCacheOnLoad,bitmap.put()));
-    winrt::com_ptr<ID2D1RenderTarget> renderer;
-    auto properties=D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED));
-    winrt::check_hresult(factory->CreateWicBitmapRenderTarget(bitmap.get(),properties,renderer.put()));
-    winrt::com_ptr<ID2D1SolidColorBrush> brush;
-    winrt::check_hresult(renderer->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White),brush.put()));
-    renderer->BeginDraw();renderer->Clear(D2D1::ColorF(0,0.0f));
-    const auto bounds=D2D1::RectF(4,4,60,60);
-    if(official)Check(reel::DrawOfficialIcon(renderer.get(),app,bounds,true),"verified official artwork decodes and draws");
-    else reel::DrawAppSymbol(renderer.get(),app,bounds,brush.get(),3.5f);
-    winrt::check_hresult(renderer->EndDraw());
-    winrt::com_ptr<IWICBitmapLock> locked;
-    WICRect region{0,0,64,64};winrt::check_hresult(bitmap->Lock(&region,WICBitmapLockRead,locked.put()));
-    UINT length=0,stride=0;BYTE* pixels=nullptr;
-    winrt::check_hresult(locked->GetDataPointer(&length,&pixels));
-    winrt::check_hresult(locked->GetStride(&stride));
-    unsigned visible=0;uint64_t hash=14695981039346656037ull;
-    for(UINT y=0;y<64;++y)for(UINT x=0;x<64;++x) {
-        const auto pixel=pixels+y*stride+x*4;
-        if(pixel[3])++visible;
-        for(unsigned channel=0;channel<4;++channel){hash^=pixel[channel];hash*=1099511628211ull;}
+
+struct Raster { uint64_t hash=0; unsigned visible=0,outsideTile=0,inCorners=0; float centerX=0,centerY=0; };
+
+// Headless WARP device context, so the production DrawArtwork path (per-DPI prescale,
+// tile clip, Segoe Fluent Icons) is exercised without a window.
+class Canvas {
+public:
+    Canvas() {
+        winrt::check_hresult(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            nullptr,0,D3D11_SDK_VERSION,d3d.put(),nullptr,nullptr));
+        winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,__uuidof(ID2D1Factory1),nullptr,factory.put_void()));
+        winrt::check_hresult(factory->CreateDevice(d3d.as<IDXGIDevice>().get(),device.put()));
     }
-    Check(visible>80,"icon renders nonempty visible pixels");
-    reel::ReleaseOfficialIcons(renderer.get());return hash;
-}
-void CheckGpuBounds(const reel::AppTarget& app) {
-    winrt::com_ptr<ID3D11Device> d3d;
-    winrt::check_hresult(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,
-        D3D11_CREATE_DEVICE_BGRA_SUPPORT,nullptr,0,D3D11_SDK_VERSION,d3d.put(),nullptr,nullptr));
-    auto dxgi=d3d.as<IDXGIDevice>();
-    winrt::com_ptr<ID2D1Factory1> factory;
-    winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-        __uuidof(ID2D1Factory1),nullptr,factory.put_void()));
-    winrt::com_ptr<ID2D1Device> device;
-    winrt::check_hresult(factory->CreateDevice(dxgi.get(),device.put()));
-    winrt::com_ptr<ID2D1DeviceContext> baseContext;
-    winrt::check_hresult(device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,baseContext.put()));
-    auto context=baseContext.as<ID2D1DeviceContext5>();
-    Check(context!=nullptr,"headless GPU test uses the SVG-capable native render path");
-    const auto format=D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED);
-    const auto targetProperties=D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET|D2D1_BITMAP_OPTIONS_CANNOT_DRAW,format);
-    winrt::com_ptr<ID2D1Bitmap1> destination;
-    winrt::check_hresult(context->CreateBitmap(D2D1::SizeU(64,64),nullptr,0,targetProperties,destination.put()));
-    context->SetTarget(destination.get());
-    // Use the production 28-DIP optical box with room around all four edges.
-    const auto bounds=D2D1::RectF(18,18,46,46);
-    context->BeginDraw();context->Clear(D2D1::ColorF(0,0.0f));
-    Check(reel::DrawOfficialIcon(context.get(),app,bounds,true),"official icon draws on the SVG-capable path");
-    winrt::check_hresult(context->EndDraw());
-    const auto readProperties=D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_CPU_READ|D2D1_BITMAP_OPTIONS_CANNOT_DRAW,format);
-    winrt::com_ptr<ID2D1Bitmap1> readable;
-    winrt::check_hresult(context->CreateBitmap(D2D1::SizeU(64,64),nullptr,0,readProperties,readable.put()));
-    winrt::check_hresult(readable->CopyFromBitmap(nullptr,destination.get(),nullptr));
-    D2D1_MAPPED_RECT pixels{};winrt::check_hresult(readable->Map(D2D1_MAP_OPTIONS_READ,&pixels));
-    unsigned visible=0,outside=0;int minimumX=64,minimumY=64,maximumX=-1,maximumY=-1;
-    for(int y=0;y<64;++y)for(int x=0;x<64;++x) {
-        const auto alpha=pixels.bits[y*pixels.pitch+x*4+3];
-        if(alpha) {
-            ++visible;if(x<18 || x>=46 || y<18 || y>=46)++outside;
-            minimumX=(std::min)(minimumX,x);minimumY=(std::min)(minimumY,y);
-            maximumX=(std::max)(maximumX,x);maximumY=(std::max)(maximumY,y);
+    // Draws one item into a 64 DIP square with its 40 DIP tile at (12,12)-(52,52).
+    Raster Draw(const reel::AppTarget& app,float dpi,bool dark=true) {
+        winrt::com_ptr<ID2D1DeviceContext> context;
+        winrt::check_hresult(device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,context.put()));
+        const UINT edge=static_cast<UINT>(64*dpi/96);
+        const auto format=D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED);
+        winrt::com_ptr<ID2D1Bitmap1> target,readable;
+        winrt::check_hresult(context->CreateBitmap(D2D1::SizeU(edge,edge),nullptr,0,
+            D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET|D2D1_BITMAP_OPTIONS_CANNOT_DRAW,format,dpi,dpi),target.put()));
+        winrt::check_hresult(context->CreateBitmap(D2D1::SizeU(edge,edge),nullptr,0,
+            D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_CPU_READ|D2D1_BITMAP_OPTIONS_CANNOT_DRAW,format,dpi,dpi),readable.put()));
+        context->SetTarget(target.get());context->SetDpi(dpi,dpi);
+        context->BeginDraw();context->Clear(D2D1::ColorF(0,0.0f));
+        Check(reel::DrawArtwork(context.get(),app,D2D1::RectF(12,12,52,52),
+            reel::ArtworkStyle{dpi,dark,false,D2D1::ColorF(1,1,1,1)}),"artwork draws for every non-language item");
+        winrt::check_hresult(context->EndDraw());
+        winrt::check_hresult(readable->CopyFromBitmap(nullptr,target.get(),nullptr));
+        D2D1_MAPPED_RECT pixels{};winrt::check_hresult(readable->Map(D2D1_MAP_OPTIONS_READ,&pixels));
+        Raster result;result.hash=14695981039346656037ull;
+        const float scale=dpi/96,tileLeft=12*scale,tileRight=52*scale,radius=reel::vi::kTileRadius*scale;
+        double sumX=0,sumY=0;
+        for(UINT y=0;y<edge;++y)for(UINT x=0;x<edge;++x) {
+            const BYTE* pixel=pixels.bits+y*pixels.pitch+x*4;
+            for(unsigned channel=0;channel<4;++channel){result.hash^=pixel[channel];result.hash*=1099511628211ull;}
+            if(pixel[3]<8)continue;
+            ++result.visible;sumX+=x+.5;sumY+=y+.5;
+            const float px=x+.5f,py=y+.5f;
+            if(px<tileLeft || px>tileRight || py<tileLeft || py>tileRight)++result.outsideTile;
+            // Beyond the r10 corner arc of the tile shape.
+            const float cx=std::clamp(px,tileLeft+radius,tileRight-radius),cy=std::clamp(py,tileLeft+radius,tileRight-radius);
+            if((px-cx)*(px-cx)+(py-cy)*(py-cy)>(radius+1)*(radius+1))++result.inCorners;
         }
+        winrt::check_hresult(readable->Unmap());
+        if(result.visible){result.centerX=static_cast<float>(sumX/result.visible/scale);result.centerY=static_cast<float>(sumY/result.visible/scale);}
+        return result;
     }
-    winrt::check_hresult(readable->Unmap());
-    Check(visible>80,"GPU icon remains visibly populated inside its optical box");
-    if(outside)std::cerr<<"Out-of-bounds pixels: "<<outside<<"; extent "<<minimumX<<','<<minimumY<<" to "<<maximumX<<','<<maximumY<<'\n';
-    Check(outside==0,"SVG and PNG alpha remain inside the requested 28-DIP bounds");
-    Check(std::abs((minimumX+maximumX)/2.0-31.5)<=1 && std::abs((minimumY+maximumY)/2.0-31.5)<=1,
-        "official artwork is centered inside the optical box");
-    reel::ReleaseOfficialIcons(context.get());
+private:
+    winrt::com_ptr<ID3D11Device> d3d;
+    winrt::com_ptr<ID2D1Factory1> factory;
+    winrt::com_ptr<ID2D1Device> device;
+};
 }
 
-}
 int main() {
     using namespace reel;winrt::init_apartment(winrt::apartment_type::single_threaded);
+    // System destinations are recognized by target, independently of localized names.
     Check(IdentifySystemIcon(Target(L"ms-settings:",L"Windows 设置"))==SystemIconKind::Settings,"localized Settings target");
     Check(IdentifySystemIcon(Target(L"MS-SETTINGS:colors"))==SystemIconKind::Settings,"Settings URI page and case");
     Check(IdentifySystemIcon(Target(L"C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe"))==SystemIconKind::Settings,"Settings executable path");
@@ -109,19 +95,61 @@ int main() {
         Target(L"https://example.com/?target=ms-settings:"),Target(L"notepad.exe --fake"),
         Target(L"my-notepad.exe"),Target(L"notepad.exe",L"Name",TargetKind::Aumid)})
         Check(IdentifySystemIcon(app)==SystemIconKind::None,"non-system target cannot acquire a system identity");
-    winrt::com_ptr<IWICImagingFactory> imaging;
-    winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(imaging.put())));
-    winrt::com_ptr<ID2D1Factory> factory;winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory.put()));
-    const auto settings=Render(factory.get(),imaging.get(),Target(L"ms-settings:"),false);
-    const auto notepad=Render(factory.get(),imaging.get(),Target(L"notepad.exe"),false);
-    const auto generic=Render(factory.get(),imaging.get(),Target(L"custom.exe"),false);
-    Check(settings!=generic && notepad!=generic && settings!=notepad,"Settings and Notepad have distinct non-generic glyphs");
-    Check(Render(factory.get(),imaging.get(),Target(L"custom.exe",L"Gemini"),false)==generic,"unverified vendor identity receives generic fallback, never invented logo");
+
+    // Vendor identity comes from the target, never from the display name or a profile folder.
+    Check(IdentifyBrand(Target(L"OpenAI.Codex_2p2nqsd0c76g0!App",L"Work",TargetKind::Aumid))==L"chatgpt","ChatGPT package family");
+    Check(IdentifyBrand(Target(L"Claude_pzs8sxrjxfjjc!Claude",L"Assistant",TargetKind::Aumid))==L"claude","Claude package family");
+    Check(IdentifyBrand(Target(L"https://gemini.google.com/app"))==L"gemini","Gemini URL host");
+    Check(IdentifyBrand(Target(L"https://gemini.google.com.evil.example/"))==L"","look-alike host is not the vendor");
+    Check(IdentifyBrand(Target(L"C:\\Program Files\\Microsoft VS Code\\Code.exe"))==L"vscode","VS Code by install folder");
+    Check(IdentifyBrand(Target(L"C:\\Tools\\Code.exe"))==L"","generic Code.exe outside its install folder");
+    Check(IdentifyBrand(Target(L"C:\\Program Files\\JetBrains\\PyCharm\\bin\\pycharm64.exe"))==L"pycharm","JetBrains product executable");
+    Check(IdentifyBrand(Target(L"C:\\Users\\Claude\\tool.exe"))==L"","a profile named Claude never selects a vendor");
+    Check(IdentifyBrand(Target(L"C:\\Users\\Claude\\AppData\\Local\\Tool\\tool.exe"))==L"","vendor words in profile paths are ignored");
+    Check(IdentifyBrand(Target(L"custom.exe",L"Gemini"))==L"","display names cannot claim vendor artwork");
+    Check(IdentifyBrand(Target(L"",L"Claude for Science"))==L"claude","an unresolved preset uses its catalog name");
+
     PreloadOfficialIconAssets();
-    const auto gemini=Render(factory.get(),imaging.get(),Target(L"https://gemini.google.com",L"Gemini"),true);
-    const auto perplexity=Render(factory.get(),imaging.get(),Target(L"https://www.perplexity.ai",L"Perplexity"),true);
-    Check(gemini!=perplexity && gemini!=generic && perplexity!=generic,"Gemini and Perplexity official assets remain distinct");
-    CheckGpuBounds(Target(L"https://www.perplexity.ai",L"Perplexity"));
-    CheckGpuBounds(Target(L"https://gemini.google.com",L"Gemini"));
-    std::cout<<"Iconography tests passed: "<<checks<<" checks; target identity and headless Direct2D rendering.\n";
+    for(std::size_t i=0;i<vi::kBrandCount;++i)
+        Check(OfficialArtworkBytes(vi::kBrands[i].key)!=nullptr,"every brand in the token table has packaged artwork");
+    const auto claude=Target(L"Claude_pzs8sxrjxfjjc!Claude",L"Claude",TargetKind::Aumid);
+    const auto gemini=Target(L"https://gemini.google.com",L"Gemini");
+    const auto perplexity=Target(L"https://www.perplexity.ai",L"Perplexity");
+    const auto settings=Target(L"ms-settings:");
+    const auto notepad=Target(L"Microsoft.WindowsNotepad_8wekyb3d8bbwe!App",L"Notepad",TargetKind::Aumid);
+    const auto unknown=Target(L"C:\\nowhere\\tool.exe",L"Gemini");
+    const std::vector<AppTarget> items{claude,gemini,perplexity,settings,notepad,unknown};
+    Check(ClassifyArtwork(Target(L"reel:add"))==ArtworkClass::Command,"internal commands are command glyphs");
+    PrepareArtwork(items,96);
+    Check(ClassifyArtwork(claude)==ArtworkClass::Plated && ClassifyArtwork(perplexity)==ArtworkClass::Plated,
+        "artwork with its own plate is plated");
+    Check(ClassifyArtwork(gemini)==ArtworkClass::Glyph,"open marks sit on the neutral tile");
+    Check(ClassifyArtwork(unknown)==ArtworkClass::Generic,"unknown targets fall back to the generic glyph");
+
+    Canvas canvas;
+    for(const float dpi:{96.f,192.f}) {
+        PrepareArtwork(items,dpi);
+        const auto plated=canvas.Draw(claude,dpi),open=canvas.Draw(gemini,dpi),other=canvas.Draw(perplexity,dpi);
+        Check(plated.visible>800*dpi/96*dpi/96,"plated artwork fills its tile");
+        Check(plated.outsideTile==0 && plated.inCorners==0,"plated artwork is clipped to the r10 tile shape");
+        Check(open.visible>80 && open.outsideTile==0,"glyph marks stay inside the tile");
+        Check(std::abs(open.centerX-32)<1.5f && std::abs(open.centerY-32)<1.5f,"glyph marks are centered in the tile");
+        Check(plated.hash!=open.hash && open.hash!=other.hash,"vendor marks remain distinct");
+        const auto system=canvas.Draw(settings,dpi),note=canvas.Draw(notepad,dpi),generic=canvas.Draw(unknown,dpi);
+        Check(generic.visible>40 && generic.outsideTile==0,"generic glyph renders inside the tile");
+        Check(system.hash!=generic.hash && note.hash!=generic.hash && system.hash!=note.hash,
+            "Windows Settings and Notepad use their own Shell icons");
+        for(const auto* command:{L"reel:add",L"reel:manage",L"reel:preferred",L"reel:appearance",L"reel:edit",
+                                 L"reel:remove",L"reel:previous",L"reel:next"}) {
+            const auto glyph=canvas.Draw(Target(command),dpi);
+            Check(glyph.visible>20 && glyph.outsideTile==0,"command glyph renders inside the tile");
+            Check(std::abs(glyph.centerX-32)<2.5f && std::abs(glyph.centerY-32)<2.5f,"command glyph is centered on its ink");
+        }
+        Check(canvas.Draw(Target(L"reel:appearance"),dpi,false).hash!=canvas.Draw(Target(L"reel:appearance"),dpi,true).hash,
+            "appearance shows the sun in light and the moon in dark");
+    }
+    Glyph glyph{};
+    Check(!CommandGlyph(Target(L"reel:language"),true,glyph),"the language monogram is drawn by the renderer");
+    ReleaseArtwork(nullptr);
+    std::cout<<"Iconography tests passed: "<<checks<<" checks; target identity, artwork classes, tile clipping and command glyphs.\n";
 }

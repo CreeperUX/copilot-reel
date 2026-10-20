@@ -1,6 +1,8 @@
 param([ValidateSet('Release','Debug')][string]$Configuration = 'Release')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+# src/vi_tokens.h comes from design/vi/tokens.json; a token error fails the build here.
+& (Join-Path $PSScriptRoot 'gen-vi-tokens.ps1')
 $localRoot = Join-Path $PSScriptRoot 'local'
 $compilerRoot = Join-Path $localRoot 'msvc\VC\Tools\MSVC\14.44.35207'
 $sdkRoot = Join-Path $localRoot 'sdk\c'
@@ -25,7 +27,7 @@ try {
     finally { Pop-Location }
     $flags=@('/nologo','/std:c++20','/utf-8','/EHsc','/MT','/W4','/DUNICODE','/D_UNICODE','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN','/D_WIN32_WINNT=0x0A00',"/I$projectRoot\src")
     if($Configuration -eq 'Debug') { $flags+=@('/Od','/Zi') } else { $flags+=@('/O2','/DNDEBUG') }
-    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
+    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','artwork.cpp','acrylic.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
     $libraries=@('d3d11.lib','d2d1.lib','dwrite.lib','dxgi.lib','dxguid.lib','dwmapi.lib','windowsapp.lib','CoreMessaging.lib','user32.lib','gdi32.lib','shell32.lib','ole32.lib','oleaut32.lib','propsys.lib','shlwapi.lib','comdlg32.lib','comctl32.lib','advapi32.lib','wtsapi32.lib','windowscodecs.lib','uuid.lib','imm32.lib')
     Push-Location $buildRoot
     try {
@@ -46,7 +48,7 @@ try {
         if($LASTEXITCODE -ne 0) {throw 'Behavior tests compilation failed.'}
         & '.\behavior_tests.exe'
         if($LASTEXITCODE -ne 0) {throw 'Behavior tests failed.'}
-        & $compiler @flags "$projectRoot\tests\iconography_tests.cpp" "$projectRoot\src\iconography.cpp" "$projectRoot\src\official_icons.cpp" /Fe:iconography_tests.exe /link d3d11.lib dxgi.lib d2d1.lib dwrite.lib windowsapp.lib user32.lib gdi32.lib ole32.lib oleaut32.lib shlwapi.lib windowscodecs.lib uuid.lib
+        & $compiler @flags "$projectRoot\tests\iconography_tests.cpp" "$projectRoot\src\iconography.cpp" "$projectRoot\src\official_icons.cpp" "$projectRoot\src\artwork.cpp" /Fe:iconography_tests.exe /link d3d11.lib dxgi.lib d2d1.lib dwrite.lib windowsapp.lib user32.lib gdi32.lib shell32.lib ole32.lib oleaut32.lib shlwapi.lib windowscodecs.lib uuid.lib
         if($LASTEXITCODE -ne 0) {throw 'Iconography tests compilation failed.'}
         & '.\iconography_tests.exe'
         if($LASTEXITCODE -ne 0) {throw 'Iconography tests failed.'}

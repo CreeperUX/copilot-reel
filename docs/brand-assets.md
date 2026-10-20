@@ -49,17 +49,26 @@ and Notepad. Gemini uses Google's 512-pixel sparkle artwork linked by
 [official application page](https://www.perplexity.ai/). These source files are
 preserved byte-for-byte and included in the same startup asset cache.
 
-Windows Settings and Notepad use theme-aware native vector command glyphs: a
-gear and a bound notepad. `IdentifySystemIcon` recognizes actual `ms-settings:`
-URIs, executable basenames, and known packaged identifiers. It does not infer
-system identity from localized display names or arbitrary substrings. The
-renderer passes the real target to this system-icon path before falling back to
-a neutral application window. Chinese or user-renamed entries therefore retain
-their system glyph without introducing guessed vendor marks.
+Windows Settings, Notepad and every custom application without vendor artwork
+use their own Windows Shell icon (`SHCreateItemFromParsingName` +
+`IShellItemImageFactory::GetImage`, 256 px, icon only): `ms-settings:` targets use
+the Settings package identity, Notepad its package, and executables or shortcuts
+their resolved file. Icons are extracted once per target while the configuration
+loads (`PrepareArtwork`), never during a draw. `IdentifySystemIcon` still
+recognizes actual system destinations for localized display names; it never
+infers identity from display names or arbitrary substrings.
 
-`DrawAppSymbol` now draws only those system symbols or the neutral fallback.
-The earlier approximate ChatGPT, Claude, Gemini, Codex, and Perplexity shapes are
-removed; verified vendor artwork is the sole branded rendering source.
+Vendor artwork is chosen by the launch target alone (`IdentifyBrand`): the package
+family of an AUMID, the file name of an executable or shortcut together with its
+install folder, or a URL host. A profile folder such as `C:\Users\<name>` never
+counts, and the display name is consulted only while a preset has no target yet.
+Renaming an app therefore cannot change its artwork, and a user named Claude
+does not stamp the Anthropic mark on unrelated applications.
+
+The earlier approximate ChatGPT, Claude, Gemini, Codex, and Perplexity shapes and
+the hand-drawn Settings and Notepad glyphs are removed from the reel; verified
+vendor artwork and Shell icons are its only application images. The focused
+editor's list keeps neutral line glyphs (`DrawAppSymbol`).
 
 ## Files and provenance
 
@@ -76,34 +85,39 @@ The original SVG remains in the repository and package.
 
 ## Native rendering and resource lifetime
 
-`PreloadOfficialIconAssets()` runs once on the COM-initialized UI thread before
-the first interaction. It reads all artwork and decodes PNGs with Windows
-Imaging Component. Oversized PNGs are downsampled to a maximum 256-pixel edge;
-the application never decodes images or reads artwork files during a draw.
+`PreloadOfficialIconAssets()` reads the PNG of every brand listed in
+`design/vi/tokens.json` (`iconography.brands`) once on the UI thread. The original
+SVGs stay in the repository and package for provenance; the reel renders the
+official PNGs, which avoids partial rendering of SVG masks and filters that
+Direct2D does not implement.
 
-`DrawOfficialIcon()` uses `ID2D1DeviceContext5::DrawSvgDocument` for SVG features
-supported by Direct2D. Some official assets, including VS Code and Antigravity,
-contain SVG masks or filters that Direct2D does not implement. Those assets use
-their official PNG, rather than silently rendering a damaged or incomplete SVG.
-Before drawing a supported SVG, its cached in-memory root width and height are
-normalized to numeric viewBox dimensions. This prevents physical units such as
-Perplexity's `270pt` root from expanding to 360 pixels and overflowing the shared
-optical box. The source SVG stays byte-for-byte unchanged. Native WARP/SVG tests
-verify that Perplexity and the Gemini PNG stay inside a 28-DIP rectangle and
-remain centered.
+Every reel item belongs to one artwork class (`src/artwork.h`):
 
-Legacy DC render targets also use the PNG fallback. The wheel geometry, text,
-selection rings, system glyphs, and animation remain vector-based.
+| Class | Assets | Treatment |
+| --- | --- | --- |
+| Plated | Claude, Perplexity, ZCode, DeepSeek Harness, JetBrains Air | The vendor plate replaces the neutral tile: cropped to the plate's own bounds (DeepSeek Harness drops its baked shadow margin), scaled to cover the 40 DIP tile and masked to the tile's 10 DIP corner radius, with the tile hairline on top. |
+| Glyph | ChatGPT, Gemini, VS Code, Antigravity, the JetBrains IDE family, Junie, Toolbox, Shell icons | Centered on the neutral tile. The ink bounding box fits a 28 DIP keyline times a per-brand optical scale (0.86 for the dense JetBrains product squares, 1.04 for the Gemini sparkle), so marks read at equal visual weight. |
+| Command | Internal reel actions | Segoe Fluent Icons glyphs at 24 DIP in the foreground color. |
+| Generic | No artwork | A neutral window glyph (Segoe Fluent Icons E737). |
 
-GPU images are cached by the canonical Direct2D device identity, not by the
-transient device-context pointer returned by a composition surface's
-`BeginDraw`. Legacy targets have a cache keyed by their canonical COM identity.
-Each cache retains its owner so a recycled pointer cannot accidentally match a
-stale resource. `ReleaseOfficialIcons(nullptr)` clears all device resources on
-device loss or shutdown; passing a target clears only that resource domain.
+The class, optical scale and content rectangle of each brand are tokens, measured
+from the artwork's alpha (coverage of its bounding box and match with a rounded
+rectangle) and tuned on native contact sheets. Shell icons are classified by the
+same alpha analysis at run time.
 
-Missing or unverified artwork returns `false` and uses a neutral application
-glyph. It must never be replaced by an invented branded logo.
+Masking a plated mark to the tile shape is the only geometric treatment. Marks are
+never recolored, redrawn, distorted, or placed inside a second plate. Light and
+dark variants are used only where the vendor ships them (ChatGPT); in high
+contrast the variant follows the brightness of the system window color.
+
+Raster artwork is pre-scaled with WIC high-quality cubic filtering to the exact
+device-pixel size for the current DPI and drawn 1:1 on the pixel grid; any other
+size uses Direct2D high-quality cubic interpolation. Caches are keyed by source
+and pixel size, held per Direct2D device, and released on DPI change and device
+loss (`ReleaseArtwork`).
+
+Missing or unverified artwork uses the neutral glyph. It must never be replaced by
+an invented branded logo.
 
 ## Vendor notices
 

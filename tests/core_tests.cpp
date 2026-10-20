@@ -153,12 +153,17 @@ int main() {
         Check(main[count].action==MenuAction::Settings && main[count].visual.target==L"reel:add",
             "the single plus icon opens the combined hub without launching an app");
         const auto hub=BuildMenu(MenuPage::Settings,apps,presets);
-        Check(hub.size()==(count<8?5u:4u),"hub reserves its Add action only while another app can be saved");
+        Check(hub.size()==5u && hub[4].action==MenuAction::Presets,"hub keeps its Add slot at every app count, so it never reflows");
+        Check(hub[4].enabled==(count<kMaxApps),"hub Add is enabled only while another app can be saved");
+        for(size_t i=0;i<4;++i)Check(hub[i].enabled,"hub commands other than Add are always enabled");
         const auto manage=BuildMenu(MenuPage::Manage,apps,presets);
-        Check(manage.size()==count+(count<8?1:0),"manage wheel exposes Add only below the saved-app limit");
+        Check(manage.size()==count+1,"manage wheel keeps its Add slot at the saved-app limit");
         for(size_t i=0;i<count;++i)
-            Check(manage[i].action==MenuAction::Entry && manage[i].index==static_cast<int>(i),"manage opens the selected entry submenu");
-        if(count<8)Check(manage.back().action==MenuAction::Presets,"Add opens the preset wheel");
+            Check(manage[i].action==MenuAction::Entry && manage[i].index==static_cast<int>(i) && manage[i].enabled,
+                "manage opens the selected entry submenu");
+        Check(manage.back().action==MenuAction::Presets && manage.back().enabled==(count<kMaxApps),
+            "Add opens the preset wheel and is disabled at the limit");
+        for(const auto& entry:main)Check(entry.enabled,"main wheel entries are always enabled");
         const auto preferred=BuildMenu(MenuPage::Preferred,apps,presets);
         Check(preferred.size()==count,"preferred wheel lists every saved app");
         for(size_t i=0;i<count;++i) {

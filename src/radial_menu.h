@@ -7,26 +7,30 @@ namespace reel {
 enum class MenuPage { Main, Manage, Presets, Settings, Preferred, Entry };
 enum class MenuAction { Launch, Manage, Settings, Edit, Presets, Preset, Custom,
     Language, Preferred, SetPreferred, Appearance, Entry, Remove, Previous, Next };
-struct MenuEntry { AppTarget visual; MenuAction action; int index=-1; };
+// Disabled entries keep their slot and name but can never be chosen.
+struct MenuEntry { AppTarget visual; MenuAction action; int index=-1; bool enabled=true; };
+inline constexpr size_t kMaxApps=8;
 
 // Action metadata is separate from launch targets, so internal commands never
 // reach ShellExecute and app entries retain their official icon identity.
 inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarget>& apps,
     const std::vector<AppTarget>& presets,size_t offset=0,int editing=-1) {
     std::vector<MenuEntry> result;
-    auto action=[&](const wchar_t* name,const wchar_t* glyph,MenuAction kind,int index=-1) {
-        result.push_back({{name,TargetKind::Shell,glyph,L"",L""},kind,index});
+    auto action=[&](const wchar_t* name,const wchar_t* glyph,MenuAction kind,int index=-1,bool enabled=true) {
+        result.push_back({{name,TargetKind::Shell,glyph,L"",L""},kind,index,enabled});
     };
     auto entries=[&](MenuAction kind) {
         for(size_t i=0;i<apps.size();++i) result.push_back({apps[i],kind,static_cast<int>(i)});
     };
+    // At capacity Add stays in place, disabled, so the orbit never reflows.
+    const bool canAdd=apps.size()<kMaxApps;
     switch(page) {
     case MenuPage::Main:
         entries(MenuAction::Launch);
         action(Tr(L"Apps and settings",L"应用与设置"),L"reel:add",MenuAction::Settings);break;
     case MenuPage::Manage:
         entries(MenuAction::Entry);
-        if(apps.size()<8)action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets);break;
+        action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets,-1,canAdd);break;
     case MenuPage::Presets:
         for(size_t i=offset;i<std::min(offset+5,presets.size());++i)
             result.push_back({presets[i],MenuAction::Preset,static_cast<int>(i)});
@@ -38,7 +42,7 @@ inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarge
         action(Tr(L"Appearance",L"外观"),L"reel:appearance",MenuAction::Appearance);
         action(Tr(L"Preferred agent",L"首选应用"),L"reel:preferred",MenuAction::Preferred);
         action(Tr(L"Manage apps",L"管理应用"),L"reel:manage",MenuAction::Manage);
-        if(apps.size()<8)action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets);break;
+        action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets,-1,canAdd);break;
     case MenuPage::Preferred:entries(MenuAction::SetPreferred);break;
     case MenuPage::Entry:
         action(Tr(L"Edit app",L"编辑应用"),L"reel:edit",MenuAction::Edit,editing);
