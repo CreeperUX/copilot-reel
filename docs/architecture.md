@@ -90,6 +90,12 @@ There is no pre-rendered frame sequence or fixed 60 Hz application timer. The co
 
 Performance validation must cover 60/144/240 Hz, mixed refresh rates, different DPI, integrated graphics, and battery/energy saver. Measure first-visible latency, selection latency, frame-time variation, and static/hidden CPU/GPU activity against an application-closed baseline. See [validation](validation.md).
 
+## Language and identity
+
+`AppDisplayName` localizes recognized Notepad and Windows Settings default labels at the rendering boundary, including historical Chinese names. It does not mutate `AppTarget`, launch fields, or persisted preferences. Both languages pass the same stored target and name into icon identification; menu action labels are localized separately from their invariant `reel:` action IDs. The editor also presents built-in labels in its current language, and its initialization guard prevents presentation changes from becoming edits.
+
+One active profile supplies apps, ordering, favorite, and language. The application and diagnostic paths come from `ConfigPath`; language does not choose a path. Windows packaging can redirect an installed app into its own LocalCache scope, independently of standalone development files.
+
 ## Configuration and activation
 
 The native editor supports 1-8 targets. Main contains configured apps and a single +. The + opens the combined hub, ordered Language, Appearance, Preferred agent, Manage apps, and Add app. Language displays EN/ZH at the top tile with flanking 40 DIP arrow hit regions, or A/D. Appearance uses sun/moon for the current system theme and opens ms-settings:colors. The center chevron or Esc returns one level. Missing presets open the focused native editor with an empty launch target. See [configuration and isolation](configuration.md).

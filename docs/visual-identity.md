@@ -38,6 +38,8 @@ The hub order is stable: language at twelve o'clock, then appearance, preferred 
 
 The language tile displays `EN` or `ZH`. Small chevrons flank this tile at local canvas coordinates `(144, 80)` and `(240, 80)`. The visible chevrons are 5 x 10 DIP strokes without filled backgrounds; their hit regions are 40 x 40 DIP. A/D supplies the same language adjustment. English is the default; Simplified Chinese is a native option. The update applies after persistence succeeds and never renames user app data.
 
+Language is a presentation state over one application profile. The same raw targets and artwork feed both locales. Built-in system names use localized display labels, while custom names and saved data remain intact. An idle Main render must be identical in English and Chinese; only the EN/ZH tile changes in the idle hub.
+
 Appearance uses a sun for the system light theme and a moon for the system dark theme. Activating it opens Windows color settings. It does not introduce a separate application theme override. Neither language nor appearance has a caption beneath its tile. Hovering either tile shows its functional name at the center. The language-arrow hit regions also select Language, preserving that label while the pointer moves to an arrow.
 
 ## Geometry and official artwork

@@ -54,6 +54,10 @@ try {
         if($LASTEXITCODE -ne 0) {throw 'Local launch tests compilation failed.'}
         & '.\local_launch_tests.exe'
         if($LASTEXITCODE -ne 0) {throw 'Local launch tests failed.'}
+        & $compiler @flags "$projectRoot\tests\display_names_tests.cpp" "$projectRoot\src\iconography.cpp" "$projectRoot\src\behavior.cpp" "$projectRoot\src\localization.cpp" "$projectRoot\src\settings.cpp" /Fe:display_names_tests.exe /link d2d1.lib windowsapp.lib user32.lib gdi32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib
+        if($LASTEXITCODE -ne 0) {throw 'Display name tests compilation failed.'}
+        & '.\display_names_tests.exe'
+        if($LASTEXITCODE -ne 0) {throw 'Display name tests failed.'}
         & $compiler @flags "$projectRoot\tests\launch_probe.cpp" /Fe:launch_probe.exe /link /SUBSYSTEM:WINDOWS user32.lib
         if($LASTEXITCODE -ne 0) {throw 'Launch probe compilation failed.'}
     } finally { Pop-Location }

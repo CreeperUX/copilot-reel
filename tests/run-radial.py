@@ -75,6 +75,8 @@ u.MonitorFromPoint.restype = w.HANDLE
 u.GetMonitorInfoW.argtypes = [w.HANDLE, ctypes.POINTER(MonitorInfo)]
 u.GetWindowRect.argtypes = [w.HWND, ctypes.POINTER(w.RECT)]
 u.IsWindowVisible.argtypes = [w.HWND]
+u.IsWindowEnabled.argtypes = [w.HWND]
+u.IsWindowEnabled.restype = w.BOOL
 u.GetDpiForWindow.argtypes = [w.HWND]
 u.GetDpiForWindow.restype = w.UINT
 u.GetForegroundWindow.restype = w.HWND
@@ -478,6 +480,8 @@ def native_picker_short_tap():
             filename_attempts.append({'matches': len(filename_controls)})
             return False
         filename = filename_controls[0]
+        if not u.IsWindowVisible(picker) or not u.IsWindowVisible(filename) or not u.IsWindowEnabled(filename):
+            return False
         set_result = u.SendMessageW(filename, 0x000c, 0, ctypes.addressof(filename_text))
         # GetWindowText cannot read another process's edit contents. WM_GETTEXT
         # marshals the requested native text instead and proves the field is ready.
@@ -486,6 +490,10 @@ def native_picker_short_tap():
         filename_attempts.append({'set': set_result, 'get': get_result, 'text': actual.value})
         return actual.value == str(probe)
 
+    # The dialog HWND is published before the common dialog finishes filling
+    # its initial directory. Wait for visible controls before entering a path.
+    wait(lambda: u.IsWindowVisible(picker), 'visible native application picker')
+    time.sleep(.25)
     try:
         wait(fill_native_filename, 'ready native filename control containing the probe path')
     finally:

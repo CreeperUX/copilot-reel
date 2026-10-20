@@ -10,6 +10,7 @@
 #include "official_icons.h"
 #include "radial_menu.h"
 #include "local_launch.h"
+#include "display_names.h"
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -51,16 +52,9 @@ CommandPacket CaptureCommand(Command command,bool cold=false) {
 }
 
 std::wstring DataDirectory() {
-    wchar_t overridePath[32768]{};
-    const DWORD overrideLength=GetEnvironmentVariableW(L"COPILOT_REEL_DATA_DIR",overridePath,32768);
-    if(overrideLength>0 && overrideLength<32768 && std::filesystem::path(overridePath).is_absolute()) {
-        std::filesystem::create_directories(overridePath);return overridePath;
-    }
-    PWSTR path=nullptr;
-    std::wstring result;
-    if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&path))) { result=path; CoTaskMemFree(path); }
-    else { wchar_t temp[MAX_PATH]{}; GetTempPathW(MAX_PATH,temp); result=temp; }
-    result+=L"\\CopilotReel"; CreateDirectoryW(result.c_str(),nullptr); return result;
+    const auto path=std::filesystem::path(ConfigPath()).parent_path();
+    if(path.empty())throw std::runtime_error("The application data path is unavailable");
+    std::filesystem::create_directories(path);return path.wstring();
 }
 void Log(const std::wstring& value) {
     try {
@@ -134,7 +128,7 @@ void Launch(const AppTarget& target,HWND owner) {
     if(FAILED(hr)) {
         wchar_t number[40]{};swprintf_s(number,L"0x%08X",static_cast<unsigned>(hr));
         Log(L"Launch failed "+std::wstring(number));
-        MessageBoxW(nullptr,(std::wstring(Tr(L"Could not open: ",L"无法打开："))+target.name+Tr(L"\nCheck the target and arguments in App settings.\n\n",L"\n请检查应用设置中的目标与参数。\n\n")+number).c_str(),kAppName,MB_OK|MB_ICONERROR);
+        MessageBoxW(nullptr,(std::wstring(Tr(L"Could not open: ",L"无法打开："))+AppDisplayName(target)+Tr(L"\nCheck the target and arguments in App settings.\n\n",L"\n请检查应用设置中的目标与参数。\n\n")+number).c_str(),kAppName,MB_OK|MB_ICONERROR);
     }
 }
 
@@ -258,7 +252,7 @@ public:
         case MenuPage::Presets:return Tr(L"Add an agent",L"添加应用");
         case MenuPage::Settings:return Tr(L"Settings",L"设置");
         case MenuPage::Preferred:return Tr(L"Preferred agent",L"首选应用");
-        case MenuPage::Entry:return editing_>=0 && static_cast<size_t>(editing_)<items_.size()?items_[editing_].name:L"";
+        case MenuPage::Entry:return editing_>=0 && static_cast<size_t>(editing_)<items_.size()?AppDisplayName(items_[editing_]):L"";
         default:return L"Copilot Reel";
         }
     }
@@ -535,11 +529,13 @@ public:
     }
     void SaveDiagnostics() {
         std::wostringstream text;
-        text<<L"Copilot Reel 0.3.2\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.3\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
-            <<L"\r\npreview="<<preview_<<L"\r\neditorOpen="<<editorOpen_<<L"\r\n"<<renderer_->Diagnostics();
+            <<L"\r\npreview="<<preview_<<L"\r\neditorOpen="<<editorOpen_
+            <<L"\r\ndataPath="<<ConfigPath()<<L"\r\nlanguage="<<(CurrentLanguage()==Language::English?L"en-US":L"zh-CN")
+            <<L"\r\n"<<renderer_->Diagnostics();
         const auto bytes=winrt::to_string(text.str());
         const auto path=DataDirectory()+L"\\diagnostics.txt";
         HANDLE file=CreateFileW(path.c_str(),GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);

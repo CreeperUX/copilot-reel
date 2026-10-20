@@ -2,6 +2,7 @@
 #include "iconography.h"
 #include "official_icons.h"
 #include "localization.h"
+#include "display_names.h"
 
 #include <d2d1_1.h>
 #include <d2d1effects.h>
@@ -390,7 +391,7 @@ struct OrbitRenderer::Impl {
 
     std::wstring CenterLabel() const {
         if(awaitCenter || selection<0 || static_cast<size_t>(selection)>=items.size())return {};
-        return items[selection].name;
+        return AppDisplayName(items[selection]);
     }
 
     void DrawOnce() {

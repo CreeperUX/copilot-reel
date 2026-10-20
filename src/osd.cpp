@@ -2,6 +2,7 @@
 #include "appearance.h"
 #include "iconography.h"
 #include "localization.h"
+#include "display_names.h"
 #include "settings.h"
 
 #include <commdlg.h>
@@ -250,7 +251,7 @@ void Paint(State& state) {
         } else if (state.page == Page::About) {
             DrawText(state,target,L"Copilot Reel",D2D1::RectF(24,86,width-24,127),state.appearance.foreground,28,true);
             DrawText(state,target,Tr(L"Soft Orbit / native Windows launcher",L"柔光轨道 / Windows 原生启动器"),D2D1::RectF(24,136,width-24,164),state.appearance.secondary,14);
-            DrawText(state,target,Tr(L"Version 0.3.2",L"版本 0.3.2"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Version 0.3.3",L"版本 0.3.3"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
             DrawText(state,target,Tr(L"Hold the Copilot key, choose an app, then release.",L"按住 Copilot 键，选择应用，然后松开。"),D2D1::RectF(24,194,width-24,220),state.appearance.foreground,14);
             DrawText(state,target,Tr(L"Windows controls the theme, transparency and motion.",L"主题、透明效果和动画均遵循 Windows 设置。"),D2D1::RectF(24,233,width-24,259),state.appearance.secondary,13);
         }
@@ -368,7 +369,7 @@ void DrawControl(State& state, const DRAWITEMSTRUCT& item) {
         ComPtr<ID2D1SolidColorBrush> brush;
         target->CreateSolidColorBrush(Color(selected?state.appearance.selectionText:foreground),&brush);
         if (brush) DrawAppSymbol(target,app,D2D1::RectF(12,6,34,28),brush.Get(),1.6f);
-        DrawText(state,target,app.name,D2D1::RectF(46,7,width-115,31),
+        DrawText(state,target,AppDisplayName(app),D2D1::RectF(46,7,width-115,31),
             selected?state.appearance.selectionText:foreground,14);
         const bool website = app.target.starts_with(L"https:") || app.target.starts_with(L"http:");
         DrawText(state,target,website?Tr(L"Website",L"网页"):Tr(L"Application",L"应用"),
@@ -474,7 +475,7 @@ void BuildPage(State& state) {
         const auto list=Control(state,AppList,L"LISTBOX",Tr(L"Applications",L"应用列表"),
             WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT,24,90,512,204);
         SendMessageW(list,LB_SETITEMHEIGHT,0,state.Px(34));
-        for(const auto& app:state.apps)SendMessageW(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(app.name.c_str()));
+        for(const auto& app:state.apps)SendMessageW(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(AppDisplayName(app).c_str()));
         state.selected=std::clamp(state.selected,0,static_cast<int>(state.apps.size())-1);
         SendMessageW(list,LB_SETCURSEL,state.selected,0);
         Button(state,Edit,Tr(L"Edit",L"编辑"),24,304,112);
@@ -500,7 +501,7 @@ void BuildPage(State& state) {
         Button(state,WindowsAppearance,Tr(L"Open Windows appearance",L"打开 Windows 外观设置"),24,302,250);
         break;
     case Page::Editor:
-        EditField(state,Name,Tr(L"Name",L"名称"),state.draft.name,24,77,512,128);
+        EditField(state,Name,Tr(L"Name",L"名称"),AppDisplayName(state.draft),24,77,512,128);
         EditField(state,Target,state.draft.kind==TargetKind::Aumid?
             Tr(L"Application ID (AUMID)",L"应用 ID (AUMID)"):
             Tr(L"Open with · app, shortcut or website",L"打开目标 · 应用、快捷方式或网页"),state.draft.target,24,151,390);
@@ -674,7 +675,7 @@ void Command(State& state,int id,int notification) {
     case Save:CompleteEdit(state);break;
     case Remove:
         if(state.apps.size()>1 && MessageBoxW(state.window,
-            (std::wstring(Tr(L"Remove ",L"移除 "))+state.apps.at(static_cast<size_t>(state.selected)).name+L"?").c_str(),
+            (std::wstring(Tr(L"Remove ",L"移除 "))+AppDisplayName(state.apps.at(static_cast<size_t>(state.selected)))+L"?").c_str(),
             kAppName,MB_YESNO|MB_ICONQUESTION)==IDYES) {
             auto candidate=state.apps;candidate.erase(candidate.begin()+state.selected);
             if(Persist(state,candidate))BuildPage(state);

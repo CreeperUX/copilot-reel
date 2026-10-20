@@ -1,8 +1,8 @@
 # Validation status
 
-Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.2.0**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.3.0**. This records demonstrated behavior and its limits, not full release acceptance.
 
-## Verified in v0.3.2
+## Verified in v0.3.3
 
 | Area | Evidence and scope |
 | --- | --- |
@@ -10,25 +10,30 @@ Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed applica
 | Core geometry and state | 1-12 sectors, 96-384 DPI geometry, negative monitor origins, eight boundary positions, center-entry gating, delayed Down/Up ordering, exactly-once release, radial action routing, preset pagination, and protocol parsing passed. |
 | Configuration | 48 parser/validation checks passed. Invalid data is preserved; fallback does not overwrite it. |
 | Preferred profile | 65 checks passed, including rename/reorder stability, deleted preference fallback, data-directory isolation, UTF-16 BOM, corrupt preferences, and atomic replacement failure. |
-| Native end-to-end input | `tests/run-radial.py` passed 21 scenario groups against the final Release binary. Cold/warm Tap, cold/warm Down, stop, duplicate Down/Up, orphan cold Up, protocol Tap, and the registered message contract are covered using harmless launch probes. |
-| Animation interruption | Release 25.68 ms into the 160 ms opening canceled without launching; reopening 17.32 ms into the 120 ms exit remained visible after 270 ms. The old close timer did not hide the new gesture. |
+| Native end-to-end input | `tests/run-radial.py` passed 19 interaction groups; the two native-picker groups passed in a focused rerun after correcting a fixture race with dialog initialization. The application picker code was unchanged. Cold/warm Tap, cold/warm Down, stop, duplicate Down/Up, orphan cold Up, protocol Tap, and the registered message contract are covered using harmless launch probes. |
+| Animation interruption | Release 25.79 ms into the 160 ms opening canceled without launching; reopening 18.3 ms into the 120 ms exit remained visible after 270 ms. The old close timer did not hide the new gesture. |
 | Missing preset | Selecting unresolved Claude Science opened the focused editor with its official name and an empty target. Cancel preserved the configuration byte-for-byte and launched nothing. |
-| Actual pointer placement | On this 200% DPI display, the canvas measured 768 pixels. Interior anchors (1440, 900) and (912, 1158) had zero center displacement. All eight edge/corner positions used only the minimum translation and stayed in the 2880 x 1800 work area. Tests verified the captured pointer and that the application did not warp it. |
+| Actual pointer placement | On this 200% DPI display, the canvas measured 768 pixels. Interior anchors (1440, 2700) and (912, 2958) had zero center displacement. All eight edge/corner positions used only the minimum translation and stayed inside the tested monitor work area [0, 1800, 2880, 3600]. Tests verified the captured pointer and that the application did not warp it. |
 | Radial navigation | Main has one + entry, opening a combined hub for Language, Appearance, Preferred, Manage, and Add. Both preset invocation paths return to their recorded parent. Entry actions, pagination, custom editor, and cancellation back to Manage passed. Center and Escape returned one level. |
 | Functional hover labels | Twenty-six observations verified real mouse and keyboard selection across English/Chinese hub actions, both language arrows, main app/+ items, and idle clearing. One name is rendered; no explanatory second line is added. |
 | Local short tap | Native picker cancellation preserves data and launches nothing. Accepting the harmless executable saves the profile, retains a backup, launches once, and makes the next Tap direct. Sixteen shortcut-verification checks reject URL/missing targets without execution. Exact legacy ChatGPT/Claude homepage migrations preserve display names and preferred identity. Installed-user profiles now point to their native AUMIDs; the preferred index remains ChatGPT. |
+| Built-in display names | 51 checks passed across English, Chinese, and English again. Historical Notepad/Windows Settings names translate only for display, including in the focused editor. Names, targets, custom labels, and launch identity remain intact. |
+| Shared language profile | One native instance used one isolated apps.ini and behavior.ini while switching EN to ZH to EN. Both files retained identical SHA-256 hashes, app order and preference remained fixed, and all captures used the same dataPath. |
+| Pixel-level icon invariance | Main EN versus ZH: zero differing pixels. Main EN versus returned EN: zero. Hub outside the EN/ZH tile: zero. Hub EN versus returned EN: zero. Actual captures are in output/runtime/v0.3.3/. System hover names show the appropriate language; only the locale monogram changes in the idle hub. |
 | Native language input | Actual `SendInput` A/D, the EN/ZH tile, and both arrows beside that tile switched and persisted English/Chinese. Testing found Chinese IME interception; only the command HWND now disables IME. Text editors retain IME input. |
-| Rendering work at rest | Stationary visible surface draws stayed 88 to 88 over 350 ms; hidden draws stayed 217 to 217 over 350 ms. This verifies absence of repeated surface rasterization in those observations, not GPU cost or high-refresh presentation quality. |
+| Rendering work at rest | Stationary visible surface draws stayed 88 to 88 over 350 ms; hidden draws stayed 216 to 216 over 350 ms. This verifies absence of repeated surface rasterization in those observations, not GPU cost or high-refresh presentation quality. |
 | Official artwork | All 39 artwork hashes match provenance. Thirty-five icon checks passed: strict target-based Windows Settings/Notepad glyphs, nonempty/distinct WIC renders, and SVG-capable D3D11/WARP bounds checks. Gemini and Perplexity use official artwork. Perplexity physical-unit SVG dimensions are normalized in the cached document so no pixels escape its optical bounds; original source files remain unchanged. |
 | Actual wheel images | Windows Graphics Capture captured the application HWND at 192 DPI, independently of overlapping desktop windows. Main and combined-hub images show the six default identities, EN/ZH, functional hover names, matching geometry, and no renderer error. See `output/runtime/v0.3.2/`. The unchanged motion implementation was captured in v0.3.1; that sequence is visual evidence, not a frame-rate benchmark. This validates the tested dark, opaque setup. |
 | VI | v0.8 PDF contains 12 English pages, all rendered and visually inspected. The active vector masters describe the single + entry, one-line functional hover names, EN/ZH and sun/moon state, zero interior pointer offset, and restrained native motion. Evidence: `artifacts/qa/vi-v08/results.json`. |
-| Clean installation | Old 0.3.1.0 package was removed, signed 0.3.2.0 installed, and three existing configuration files restored byte-for-byte before the intentional local-profile migration. Installed executable SHA-256 equals the final tested build. All 42 packaged artwork/provenance/license files match source hashes. |
+| Clean installation | Old 0.3.2.0 package was removed, signed 0.3.3.0 installed, and four existing configuration files across the installed/development scopes were restored byte-for-byte. This release does not rewrite saved names when language changes. Installed executable SHA-256 equals the final tested build. All 42 packaged artwork/provenance/license files match source hashes. |
 | Copilot registration | Installed provider and all three state declarations are valid. AUMID remains `CopilotReel.Desktop_nks6vs6sjb1qw!App`. The user's current Windows selection is this app. No tool wrote the key preference. |
 
-Final controller evidence: `artifacts/qa/radial-20261020-130854-0ad1af/results.json`.
+Controller evidence: `artifacts/qa/radial-20261020-132622-600967/results.json` (19 groups, then a picker-fixture timeout).
+Focused picker rerun: `artifacts/qa/radial-20261020-132834-3f2e1d/results.json` (both picker groups passed).
+Language/image invariance: `artifacts/qa/language-invariance-20261020-132456-0e03b9/results.json`.
 Native motion evidence: `artifacts/qa/quiet-motion/capture-results.json`.
 Installation receipt: `artifacts/installation.json`.
-Configuration backup: `artifacts/backups/20261020-131011`.
+Configuration backup: `artifacts/backups/20261020-132908`.
 These local evidence and signing directories are ignored by Git. Private signing material is never packaged.
 
 The prior Windows Settings UI Automation check observed a visible, enabled Copilot Reel item. The new package retains that provider identity. Manifest verification and the saved current selection are not a new UI Automation observation of an open picker.

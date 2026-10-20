@@ -6,7 +6,7 @@ Application configuration uses UTF-16 LE with a BOM and preserves Unicode text. 
 
 ## Interface language
 
-English is the default interface language. Open **Main reel > +**, then click the small arrows flanking the **EN/ZH** tile, or press **A / D**, to switch between English and Simplified Chinese. This is an in-place radial adjustment, not a dropdown in a separate rectangular settings window. The change updates the EN/ZH icon, tray text, editor labels, and subsequent dialogs. Hovering the EN/ZH tile or either arrow shows Language at the center. No fixed language heading, caption beneath the tile, or keyboard hint is rendered inside the wheel. Entry names are user data and are never translated or renamed. This release has no autostart preference.
+English is the default interface language. Open **Main reel > +**, then click the small arrows flanking the **EN/ZH** tile, or press **A / D**, to switch between English and Simplified Chinese. This is an in-place radial adjustment, not a dropdown in a separate rectangular settings window. The change updates the EN/ZH icon, tray text, editor labels, and subsequent dialogs. Hovering the EN/ZH tile or either arrow shows Language at the center. No fixed language heading, caption beneath the tile, or keyboard hint is rendered inside the wheel. Stored entry names remain user data. Built-in Notepad and Windows Settings labels, including the legacy Chinese defaults, are localized only while drawing the UI; their stored names and launch identities are untouched. Explicit custom names remain unchanged. This release has no autostart preference.
 
 Language preference is stored independently in `%LOCALAPPDATA%\CopilotReel\preferences.ini`:
 
@@ -14,6 +14,8 @@ Language preference is stored independently in `%LOCALAPPDATA%\CopilotReel\prefe
 [General]
 Language=en-US
 ```
+
+Both languages read the same `apps.ini` and `behavior.ini` in the active profile. Switching language writes only `preferences.ini`; it never selects another application list, icon set, target order, or preferred target. The installed MSIX and a standalone development executable may have separate Windows application-data scopes. That distinction is packaging, not language. Isolated tests explicitly override their scope with `COPILOT_REEL_DATA_DIR`. Diagnostics expose the active `dataPath` and `language`.
 
 The supported persisted values are `en-US` and `zh-CN`. Missing or invalid values select English. The radial adjustment applies only after its atomic preference write succeeds. The command-only wheel disables IME composition so A/D work under a Chinese keyboard layout; native text editors keep their input method. Windows-owned dialog controls may follow the Windows display language.
 
