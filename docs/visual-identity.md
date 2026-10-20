@@ -1,88 +1,168 @@
-# Visual identity v0.8: Quiet Soft Orbit
+# Visual identity v0.9: Soft Orbit
 
-Soft Orbit uses a restrained native surface, original application marks, and a single `+` entry for both app management and settings. The interface conveys language and appearance through the icons themselves. This specification describes implementation intent; runtime evidence belongs in [validation](validation.md).
+Normative visual specification for the native **Copilot Reel 0.3.4** build. Every value below comes from [`design/vi/tokens.json`](../design/vi/tokens.json) (schema 0.9, hand-edited); if this page and the tokens ever disagree, the tokens win. `src/vi_tokens.h` is generated from the same file.
 
 ## Deliverables
 
-- [English VI PDF](../output/pdf/copilot-reel-vi-v0.8.pdf): 12 reviewed pages.
-- [SVG masters](../design/vi/vectors): Main, unified hub, language, preferred-agent, management, and presets in light/dark variants.
-- [Design tokens](../design/vi/tokens.json): geometry, timing, input, materials, and artwork policy.
-- [Style specification](../design/vi/stylesheet.typ): editable English Typst table; the Python scene generator produces the PDF.
-- [Official artwork provenance](../assets/brands/provenance.json): sources, ownership, processing, and hashes.
-
-PDF and PNG previews are review artifacts, never application UI or animation frames. Native UI geometry is vector based. Supported official SVGs use Direct2D; original PNG identities remain valid when vector sources are missing or unsupported.
-
-## Center and visual copy
-
-Main has an empty idle center. Idle submenus show a small neutral back chevron. Hovering an application or command shows one concise functional name at the center, such as Language, Appearance, Preferred agent, Manage apps, or Add app. The label replaces the back chevron while an item is selected. It uses 14 DIP text in a 132 DIP single-line region, with ellipsis for unusually long user names. No generic page heading, second-line explanation, Choose an app prompt, release instruction, A/D hint, or Move here instruction is drawn.
-
-Semantic action names remain in the model and development documentation. The minimal visual surface does not establish complete accessibility support; keyboard discoverability and assistive-technology semantics require their own validation.
-
-## One combined entry
-
-| Level | Contents |
+| Item | Location |
 | --- | --- |
-| Main | Configured applications and a single `+` |
-| Unified hub | Language, appearance, preferred agent, app management, adding |
-| Preferred agent | Configured apps and the saved preferred marker |
-| App management | Existing apps and Add |
-| Presets | Five official app identities per page, Custom, Previous/Next |
-| App actions | Edit, set preferred, remove when allowed |
-| Focused native editor | Name, actual launch target, and optional launch details |
+| Illustrated specification, 15 pages | [output/pdf/copilot-reel-vi-v0.9.pdf](../output/pdf/copilot-reel-vi-v0.9.pdf) |
+| Page previews at 2x (1920 x 1200) | [output/previews/v0.9/](../output/previews/v0.9) |
+| Editable SVG masters (384 DIP canvas) | [design/vi/vectors/](../design/vi/vectors): `radial-{main,hub,language,preferred,manage,presets}-{light,dark}.svg`, `radial-{main,hub}-contrast.svg`, `radial-main-{light,dark}-frosted.svg` |
+| Token sheet (Typst, reads tokens.json) | [design/vi/stylesheet.typ](../design/vi/stylesheet.typ) |
+| Generator sources | [design/vi/source/](../design/vi/source): `build_vi.py`, `pages.py`, `reel.py` (mirror of `src/renderer.cpp`), `scene.py`, `art.py`, `fonts.py`, `tokens.py`, `layout.py`, `masters.py` |
+| Runtime evidence | [output/runtime/v0.3.4/](../output/runtime/v0.3.4) and [validation](validation.md) |
+| Review bundle | `output/copilot-reel-vi-v0.9.zip` (PDF, SVG masters, tokens, sources, previews) |
+| Artwork provenance | [assets/brands/provenance.json](../assets/brands/provenance.json) |
 
-A short Copilot tap opens the preferred local application. Defaults favor installed software; recognized legacy website defaults resolve to a verified native target. If that target is unavailable, show a native application picker for an executable or shortcut rather than opening a website. Missing presets still use the focused editor. Explicit web entries remain a deliberate wheel action.
+Rebuild (Windows; needs Segoe UI Variable, Segoe Fluent Icons, Microsoft YaHei UI, Consolas and Poppler `pdftoppm` or PyMuPDF):
 
-The hub order is stable: language at twelve o'clock, then appearance, preferred agent, management, and adding clockwise. The separate Main Settings gear is removed. The center or Esc returns one level; the menu remains open for deliberate adjustment after the initial hold ends.
+```powershell
+uv run --python 3.14 --with reportlab --with pillow --with fonttools --with numpy python design/vi/source/build_vi.py
+```
 
-## State in the icon
+The generator never writes `tokens.json`. Scenes use the token accent fallbacks; frosted scenes are tonal illustrations over a sample wallpaper.
 
-The language tile displays `EN` or `ZH`. Small chevrons flank this tile at local canvas coordinates `(144, 80)` and `(240, 80)`. The visible chevrons are 5 x 10 DIP strokes without filled backgrounds; their hit regions are 40 x 40 DIP. A/D supplies the same language adjustment. English is the default; Simplified Chinese is a native option. The update applies after persistence succeeds and never renames user app data.
+## Principles
 
-Language is a presentation state over one application profile. The same raw targets and artwork feed both locales. Built-in system names use localized display labels, while custom names and saved data remain intact. An idle Main render must be identical in English and Chinese; only the EN/ZH tile changes in the idle hub.
+1. **Windows-neutral surface.** One plate in the system flyout color (`#F9F9F9` light, `#2C2C2C` dark), one soft shadow, a 1 DIP inset rim; frosted acrylic when Windows transparency is on.
+2. **One orbit.** Every item sits on the 112 DIP orbit: slot 1 at 12 o'clock, clockwise, 360/n apart. Slots never reflow and icons never rotate.
+3. **A quiet center.** Idle Main shows only a faint ring; idle submenus show the ring and a back chevron. A hovered item shows exactly one name; the ring hides while it shows.
+4. **Selection is a seat.** A 48 DIP accent-tinted seat replaces the tile fill. Command glyphs and EN/ZH stay foreground.
+5. **Marks stay true.** Vendor marks are never recolored, redrawn or distorted.
+6. **Brief motion.** 83 to 250 ms, no overshoot, scaled from the plate center; reduced motion and high contrast settle at once.
 
-Appearance uses a sun for the system light theme and a moon for the system dark theme. Activating it opens Windows color settings. It does not introduce a separate application theme override. Neither language nor appearance has a caption beneath its tile. Hovering either tile shows its functional name at the center. The language-arrow hit regions also select Language, preserving that label while the pointer moves to an arrow.
+## Anatomy (DIP)
 
-## Geometry and official artwork
-
-| Token | Value |
+| Element | Value |
 | --- | --- |
-| Canvas / visible circle | 384 / 336 DIP |
-| Icon orbit radius | 112 DIP |
-| Center cancellation zone | 88 DIP diameter |
-| Tile / corner radius | 40 / 10 DIP |
-| Official artwork bounds | 28 DIP |
-| Internal command stroke | 1.75 DIP; 2 DIP in high contrast |
-| Selection seat | 60 x 64 DIP |
-| Hover name / language monogram | 14 / 16 DIP |
-| Interior pointer offset | 0 DIP |
-| Opening / closing | 160 / 120 ms |
+| Canvas | 384 x 384, including the 24 DIP shadow margin |
+| Plate | radius 168; rim 1, inset 0.5 (high contrast 2) |
+| Orbit | radius 112; slot 1 at 12 o'clock, clockwise, step 360/n |
+| Center zone | radius 44; idle ring 1 (`ringIdle`); gated ring 1.5 + dot r 2 (`secondary`) |
+| Tile | 40, r 10; hairline 1, inset 0.5; disabled items at 0.36 |
+| Seat | 48, r 14, concentric with the tile; stroke 1.5, inset 0.75 (high contrast 2.5) |
+| Command glyph | Segoe Fluent Icons, em 24, centered on its ink bounds; vector fallback stroke 1.75 (high contrast 2) |
+| Glyph-class artwork | long ink side on the 28 DIP keyline x per-brand `opticalScale` |
+| Plated artwork | cropped to its plate, covers 40, clipped to r 10, tile hairline on top |
+| Preferred badge | accent disc r 6 at (+17, -17); plate-colored ring r 7.5 (1.5 cutout); path check 1.5 in `textOnAccent` |
+| Language chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40; `secondary`, `foreground` while Language is selected |
+| Back chevron | E76B at em 14, `secondary`, idle submenus only |
+| Center name | 14 DIP / 600, one line, 132 x 20 box on the plate center |
+| Shadow | blur 16 (std dev 8), offset y 8; knocked out under the plate |
+| Pixel grid | centers, tiles and seats snap to device pixels; hairlines at least 1 px; hit testing keeps exact geometry |
 
-Use official marks with their original proportions and recognizable colors. The launcher standardizes the container, optical bounds, spacing, selection, and preferred marker. Unknown identities use a neutral app glyph. EN/ZH and sun/moon are native status glyphs, not replacements for vendor branding.
+## Color roles
 
-The system accent is local to selected tiles and the preferred marker. The base outline is neutral. No blue perimeter sweep, decorative connector, rotating mark, or circular reveal remains.
+| Role | Light | Dark | High contrast |
+| --- | --- | --- | --- |
+| plate | `#F9F9F9` | `#2C2C2C` | COLOR_WINDOW |
+| foreground | `#1B1B1B` | `#FFFFFF` | COLOR_WINDOWTEXT |
+| secondary | `#5D5D5D` | `#CFCFCF` | COLOR_WINDOWTEXT |
+| tile | `#FFFFFF` (frosted 70%) | `#FFFFFF` 10% | COLOR_WINDOW + WINDOWTEXT stroke |
+| tileStroke / plateStroke | `#000000` 8% / 8% | `#FFFFFF` 8% / 10% | COLOR_WINDOWTEXT (plate 2 DIP) |
+| ringIdle | `#000000` 10% | `#FFFFFF` 10% | COLOR_WINDOWTEXT |
+| accent | AccentDark1 (fallback `#005FB8`) | AccentLight2 (fallback `#60CDFF`) | COLOR_HIGHLIGHT |
+| accentText | AccentDark2 (`#003E92`) | AccentLight3 (`#99EBFF`) | COLOR_HIGHLIGHT |
+| textOnAccent | `#FFFFFF` | `#000000` | COLOR_HIGHLIGHTTEXT |
+| selection (seat fill) | Mix(plate, accent, 0.10) | Mix(plate, accent, 0.18) | COLOR_HIGHLIGHT, HIGHLIGHTTEXT 2.5 stroke |
+| selectionText | foreground | foreground | COLOR_HIGHLIGHTTEXT |
+| outline (native editor only) | `#CCCCCC` | `#4A4A4A` | COLOR_WINDOWTEXT |
+| shadowOpacity | 14% | 26% | none |
 
-## Pointer placement
+- The accent is a role: UISettings ramp steps, never the raw `UIColorType::Accent`. Fallbacks apply only when the ramp is unavailable. A sample ramp (Windows default blue on the capture machine) is on page 3.
+- Mix(a, b, t) = a + (b - a) * t per channel, opaque. Translucent roles composite over the plate.
+- WCAG 2.2 with the fallback accents (light / dark): label on plate 16.36 / 13.97, glyph on seat 14.09 / 9.43, chevrons on plate 6.25 / 8.96, seat stroke on plate 5.99 / 7.76, badge check 6.31 / 11.67. All pass (4.5:1 text, 3:1 non-text).
 
-Capture the actual pointer at invocation. If the complete canvas fits around it, its location is the final wheel center. Opening does not move the pointer and does not move the wheel one radius away.
+## Typography
 
-At a boundary, apply only the minimum inward translation needed to fit the canvas inside the current monitor work area. Preserve slot order, angles, and sizes. If that displacement leaves the pointer outside the final center zone, keep selection unarmed until the pointer enters the center; early release cancels. The normal interior path requires no extra center-entry movement. Hit testing always uses the final visible center.
+- Latin: Segoe UI Variable Text (WWS), weight 600; fallback Segoe UI.
+- Chinese: Microsoft YaHei UI (zh-CN) for U+2E80-2FDF, 3000-303F, 3400-4DBF, 4E00-9FFF, F900-FAFF, FF00-FFEF, then the system fallback. Weight 600 resolves to YaHei UI Bold.
+- Center name: 14 DIP, one line in 132 x 20, character-ellipsis trimming. Baseline = center + capHeight x size / 2, using the Latin face's cap height (0.70 em), also for Chinese.
+- Measured at 14 DIP: Visual Studio Code 119.7 (fits), Windows Settings 114.1 (fits), IntelliJ IDEA Ultimate 134.2 and DeepSeek Harness (DSH) 158.6 (trimmed).
+- EN / ZH monogram: 16 DIP / 600, centered on the cap height, foreground.
+- Never drawn: page titles, captions, helper copy, A/D hints, "Move here", a second label line.
 
-Tiny work areas uniformly scale the whole circle. This preserves proportions but reduces text and target sizes, so small-display usability remains an explicit test.
+## Iconography
 
-## Motion and materials
+| Class | Rule |
+| --- | --- |
+| Command | Segoe Fluent Icons on the neutral tile (fallback Segoe MDL2 Assets, then vector paths) |
+| Glyph | open mark on the neutral tile at keyline 28 x `opticalScale` (ChatGPT, Gemini, VS Code, Antigravity, JetBrains IDEs, Junie, Toolbox; Notepad, Windows Settings and custom apps through their Shell icons) |
+| Plated | own filled plate (alpha coverage >= 90%, rounded rectangle): Claude, Perplexity, ZCode, DeepSeek Harness, JetBrains Air |
+| Generic | no artwork: GenericApp E737 on the neutral tile; never initials |
 
-Opening is a 160 ms opacity transition from 0 to 1 with scale from 0.96 to 1. Closing reverses opacity and scale over 120 ms, then detaches the composition tree. Use smooth easing without overshoot. Interruption starts from the current compositor presentation value; a pending close must not hide a new gesture. Reduced motion and high contrast apply the final state immediately.
+Command glyphs: Add E710, Manage F0E2, Preferred E930, Sun E706, Moon E708, Edit E70F, Remove E74D, Previous E76B, Next E76C, ChevronLeftSmall E76B, ChevronRightSmall E76C, BackChevron E76B, GenericApp E737. The badge check is a path. Per-brand treatment (class, `opticalScale`, normalized content rect) is `iconography.brands`; page 6 shows every entry on light and dark tiles.
 
-Windows Composition drives these properties without a fixed application frame timer or pre-rendered frame sequence. Content is cached and redraws only for relevant state changes. This architecture does not by itself prove 144/240 Hz smoothness or low GPU cost.
+## States
 
-The neutral base follows Windows app light/dark mode. Transparency off means an opaque surface without backdrop sampling. Transparency on permits a frosted backdrop where supported. High contrast, effects availability, and energy saver take precedence. Frosted PDF scenes illustrate tone; actual background blur requires runtime validation.
+Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one name, ring hidden); disabled (0.36, named on hover, never seated); preferred (badge); edge-gated (secondary ring 1.5 and dot, no selection); keyboard focus (the same seat); commit (the choice holds 50 ms while the rest fades). High contrast uses live system colors and paints the seat COLOR_HIGHLIGHT.
+
+## Layouts and navigation
+
+- One to nine items: Preferred with one app (1), App actions (2-3), Main (2-9: up to 8 apps and +), the + hub (5), Presets (up to 8: five presets, Custom, Previous, Next).
+- At 8 apps the hub and Manage keep their Add slot, disabled, without reflow.
+- Main (depth 0) -> + hub (1) -> Manage apps / Preferred agent (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D) and Appearance act in place. The center or Esc returns one level.
+
+## Placement and edge gating
+
+The pointer is the plate center whenever the 384 DIP canvas fits (offset 0). At an edge or corner the whole canvas moves inward by the minimum needed; order, angles, radius and icon size are unchanged. Only if that leaves the pointer outside the 44 DIP center zone does selection wait for center entry (gated ring and dot; early release cancels). No cursor warp, no line from the pointer.
+
+## Motion (Full tier, Windows.UI.Composition)
+
+| Event | Spec |
+| --- | --- |
+| Open | opacity 0 -> 1, 83 ms linear; scale 0.96 -> 1, 167 ms decelerate (0, 0, 0, 1); origin = plate center |
+| Close (cancel, Esc, timeout) | opacity -> 0, 83 ms linear; scale -> 0.98, 83 ms accelerate (0.4, 0, 1, 1) |
+| Commit (launch, appearance) | plate, other items and name fade in 83 ms; the choice holds 50 ms then fades 83 ms; press 1 -> 0.975 -> 1 over 100 ms; 133 ms total; the launch never waits |
+| Seat appears | opacity 0 -> 1, 83 ms; scale 0.94 -> 1, 167 ms decelerate; tile fill -> 0, 83 ms |
+| Seat travels | along the orbit, shortest arc; ScalarNaturalMotion spring, damping 0.85, period 50 ms (observed settle about 140 ms) |
+| Name | crossfade 83 ms linear; the ring hides in 83 ms |
+| Gate arms | ring to idle style in 167 ms decelerate; dot fades in 83 ms |
+| Drill in / out | out 100 ms to 1.04 / 0.96 and 0; in 250 ms from 0.94 / 1.04 with (0.1, 0.9, 0.2, 1); fade 83 ms after 50 ms |
+| Handoff | the tapped tile travels to the center in 200 ms, scaling to 0.5, and fades over the last 83 ms as the back chevron appears; the outgoing name clears in 33 ms |
+| Swap (presets) | out 83 ms; in 120 ms from 0.98, decelerate |
+| Language | only the monogram crossfades (83 ms) |
+| Reduced motion, high contrast | the same path with every duration 1 ms |
+
+Never: staggered entrances, hover magnification, overshoot or elastic curves, a rim notch, pointer-anchored origins, perimeter stroke animation, connector lines.
+
+## Material and elevation
+
+- Solid (transparency off): opaque plate, one baked shadow, 1 DIP rim.
+- Frosted (transparency on): HostBackdrop -> Blend(Luminosity) with the tint at luminosity opacity (light `#FCFCFC` at 0.85, dark `#2C2C2C` at 0.96) -> Blend(Color) with the tint (0 / 0.15) -> 2% noise, 256 px tile. Tiles use the same roles (light tile at 70%).
+- Solid whenever CompositionCapabilities reports effects unsupported or slow, the backdrop cannot be created, high contrast is on, or energy saver is on.
+- Layers, back to front: shadow, backdrop, plate and rim, ring and gate, seat, page items, handoff clone, two label visuals.
+
+## Do and don't
+
+One plate (no plate inside the plate); the name owns the center (never over the ring); no titles, captions or helper copy; no perimeter sweep or connector; vendor marks never recolored or redrawn; glyphs never accent-colored and no dot under the selection.
+
+## Evidence
+
+Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, see [validation](validation.md)):
+
+- Dark and light solid plates: tiles, seat, badge, chevrons, name, ring and gate.
+- The high-contrast code path (seat in COLOR_HIGHLIGHT) with the machine's current, non-high-contrast system colors.
+- 100, 150 and 200% through the DPI override.
+- Motion strips: open, cancel, seat appear and travel, drill-in with handoff, drill-out, commit (visual evidence, not frame-rate measurement).
+- EN/ZH: idle Main pixel-identical; the hub differs only inside the monogram.
+- Placement: zero interior offset, minimal clamp at eight edge and corner positions, no cursor warp.
+
+Not verified:
+
+- The live frosted backdrop over real content: window capture omits the DWM host backdrop, so frosted pages are tonal illustrations; `blendModeVerified` is still `pending`.
+- Real High Contrast themes.
+- Physical Copilot-key tap and hold timing.
+- Reduced motion, high-refresh smoothness and GPU cost.
+
+Known limit (0.3.4): retargeting the seat twice within one spring settle measures the shortest arc from the previous target, so a fast 180-degree flick can swing the long way round.
 
 ## References
 
 - [Windows motion](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/motion)
 - [Composition animation](https://learn.microsoft.com/en-us/windows/uwp/composition/composition-animation)
 - [Windows materials](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials)
-- [Kando pointer behavior](https://kando.menu/config-files/#warpmouse)
-- [Blender pie menus](https://docs.blender.org/manual/en/latest/editors/preferences/interface.html)
+- [Brand asset policy](brand-assets.md)
 
-Specification date: 2026-10-20. Development documentation, comments, tokens, and sources use English. Product localization remains separate.
+Specification date: 2026-10-20. Development documentation, tokens and sources are English; product localization (English, Simplified Chinese) is separate.

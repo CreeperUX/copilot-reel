@@ -1,23 +1,22 @@
-# VI source package v0.8
+# VI source package v0.9
 
-Soft Orbit now uses one + entry for the combined settings and management hub. Main has an empty idle center; idle submenus show a back chevron. Hovering any application or secondary action shows one concise functional name at the center, without a second line. EN/ZH and sun/moon icons express state without captions. Short tap opens the preferred local application; unavailable local targets open a native executable/shortcut picker, without a website fallback. Ordinary opening is pointer-centered. A 160 ms opacity/scale arrival and 120 ms exit replace the tether, circular reveal, and blue perimeter sweep.
+Soft Orbit for Copilot Reel 0.3.4: a Windows-neutral plate with one flyout shadow, a concentric selection seat that replaces the tile fill and travels along the orbit, official artwork in one tile system (plated marks fill the tile; open marks share one optical size; system apps use their Shell icons), Segoe Fluent Icons commands, and drill-in/out page transitions in which the tapped tile becomes the back chevron. The center stays quiet: one name on hover, never a caption or helper copy.
 
-- `vectors/`: active radial main, Settings, language, preferred-agent, manage, and preset masters in both themes; material and high-contrast variants; historical visual-direction comparisons.
-- `tokens.json`: English semantic design tokens and input/material/artwork policies.
-- `stylesheet.typ`: editable English style table; not the PDF generator.
-- `source/scene.py`: vector and official-artwork drawing primitives.
-- `source/radial_pages.py`: 12 English specification pages.
-- `source/build_vi.py`: PDF, SVG, and token generator.
-- [Review PDF](../../output/pdf/copilot-reel-vi-v0.8.pdf).
+- `tokens.json`: the single, hand-edited source of design values (geometry, palettes and accent roles, material, motion, typography, per-brand artwork treatment). `tools/gen-vi-tokens.ps1` generates `src/vi_tokens.h` from it for the application; this package reads it directly.
+- `vectors/`: active SVG masters on the 384 DIP canvas: `radial-{main,hub,language,preferred,manage,presets}-{light,dark}.svg`, `radial-{main,hub}-contrast.svg`, `radial-main-{light,dark}-frosted.svg`.
+- `stylesheet.typ`: Typst token sheet that reads `tokens.json`; it repeats no values.
+- `source/build_vi.py`: builds the PDF, the SVG masters, the 2x previews and the review zip.
+- `source/pages.py`: the 15 specification pages; `source/reel.py`: vector mirror of `src/renderer.cpp`; `source/scene.py`, `art.py`, `fonts.py`, `tokens.py`, `layout.py`, `masters.py`: drawing, artwork, font, token, layout and master helpers.
+- [Review PDF](../../output/pdf/copilot-reel-vi-v0.9.pdf) and [normative summary](../../docs/visual-identity.md).
 
 ## Rebuild
 
 ```powershell
-python design/vi/source/build_vi.py
+uv run --python 3.14 --with reportlab --with pillow --with fonttools --with numpy python design/vi/source/build_vi.py
 ```
 
-Requires Python, reportlab, and Windows Segoe UI / Microsoft YaHei fonts. Render PDF review snapshots with Poppler `pdftoppm`. All geometry and text remain vector in the PDF. Official PNG source marks may be embedded; SVG scene exports use the corresponding source SVG when present. Neither the PDF nor PNG review pages become application UI frames.
+`--pages 2,7` rebuilds selected pages for review. The build needs the Windows fonts Segoe UI Variable, Segoe Fluent Icons, Microsoft YaHei UI and Consolas, and renders previews with Poppler `pdftoppm` or PyMuPDF. It never writes `tokens.json`.
 
-The generator retires `osd-*.svg` rectangular primary-panel masters from the active vector directory. Older PDF versions are historical reviews, not the current design contract.
+Scenes are vector and use the token accent fallbacks; frosted scenes are labelled tonal illustrations. Official vendor PNGs are embedded unmodified, with plated marks clipped to the tile shape exactly as the application does. Pages 12 and 15 show native captures from `output/runtime/v0.3.4/`. Neither the PDF nor the PNG previews ever become application UI frames. Older PDF versions are historical reviews, not the current design contract.
 
-The runtime uses native geometry, DirectWrite, official-artwork caches, and Windows Composition animation properties. Asset ownership and source details live in `assets/brands/provenance.json`. Backdrop behavior, physical input timing, and high-refresh performance remain separate runtime validation items in `docs/validation.md`.
+Asset ownership and sources live in `assets/brands/provenance.json`. The live frosted backdrop, real High Contrast themes, physical Copilot-key timing and high-refresh performance remain runtime validation items in `docs/validation.md`.

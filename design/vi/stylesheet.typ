@@ -1,68 +1,96 @@
-// Copilot Reel visual specification. English-only development reference.
-// The Python scene generator produces the PDF; this table is editable source.
-#set text(font: "Segoe UI", size: 10pt)
-#set page(margin: 24mm)
-= Copilot Reel / Quiet Soft Orbit
-Version 0.8. Dimensions use DIP. Runtime validation is tracked separately.
+// Copilot Reel visual identity: token reference sheet (editable English source).
+// Reads tokens.json directly, so no value is duplicated here; the Python generator in
+// source/ draws the VI PDF from the same file. Compile with Typst 0.11 or later:
+//   typst compile design/vi/stylesheet.typ
+#let t = json("tokens.json")
+#let g = t.geometry
+#let ev = t.motion.events
+#let pal = t.palettes
+#let n(v) = if type(v) == float or type(v) == int { str(v) } else { v }
+#let col(v) = if type(v) == dictionary {
+  if "hex" in v { v.hex + " · " + str(calc.round(v.alpha * 100)) + "%" } else { v.ramp + " (fallback " + v.fallback + ")" }
+} else { n(v) }
 
-#table(
-  columns: (2fr, 1fr, 3fr),
-  [Token], [Value], [Usage],
-  [Reel diameter], [336], [Complete circular surface on every menu level],
-  [Icon orbit], [112], [Stable app and command locations],
-  [Cancel diameter], [88], [Center-entry guard only after boundary displacement],
-  [App tile], [40], [Official artwork in a common container; 10 DIP radius],
-  [Official artwork], [28], [Preserve vendor proportions and recognizable colors],
-  [Command stroke], [1.75], [2 DIP in high contrast; internal commands only],
-  [Selection seat], [60 x 64], [System accent local to selection],
-  [Language icon], [EN / ZH], [Active interface language inside the tile],
-  [Language arrow hit], [40 x 40], [Centers at -48/+48 horizontally and -112 vertically],
-  [Language arrow visual], [5 x 10], [Unfilled chevrons flanking the top language tile],
-  [Appearance icon], [Sun / moon], [Reflect current Windows app light/dark mode],
-  [Hover label / monogram], [14 / 16], [One concise selected-item name; no helper text or tile captions],
-  [Interior pointer offset], [0], [Mouse remains at the wheel center without cursor warping],
-  [Entry animation], [160 ms], [Opacity 0 to 1; scale 0.96 to 1; no overshoot],
-  [Exit animation], [120 ms], [Reverse opacity and scale, then detach the tree],
-  [Selection / page change], [Immediate], [No per-frame application repaint loop],
+#set document(title: "Copilot Reel - VI token sheet v" + t.schemaVersion)
+#set page(paper: "a4", flipped: true, margin: 16mm)
+#set text(font: ("Segoe UI Variable Text", "Segoe UI"), size: 8.5pt, lang: "en")
+#show heading: set text(font: ("Segoe UI Variable Display", "Segoe UI"), weight: 600)
+#show raw: set text(font: "Consolas")
+#set table(stroke: 0.4pt + luma(210), inset: 4pt)
+
+= Copilot Reel / Soft Orbit token sheet v#t.schemaVersion
+Native build #t.appVersion. Units: DIP; durations in ms. Source of truth: `design/vi/tokens.json` (hand-edited);
+`src/vi_tokens.h` is generated from it. The illustrated specification is #raw("output/pdf/copilot-reel-vi-v" + t.schemaVersion + ".pdf").
+
+== Geometry
+#table(columns: (auto, auto, 1fr),
+  [*Token*], [*Value*], [*Use*],
+  [Canvas], [#n(g.canvas)], [complete footprint including the #n(t.elevation.canvasMargin) DIP shadow margin],
+  [Plate radius / rim], [#n(g.plate.radius) / #n(g.plate.stroke), inset #n(g.plate.strokeInset)], [high contrast rim #n(g.plate.strokeHighContrast)],
+  [Orbit radius], [#n(g.orbit.radius)], [slot 1 at #g.orbit.firstSlot, #g.orbit.direction, step #g.orbit.step],
+  [Center zone], [r #n(g.centerZone.radius)], [ring #n(g.centerZone.ringStroke)\; gated ring #n(g.centerZone.ringGatedStroke) + dot r #n(g.centerZone.gateDotRadius)],
+  [Tile], [#n(g.tile.size), r #n(g.tile.radius)], [hairline #n(g.tile.stroke), inset #n(g.tile.strokeInset)],
+  [Seat], [#n(g.seat.size), r #n(g.seat.radius)], [stroke #n(g.seat.stroke), inset #n(g.seat.strokeInset)\; high contrast #n(g.seat.strokeHighContrast)\; #g.seat.relation],
+  [Command glyph], [em #n(g.glyph.em)], [#g.glyph.alignment\; vector fallback stroke #n(g.glyph.fallbackStroke) (high contrast #n(g.glyph.fallbackStrokeHighContrast))],
+  [Artwork keyline], [#n(g.artwork.keyline)], [#g.artwork.note],
+  [Preferred badge], [r #n(g.badge.radius) at (±#n(g.badge.offset))], [ring r #n(g.badge.ringRadius) (#n(g.badge.ring)); check #n(g.badge.checkStroke)\; #g.badge.check],
+  [Language chevrons], [±#n(g.chevrons.offset), y #n(g.chevrons.orbitY)], [em #n(g.chevrons.em)\; hit #n(g.chevrons.hit)\; back chevron em #n(g.chevrons.backEm)],
+  [Disabled], [#n(g.disabledOpacity)], [tile and artwork opacity; never seated; still named on hover],
+  [Shadow], [blur #n(t.elevation.shadowBlur), y #n(t.elevation.shadowOffsetY)], [#t.elevation.recipe],
+  [Pixel grid], [], [#g.pixelGrid],
 )
 
-== System appearance
-The neutral base follows Windows app light/dark mode. Selection uses the system
-accent. The perimeter remains neutral: no blue outline sweep or connector.
-Transparency off disables backdrop sampling. High contrast takes priority;
-reduced motion applies the final state immediately.
+== Color roles
+#table(columns: (auto, 1fr, 1fr, 1fr),
+  [*Role*], [*Light*], [*Dark*], [*High contrast*],
+  ..("plate", "foreground", "secondary", "outline", "tile", "tileStroke", "plateStroke", "ringIdle", "accent",
+     "accentText", "textOnAccent", "selection", "selectionText", "shadowOpacity").map(r =>
+    (raw(r), col(pal.light.at(r)), col(pal.dark.at(r)), n(pal.highContrast.at(r)))).flatten()
+)
+Seat tint: light #n(pal.light.seatTint), dark #n(pal.dark.seatTint). #pal.mix. #pal.accentRule.
+Frosted tile alpha: light #n(pal.light.frostedTileAlpha), dark #n(pal.dark.frostedTileAlpha).
 
-== Radial navigation and visual copy
-Main contains configured agents and one + entry. The + opens a five-item hub:
-language, appearance, preferred agent, app management, and adding. No separate
-Settings gear remains on Main. Main's idle center is empty. Idle submenus show a
-small back chevron. A hovered application or secondary command shows its concise
-functional name at the center, without a second line. Generic page headings,
-keyboard hints, and instructional copy do not appear inside the product UI.
+== Typography
+#table(columns: (auto, 1fr),
+  [Latin], [#t.typography.preferred (#t.typography.familyModel), weight #t.typography.weight\; fallback #t.typography.fallback],
+  [Chinese], [#t.typography.cjk.family, #t.typography.cjk.locale\; ranges #t.typography.cjk.ranges.join(", ")\; then #t.typography.cjk.then],
+  [Label], [#n(t.typography.applicationLabel.size) / #t.typography.applicationLabel.weight, #t.typography.applicationLabel.lines line, #n(t.typography.applicationLabel.width) × #n(t.typography.applicationLabel.height), #t.typography.applicationLabel.trimming\; #t.typography.applicationLabel.verticalCenter],
+  [Monogram], [#t.typography.iconMonogram.states.join(" / "), #n(t.typography.iconMonogram.size) / #t.typography.iconMonogram.weight, #t.typography.iconMonogram.verticalCenter],
+  [Never drawn], [#t.osd.neverDrawn.join(", ")],
+)
 
-== Language and appearance
-EN/ZH encode the active language in the top tile. Two small arrows flank that
-tile; A / D offers the same adjustment. English is the default. Native text
-editors preserve Chinese input methods. A sun or moon reflects current Windows
-appearance; selecting it opens Windows color settings. No captions sit beneath
-these controls. User app names remain unchanged.
+== Iconography
+Command glyphs (#t.iconography.commandFont, fallback #t.iconography.commandFontFallback):
+#table(columns: (auto, auto, 1fr),
+  [*Glyph*], [*Code point*], [*Note*],
+  ..t.iconography.commandGlyphs.pairs().map(p => (p.at(0), raw("U+" + p.at(1)),
+    t.iconography.commandGlyphNotes.at(p.at(0), default: ""))).flatten()
+)
+#table(columns: (auto, auto, auto, 1fr),
+  [*Brand key*], [*Class*], [*Optical scale*], [*Content rect (normalized)*],
+  ..t.iconography.brands.map(b => (raw(b.key), b.class, n(b.opticalScale), b.content.map(str).join(", "))).flatten()
+)
+Classes: plated: #t.iconography.classes.plated. Glyph: #t.iconography.classes.glyph. Generic: #t.iconography.classes.generic.
 
-== Copilot input and pointer placement
-A short tap opens the preferred local application. Resolve supported legacy web
-defaults through installed-app discovery. If no local target exists, open the
-native executable/shortcut picker; never fall back to a website. Missing presets
-still use the focused editor. A hold uses the official
-Windows threshold and opens the circle centered on the captured pointer.
-Only an actual boundary conflict applies the minimum inward translation needed
-to keep the full canvas inside the work area. Never warp the pointer. If that
-translation puts it outside the center zone, require center entry before arming
-selection. Normal interior opening requires no extra center-entry movement.
-The visible center is the sole hit-test origin. Tiny work areas scale the entire
-circle uniformly; validate the resulting smaller controls.
+== Motion (#t.motion.tier tier)
+#table(columns: (auto, 1fr),
+  [Curves], [#t.motion.curves.pairs().map(p => p.at(0) + " (" + p.at(1).map(str).join(", ") + ")").join("; ")],
+  [Open], [opacity #ev.open.fadeMs ms #ev.open.fadeCurve\; scale #n(ev.open.scaleFrom) → 1 in #ev.open.scaleMs ms #ev.open.scaleCurve],
+  [Close], [opacity #ev.close.fadeMs ms; scale → #n(ev.close.scaleTo) in #ev.close.scaleMs ms #ev.close.scaleCurve (#ev.close.use)],
+  [Commit], [#ev.commit.detail\; total #ev.commit.totalMs ms; #ev.commit.launch],
+  [Selection], [#ev.selection.noneToItem. Item to item: #ev.selection.travel.path\; spring damping #n(ev.selection.travel.dampingRatio), period #ev.selection.travel.periodMs ms],
+  [Name], [crossfade #ev.centerLabel.crossfadeMs ms #ev.centerLabel.curve\; the ring hides in #ev.centerLabel.ringHideMs ms],
+  [Gate], [arm #ev.gate.armMs ms #ev.gate.armCurve\; dot #ev.gate.dotFadeMs ms],
+  [Drill], [exit #ev.drill.exitMs ms; enter #ev.drill.enterMs ms #ev.drill.enterCurve\; fade #ev.drill.enterFadeMs ms after #ev.drill.enterDelayMs ms; in #n(ev.drillIn.exitScale) / #n(ev.drillIn.enterScaleFrom), out #n(ev.drillOut.exitScale) / #n(ev.drillOut.enterScaleFrom)],
+  [Handoff], [#ev.handoff.detail\; #ev.handoff.travelMs ms, scale → #n(ev.handoff.scaleTo), fade #ev.handoff.fadeMs ms; name clears in #ev.handoff.labelFadeMs ms],
+  [Swap], [out #ev.swap.exitMs ms; in #ev.swap.enterMs ms from #n(ev.swap.enterScaleFrom) #ev.swap.enterCurve],
+  [Reduced motion], [#ev.reducedMotion.appliesTo: every duration #ev.reducedMotion.durationMs ms; #ev.reducedMotion.completion],
+  [Never], [#t.motion.notAllowed.join("; ")],
+)
 
-== Artwork and motion
-Use verified vendor files, recorded in assets/brands/provenance.json. Supported
-SVGs stay vector. Official PNGs are allowed for unavailable or unsupported SVG
-sources; they are identity assets, never animation frames. Animate only native
-composition opacity and scale. No tether, circular reveal, perimeter sweep, or
-rotating artwork remains. Interrupt closing from its current presentation value.
+== Material
+Solid: plate at alpha #n(t.systemAppearance.solid.surfaceAlpha), no backdrop sampling.
+Frosted: #t.systemAppearance.frosted.graph. Light tint #t.systemAppearance.frosted.light.tint at #n(t.systemAppearance.frosted.light.tintOpacity), luminosity #n(t.systemAppearance.frosted.light.luminosityOpacity)\;
+dark tint #t.systemAppearance.frosted.dark.tint at #n(t.systemAppearance.frosted.dark.tintOpacity), luminosity #n(t.systemAppearance.frosted.dark.luminosityOpacity)\;
+noise #t.systemAppearance.frosted.noise.size px at #n(t.systemAppearance.frosted.noise.opacity).
+Solid whenever: #t.systemAppearance.frosted.fallbackToSolidWhen.join("; ").

@@ -1,390 +1,332 @@
-"""Build the Copilot Reel VI study as vector PDF and SVG assets.
+"""Vector scene recorder with PDF (reportlab) and SVG back ends.
 
-Requires Python + reportlab and the Windows Segoe UI / Microsoft YaHei fonts.
-All artwork is drawn from the same vector scene instructions; PNG previews are
-rendered separately from the resulting PDF with Poppler.
+Coordinates are y-down. A Scene records drawing operations once and replays them into
+either back end, so the PDF pages and the SVG masters come from one description.
+Colors are '#RRGGBB' strings or (r, g, b[, a]) float tuples; `alpha` multiplies.
 """
 from __future__ import annotations
 
-import json
 import base64
+import io
 import math
 from contextlib import contextmanager
-from pathlib import Path
 from xml.sax.saxutils import escape
 
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import Color
 from reportlab.lib.utils import ImageReader
 
-ROOT = Path(__file__).resolve().parents[3]
-VI = ROOT / 'design' / 'vi'
-VECTORS = VI / 'vectors'
-PDF_DIR = ROOT / 'output' / 'pdf'
-PAGE_W, PAGE_H = 1440, 900
-PDF_SCALE = 2 / 3
-INK, MUTED, LINE = '#20252B', '#626A75', '#DDE2E8'
-BLUE = '#005FB8'
-
-for name, filename in [('Segoe', 'segoeui.ttf'), ('SegoeBold', 'segoeuib.ttf'),
-                       ('YaHei', 'msyh.ttc'), ('YaHeiBold', 'msyhbd.ttc')]:
-    pdfmetrics.registerFont(TTFont(name, str(Path('C:/Windows/Fonts') / filename), subfontIndex=0))
+import fonts
 
 
-def font_for(text, bold=False):
-    return ('YaHei' if any(ord(c) > 255 for c in text) else 'Segoe') + ('Bold' if bold else '')
+def rgba(value, alpha=1.0):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        v = value.lstrip('#')
+        return (int(v[0:2], 16) / 255, int(v[2:4], 16) / 255, int(v[4:6], 16) / 255, alpha)
+    if len(value) == 3:
+        return (*value, alpha)
+    return (value[0], value[1], value[2], value[3] * alpha)
+
+
+def hexrgb(c):
+    return '#' + ''.join(f'{round(max(0, min(1, v)) * 255):02X}' for v in c[:3])
+
+
+def num(v):
+    if isinstance(v, float):
+        s = f'{v:.3f}'.rstrip('0').rstrip('.')
+        return '0' if s in ('-0', '') else s
+    return str(v)
+
+
+# Path helpers -------------------------------------------------------------------------
+
+def arc(cx, cy, r, a0, a1, move=True):
+    """Circular arc from a0 to a1 degrees (y down, clockwise positive) as cubic segments."""
+    out = []
+    p0 = (cx + r * math.cos(math.radians(a0)), cy + r * math.sin(math.radians(a0)))
+    if move:
+        out.append(('M', *p0))
+    count = max(1, math.ceil(abs(a1 - a0) / 45))
+    for i in range(count):
+        t0 = math.radians(a0 + (a1 - a0) * i / count)
+        t1 = math.radians(a0 + (a1 - a0) * (i + 1) / count)
+        k = 4 / 3 * math.tan((t1 - t0) / 4)
+        x0, y0 = cx + r * math.cos(t0), cy + r * math.sin(t0)
+        x1, y1 = cx + r * math.cos(t1), cy + r * math.sin(t1)
+        out.append(('C', x0 - k * r * math.sin(t0), y0 + k * r * math.cos(t0),
+                    x1 + k * r * math.sin(t1), y1 - k * r * math.cos(t1), x1, y1))
+    return out
+
+
+def round_rect_path(x, y, w, h, r):
+    r = max(0.0, min(r, w / 2, h / 2))
+    if r == 0:
+        return [('M', x, y), ('L', x + w, y), ('L', x + w, y + h), ('L', x, y + h), ('Z',)]
+    out = [('M', x + r, y), ('L', x + w - r, y)]
+    out += arc(x + w - r, y + r, r, -90, 0, False)
+    out += [('L', x + w, y + h - r)]
+    out += arc(x + w - r, y + h - r, r, 0, 90, False)
+    out += [('L', x + r, y + h)]
+    out += arc(x + r, y + h - r, r, 90, 180, False)
+    out += [('L', x, y + r)]
+    out += arc(x + r, y + r, r, 180, 270, False)
+    out.append(('Z',))
+    return out
+
+
+def circle_path(cx, cy, r):
+    return arc(cx, cy, r, 0, 360) + [('Z',)]
+
+
+def transform_path(cmds, dx=0, dy=0, s=1):
+    out = []
+    for cmd, *v in cmds:
+        out.append((cmd, *[(v[i] * s + (dx if i % 2 == 0 else dy)) for i in range(len(v))]))
+    return out
 
 
 class Scene:
-    def __init__(self, w=PAGE_W, h=PAGE_H):
-        self.w, self.h, self.ops = w, h, []
+    def __init__(self, w, h):
+        self.w, self.h = w, h
+        self.ops = []
+        self._alpha = [1.0]
 
-    def rect(self, x, y, w, h, fill=None, stroke=None, sw=1, r=0, alpha=1):
-        self.ops.append(('rect', (x, y, w, h, fill, stroke, sw, r, alpha)))
+    # Recording -------------------------------------------------------------------------
+    def _a(self, alpha):
+        return alpha * self._alpha[-1]
 
-    def circle(self, x, y, r, fill=None, stroke=None, sw=1, alpha=1):
-        self.ops.append(('circle', (x, y, r, fill, stroke, sw, alpha)))
+    def path(self, cmds, fill=None, stroke=None, sw=1.0, alpha=1.0, dash=None, cap='round', join='round'):
+        a = self._a(alpha)
+        if a <= 0 or (fill is None and stroke is None):
+            return
+        self.ops.append(('path', dict(cmds=cmds, fill=rgba(fill, a) if fill is not None else None,
+                                      stroke=rgba(stroke, a) if stroke is not None else None,
+                                      sw=sw, dash=dash, cap=cap, join=join)))
 
-    def path(self, points, fill=None, stroke=None, sw=1, alpha=1):
-        self.ops.append(('path', (points, fill, stroke, sw, alpha)))
+    def rect(self, x, y, w, h, fill=None, stroke=None, sw=1.0, r=0.0, alpha=1.0, dash=None, inset=False):
+        """`inset` keeps the stroke fully inside the box (Direct2D-style inset by sw / 2)."""
+        if stroke is not None and inset:
+            if fill is not None:
+                self.path(round_rect_path(x, y, w, h, r), fill=fill, alpha=alpha)
+            d = sw / 2
+            self.path(round_rect_path(x + d, y + d, w - sw, h - sw, max(0, r - d)), stroke=stroke, sw=sw,
+                      alpha=alpha, dash=dash, join='miter' if r == 0 else 'round')
+            return
+        self.path(round_rect_path(x, y, w, h, r), fill, stroke, sw, alpha, dash, join='miter' if r == 0 else 'round')
 
-    def line(self, x1, y1, x2, y2, color=LINE, sw=1, alpha=1):
-        self.path([('M', x1, y1), ('L', x2, y2)], stroke=color, sw=sw, alpha=alpha)
+    def circle(self, cx, cy, r, fill=None, stroke=None, sw=1.0, alpha=1.0, dash=None):
+        self.path(circle_path(cx, cy, r), fill, stroke, sw, alpha, dash, cap='butt')
 
-    def text(self, x, y, value, size=18, color=INK, bold=False, align='left'):
-        self.ops.append(('text', (x, y, str(value), size, color, bold, align)))
+    def line(self, x1, y1, x2, y2, color, sw=1.0, alpha=1.0, dash=None, cap='butt'):
+        self.path([('M', x1, y1), ('L', x2, y2)], stroke=color, sw=sw, alpha=alpha, dash=dash, cap=cap)
 
-    def asset(self, x, y, size, png_path, svg_path=None):
-        self.ops.append(('asset', (x, y, size, Path(png_path), Path(svg_path) if svg_path else None)))
+    def text(self, x, y, value, size=14.0, color='#1B1B1B', face='text', cjk='cjk', align='left',
+             tracking=0.0, alpha=1.0, width=None):
+        """Baseline text. `face`/`cjk` are fonts.FACES names; CJK ranges use the CJK face."""
+        value = str(value)
+        a = self._a(alpha)
+        if not value or a <= 0:
+            return 0.0
+        latin, cjkface = fonts.key(face), fonts.key(cjk)
+        w = fonts.width(value, latin, cjkface, size, tracking)
+        if align == 'center':
+            x -= w / 2
+        elif align == 'right':
+            x -= w
+        self.ops.append(('text', dict(x=x, y=y, runs=fonts.runs(value, latin, cjkface), size=size,
+                                      color=rgba(color, a), tracking=tracking)))
+        return w
 
-    def wrap(self, x, y, text, width, size=18, leading=30, color=INK, bold=False):
-        lines = []
-        font = font_for(text, bold)
-        for paragraph in text.split('\n'):
-            line = ''
-            for word in paragraph.split(' '):
-                candidate = (line+' '+word).strip()
-                if line and pdfmetrics.stringWidth(candidate,font,size)>width:
-                    lines.append(line);line=word
-                else: line=candidate
-            if line: lines.append(line)
-        for i, value in enumerate(lines):
-            self.text(x, y + i * leading, value, size, color, bold)
-        return y + len(lines) * leading
+    def image(self, img, x, y, w, h, alpha=1.0, jpeg=None):
+        """`jpeg`: embed as JPEG; by default opaque RGB rasters (photographic backdrops, captures) are."""
+        a = self._a(alpha)
+        if a <= 0:
+            return
+        self.ops.append(('image', dict(img=img, x=x, y=y, w=w, h=h, alpha=a, jpeg=img.mode == 'RGB' if jpeg is None else jpeg)))
 
     @contextmanager
-    def group(self, x=0, y=0, scale=1):
-        self.ops.append(('push', (x, y, scale)))
-        yield
-        self.ops.append(('pop', ()))
+    def group(self, x=0.0, y=0.0, scale=1.0, alpha=1.0):
+        self.ops.append(('push', dict(x=x, y=y, s=scale, alpha=alpha)))
+        self._alpha.append(self._alpha[-1] * alpha)
+        try:
+            yield
+        finally:
+            self._alpha.pop()
+            self.ops.append(('pop', {}))
 
-    def draw_pdf(self, c):
+    @contextmanager
+    def clip(self, cmds):
+        self.ops.append(('clip', dict(cmds=cmds)))
+        try:
+            yield
+        finally:
+            self.ops.append(('unclip', {}))
+
+    def clip_rect(self, x, y, w, h, r=0.0):
+        return self.clip(round_rect_path(x, y, w, h, r))
+
+    def clip_circle(self, cx, cy, r):
+        return self.clip(circle_path(cx, cy, r))
+
+    # PDF -------------------------------------------------------------------------------
+    def draw_pdf(self, c, scale=1.0):
+        readers = {}
         c.saveState()
-        c.scale(PDF_SCALE, PDF_SCALE)
+        c.scale(scale, scale)
         c.translate(0, self.h)
         c.scale(1, -1)
         for kind, p in self.ops:
             if kind == 'push':
                 c.saveState()
-                c.translate(p[0], p[1])
-                c.scale(p[2], p[2])
-                continue
-            if kind == 'pop':
+                c.translate(p['x'], p['y'])
+                c.scale(p['s'], p['s'])
+            elif kind == 'pop' or kind == 'unclip':
                 c.restoreState()
-                continue
-            c.saveState()
-            if kind == 'asset':
-                x, y, size, png_path, _ = p
-                c.translate(x, y + size)
+            elif kind == 'clip':
+                c.saveState()
+                c.clipPath(self._pdf_path(c, p['cmds']), stroke=0, fill=0, fillMode=1)
+            elif kind == 'path':
+                self._pdf_shape(c, p)
+            elif kind == 'text':
+                self._pdf_text(c, p)
+            elif kind == 'image':
+                key = id(p['img'])
+                if key not in readers:
+                    readers[key] = ImageReader(_encoded(p['img'], 'JPEG') if p['jpeg'] else p['img'])
+                c.saveState()
+                c.setFillAlpha(p['alpha'])
+                c.translate(p['x'], p['y'] + p['h'])
                 c.scale(1, -1)
-                c.drawImage(ImageReader(str(png_path)), 0, 0, size, size,
-                            preserveAspectRatio=True, anchor='c', mask='auto')
+                c.drawImage(readers[key], 0, 0, p['w'], p['h'], mask='auto')
                 c.restoreState()
-                continue
-            if kind == 'text':
-                x, y, value, size, color, bold, align = p
-                c.setFillColor(HexColor(color))
-                c.setFont(font_for(value, bold), size)
-                c.translate(x, y)
-                c.scale(1, -1)
-                draw = {'left': c.drawString, 'center': c.drawCentredString, 'right': c.drawRightString}[align]
-                draw(0, -size * .84, value)
-            else:
-                if kind == 'rect':
-                    x, y, w, h, fill, stroke, sw, radius, alpha = p
-                elif kind == 'circle':
-                    x, y, radius, fill, stroke, sw, alpha = p
-                else:
-                    points, fill, stroke, sw, alpha = p
-                if fill:
-                    c.setFillColor(HexColor(fill))
-                if stroke:
-                    c.setStrokeColor(HexColor(stroke))
-                # ReportLab's color setter also sets opacity; apply it afterwards.
-                c.setFillAlpha(alpha)
-                c.setStrokeAlpha(alpha)
-                c.setLineWidth(sw)
-                c.setLineJoin(1)
-                c.setLineCap(1)
-                if kind == 'rect':
-                    c.roundRect(x, y, w, h, radius, fill=bool(fill), stroke=bool(stroke))
-                elif kind == 'circle':
-                    c.circle(x, y, radius, fill=bool(fill), stroke=bool(stroke))
-                else:
-                    path = c.beginPath()
-                    for item in points:
-                        cmd, *v = item
-                        if cmd == 'M': path.moveTo(*v)
-                        elif cmd == 'L': path.lineTo(*v)
-                        elif cmd == 'C': path.curveTo(*v)
-                        elif cmd == 'Z': path.close()
-                    c.drawPath(path, fill=bool(fill), stroke=bool(stroke))
-            c.restoreState()
         c.restoreState()
 
-    def svg(self, title):
-        def n(v): return f'{v:.3f}'.rstrip('0').rstrip('.') if isinstance(v, (float, int)) else str(v)
-        out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" viewBox="0 0 {self.w} {self.h}" role="img">',
-               f'<title>{escape(title)}</title>',
-               '<desc>Copilot Reel vector UI master with verified vendor artwork. Source SVGs remain vector; official PNG marks are embedded where no usable SVG is supplied.</desc>']
+    @staticmethod
+    def _pdf_path(c, cmds):
+        path = c.beginPath()
+        for cmd, *v in cmds:
+            if cmd == 'M':
+                path.moveTo(*v)
+            elif cmd == 'L':
+                path.lineTo(*v)
+            elif cmd == 'C':
+                path.curveTo(*v)
+            elif cmd == 'Z':
+                path.close()
+        return path
+
+    def _pdf_shape(self, c, p):
+        c.saveState()
+        fill, stroke = p['fill'], p['stroke']
+        if fill:
+            c.setFillColor(Color(*fill[:3]))
+            c.setFillAlpha(fill[3])
+        if stroke:
+            c.setStrokeColor(Color(*stroke[:3]))
+            c.setStrokeAlpha(stroke[3])
+            c.setLineWidth(p['sw'])
+            c.setLineCap({'butt': 0, 'round': 1, 'square': 2}[p['cap']])
+            c.setLineJoin({'miter': 0, 'round': 1, 'bevel': 2}[p['join']])
+            if p['dash']:
+                c.setDash(p['dash'], 0)
+        c.drawPath(self._pdf_path(c, p['cmds']), fill=1 if fill else 0, stroke=1 if stroke else 0, fillMode=1)
+        c.restoreState()
+
+    @staticmethod
+    def _pdf_text(c, p):
+        c.saveState()
+        col = p['color']
+        c.setFillColor(Color(*col[:3]))
+        c.setFillAlpha(col[3])
+        c.translate(p['x'], p['y'])
+        c.scale(1, -1)
+        t = c.beginText(0, 0)
+        if p['tracking']:
+            t.setCharSpace(p['tracking'])
+        for face, chunk in p['runs']:
+            t.setFont(face, p['size'])
+            t.textOut(chunk)
+        c.drawText(t)
+        c.restoreState()
+
+    # SVG -------------------------------------------------------------------------------
+    def svg(self, title, desc=''):
+        out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{num(self.w)}" height="{num(self.h)}" '
+               f'viewBox="0 0 {num(self.w)} {num(self.h)}" role="img">',
+               f'<title>{escape(title)}</title>']
+        if desc:
+            out.append(f'<desc>{escape(desc)}</desc>')
+        clip_id = 0
+        images = {}
         for kind, p in self.ops:
             if kind == 'push':
-                out.append(f'<g transform="translate({n(p[0])} {n(p[1])}) scale({n(p[2])})">')
-                continue
-            if kind == 'pop':
+                attrs = []
+                if p['x'] or p['y'] or p['s'] != 1:
+                    attrs.append(f'transform="translate({num(p["x"])} {num(p["y"])}) scale({num(p["s"])})"')
+                out.append('<g ' + ' '.join(attrs) + '>' if attrs else '<g>')
+            elif kind in ('pop', 'unclip'):
                 out.append('</g>')
-                continue
-            if kind == 'asset':
-                x, y, size, png_path, svg_path = p
-                source = svg_path if svg_path and svg_path.exists() else png_path
-                mime = 'image/svg+xml' if source.suffix == '.svg' else 'image/png'
-                encoded = base64.b64encode(source.read_bytes()).decode('ascii')
-                out.append(f'<image x="{n(x)}" y="{n(y)}" width="{n(size)}" height="{n(size)}" preserveAspectRatio="xMidYMid meet" href="data:{mime};base64,{encoded}"/>')
-                continue
-            if kind == 'text':
-                x, y, value, size, color, bold, align = p
-                anchor = {'left': 'start', 'center': 'middle', 'right': 'end'}[align]
-                out.append(f'<text x="{n(x)}" y="{n(y+size*.84)}" fill="{color}" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="{n(size)}" font-weight="{600 if bold else 400}" text-anchor="{anchor}">{escape(value)}</text>')
-                continue
-            if kind == 'rect':
-                x, y, w, h, fill, stroke, sw, radius, alpha = p
-                start = f'<rect x="{n(x)}" y="{n(y)}" width="{n(w)}" height="{n(h)}" rx="{n(radius)}"'
-            elif kind == 'circle':
-                x, y, radius, fill, stroke, sw, alpha = p
-                start = f'<circle cx="{n(x)}" cy="{n(y)}" r="{n(radius)}"'
-            else:
-                points, fill, stroke, sw, alpha = p
-                d = ' '.join(a[0] + ' '.join(n(v) for v in a[1:]) for a in points)
-                start = f'<path d="{d}"'
-            out.append(start + f' fill="{fill or "none"}" stroke="{stroke or "none"}" stroke-width="{n(sw)}" stroke-linejoin="round" stroke-linecap="round" opacity="{n(alpha)}"/>')
+            elif kind == 'clip':
+                clip_id += 1
+                out.append(f'<clipPath id="clip{clip_id}"><path d="{self._svg_d(p["cmds"])}"/></clipPath>'
+                           f'<g clip-path="url(#clip{clip_id})">')
+            elif kind == 'path':
+                out.append(self._svg_shape(p))
+            elif kind == 'text':
+                out.append(self._svg_text(p))
+            elif kind == 'image':
+                key = id(p['img'])
+                fmt = 'JPEG' if p['jpeg'] else 'PNG'
+                if key not in images:
+                    images[key] = base64.b64encode(_encoded(p['img'], fmt).getvalue()).decode('ascii')
+                op = f' opacity="{num(p["alpha"])}"' if p['alpha'] < 1 else ''
+                out.append(f'<image x="{num(p["x"])}" y="{num(p["y"])}" width="{num(p["w"])}" height="{num(p["h"])}"'
+                           f' preserveAspectRatio="none"{op} href="data:image/{fmt.lower()};base64,{images[key]}"/>')
         out.append('</svg>')
         return '\n'.join(out) + '\n'
 
+    @staticmethod
+    def _svg_d(cmds):
+        return ' '.join(cmd + ' '.join(num(float(v)) for v in vals) for cmd, *vals in cmds)
 
-def point(r, deg):
-    a = math.radians(deg)
-    return r * math.cos(a), r * math.sin(a)
+    def _svg_shape(self, p):
+        attrs = [f'd="{self._svg_d(p["cmds"])}"']
+        fill, stroke = p['fill'], p['stroke']
+        attrs.append(f'fill="{hexrgb(fill)}"' if fill else 'fill="none"')
+        if fill and fill[3] < 1:
+            attrs.append(f'fill-opacity="{num(fill[3])}"')
+        if stroke:
+            attrs.append(f'stroke="{hexrgb(stroke)}" stroke-width="{num(float(p["sw"]))}"')
+            if stroke[3] < 1:
+                attrs.append(f'stroke-opacity="{num(stroke[3])}"')
+            if p['cap'] != 'butt':
+                attrs.append(f'stroke-linecap="{p["cap"]}"')
+            if p['join'] != 'miter':
+                attrs.append(f'stroke-linejoin="{p["join"]}"')
+            if p['dash']:
+                attrs.append(f'stroke-dasharray="{" ".join(num(float(d)) for d in p["dash"])}"')
+        return '<path ' + ' '.join(attrs) + '/>'
 
-
-def arc(r, a, b, move=True):
-    out = [('M' if move else 'L', *point(r, a))]
-    count = max(1, math.ceil(abs(b-a) / 60))
-    for i in range(count):
-        a0 = math.radians(a + (b-a)*i/count)
-        a1 = math.radians(a + (b-a)*(i+1)/count)
-        k = 4/3*math.tan((a1-a0)/4)
-        x0, y0, x1, y1 = r*math.cos(a0), r*math.sin(a0), r*math.cos(a1), r*math.sin(a1)
-        out.append(('C', x0-k*y0, y0+k*x0, x1+k*y1, y1-k*x1, x1, y1))
-    return out
-
-
-def wedge(ro, ri, a, b):
-    return arc(ro, a, b) + arc(ri, b, a, False) + [('Z',)]
-
-
-PALETTES = {
-    'light': {'surface':'#F4F6F8', 'inner':'#FFFFFF', 'tile':'#FCFCFD', 'text':'#20252B', 'muted':'#626B76', 'line':'#CCD3DC', 'accent':'#005FB8', 'active':'#DEECFA', 'glyph':'#4A515D', 'icon':'#E5E9EF'},
-    'dark': {'surface':'#292D33', 'inner':'#22252A', 'tile':'#343940', 'text':'#F3F5F8', 'muted':'#BEC5CE', 'line':'#545C67', 'accent':'#60CDFF', 'active':'#294555', 'glyph':'#E5EAF0', 'icon':'#444C57'},
-    'contrast': {'surface':'#000000', 'inner':'#000000', 'tile':'#000000', 'text':'#FFFFFF', 'muted':'#FFFFFF', 'line':'#FFFFFF', 'accent':'#FFFF00', 'active':'#222200', 'glyph':'#FFFFFF', 'icon':'#000000'},
-}
-APPS = ['ChatGPT', 'Claude', 'Gemini', 'Codex', 'Perplexity', 'Custom']
-SCHEMES = [('halo', 'Fluent Halo', 'FLUENT HALO'), ('petals', 'Command Petals', 'COMMAND PETALS'), ('orbit', 'Soft Orbit', 'SOFT ORBIT')]
-
-
-def shadow_circle(s, x, y, r, alpha=.10):
-    for extra, opacity in [(12,.10), (8,.16), (5,.22), (2,.28)]:
-        s.circle(x, y+5+extra*.15, r+extra, '#000000', alpha=alpha*opacity)
-
-
-def shadow_rect(s, x, y, w, h, r=8, alpha=.08):
-    for extra, opacity in [(8,.12), (5,.20), (2,.30)]:
-        s.rect(x-extra, y-extra+5, w+extra*2, h+extra*2, '#000000', r=r+extra, alpha=alpha*opacity)
+    @staticmethod
+    def _svg_text(p):
+        col = p['color']
+        op = f' fill-opacity="{num(col[3])}"' if col[3] < 1 else ''
+        ls = f' letter-spacing="{num(float(p["tracking"]))}"' if p['tracking'] else ''
+        spans = []
+        for face, chunk in p['runs']:
+            family, weight = fonts.css(face)
+            spans.append(f'<tspan font-family="{family}" font-weight="{weight}">{escape(chunk)}</tspan>')
+        return (f'<text x="{num(float(p["x"]))}" y="{num(float(p["y"]))}" font-size="{num(float(p["size"]))}" '
+                f'fill="{hexrgb(col)}"{op}{ls} xml:space="preserve">' + ''.join(spans) + '</text>')
 
 
-def glyph(s, index, x, y, size, color, stroke_width=1.75):
-    # Keep symbols aligned with the normalized Direct2D paths in iconography.cpp.
-    # Stroke is 1.75 DIP at the wheel's 28 DIP symbol size.
-    stroke = stroke_width * 24 / size
-    with s.group(x, y, size/24):
-        if index == 0:
-            s.circle(-4, 0, 6, stroke=color, sw=stroke)
-            s.circle(4, 0, 6, stroke=color, sw=stroke)
-        elif index == 1:
-            for a in range(0, 360, 45):
-                x1,y1 = point(4,a); x2,y2 = point(10,a)
-                s.line(x1,y1,x2,y2,color,stroke)
-        elif index == 2:
-            s.path([('M',0,-10),('C',2,-3,3,-2,10,0),('C',3,2,2,3,0,10),('C',-2,3,-3,2,-10,0),('C',-3,-2,-2,-3,0,-10),('Z',)], fill=color)
-        elif index == 3:
-            s.path([('M',-4,-7),('L',-10,0),('L',-4,7)], stroke=color, sw=stroke)
-            s.path([('M',4,-7),('L',10,0),('L',4,7)], stroke=color, sw=stroke)
-            s.line(2,-9,-2,9,color,stroke)
-        elif index == 4:
-            s.rect(-8,-8,16,16,stroke=color,sw=stroke,r=2.5)
-            s.line(0,-10,0,10,color,stroke)
-            s.line(-10,0,10,0,color,stroke)
-        elif index == 6:
-            s.path([('M',-7,-10),('L',3,-10),('L',8,-5),('L',8,10),('L',-7,10),('Z',)],stroke=color,sw=stroke)
-            s.path([('M',3,-10),('L',3,-5),('L',8,-5)],stroke=color,sw=stroke)
-            for yy,end in [(0,4),(4,4),(8,1)]:s.line(-3,yy,end,yy,color,stroke)
-        elif index == 7:
-            for yy,knob in [(-7,-2),(0,4),(7,-3)]:
-                s.line(-10,yy,knob-3,yy,color,stroke);s.line(knob+3,yy,10,yy,color,stroke)
-                s.circle(knob,yy,3,stroke=color,sw=stroke)
-        else:
-            s.rect(-10,-9,20,18,stroke=color,sw=stroke,r=3)
-            s.line(-10,-3,10,-3,color,stroke)
-            s.line(-5,-6,-4,-6,color,stroke);s.line(-1,-6,0,-6,color,stroke)
-            s.line(-3,3,3,3,color,stroke);s.line(0,0,0,6,color,stroke)
-
-
-def pointer(s, x, y, dark=False, scale=1):
-    with s.group(x,y,scale):
-        s.path([('M',0,0),('L',2,21),('L',7,15),('L',12,24),('L',16,22),('L',11,13),('L',19,12),('Z',)], '#FFFFFF' if dark else '#111820', '#111820' if dark else '#FFFFFF', 1.1)
-
-
-def wheel(s, scheme, theme='light', selected=1, x=0, y=0, scale=1, show_pointer=False, material='solid'):
-    p = PALETTES[theme]
-    hc = theme == 'contrast'
-    with s.group(x,y,scale):
-        if scheme == 'halo':
-            if not hc: shadow_circle(s,0,0,160)
-            s.circle(0,0,160,p['surface'],p['line'],2 if hc else 1)
-            if selected is not None:
-                a = -90+selected*60
-                s.path(wedge(157,47,a-29,a+29),p['active'])
-                s.path(arc(157,a-27,a+27),stroke=p['accent'],sw=3 if hc else 2.5)
-            for i in range(6):
-                a = -120+i*60
-                x1,y1=point(49,a); x2,y2=point(149,a)
-                s.line(x1,y1,x2,y2,p['line'],.7)
-                ix,iy=point(109,-90+i*60)
-                s.rect(ix-18,iy-23,36,36,p['icon'],r=8)
-                glyph(s,i,ix,iy-5,28,p['glyph'])
-                s.text(ix,iy+19,APPS[i],14,p['text'],align='center')
-        elif scheme == 'petals':
-            for i in range(6):
-                ix,iy=point(132,-90+i*60)
-                active = i == selected
-                if not hc: shadow_rect(s,ix-52,iy-34,104,68,8)
-                s.rect(ix-52,iy-34,104,68,p['active'] if active else p['tile'],p['accent'] if active else p['line'],2 if active or hc else 1,8)
-                if active:
-                    s.rect(ix-28,iy+29,56,3,p['accent'],r=1.5)
-                glyph(s,i,ix,iy-10,25,p['glyph'])
-                s.text(ix,iy+9,APPS[i],14,p['text'],align='center')
-        else:
-            if not hc: shadow_circle(s,0,0,168,.12)
-            frosted = material == 'frosted' and not hc
-            s.circle(0,0,168,p['surface'],p['line'],2 if hc else 1,alpha=.88 if frosted else 1)
-            if frosted:
-                # Vector-only tonal illustration, not a captured or blurred desktop.
-                s.circle(0,0,166,p['surface'],alpha=.25)
-                s.circle(0,-1,161,stroke=p['inner'],sw=1,alpha=.7)
-            for i in range(6):
-                ix,iy=point(112,-90+i*60)
-                active = i == selected
-                if active:
-                    s.rect(ix-30,iy-30,60,64,p['active'],p['accent'],2 if hc else 1.5,14)
-                    s.circle(ix,iy+25,2,p['accent'])
-                s.rect(ix-20,iy-20,40,40,p['icon'],r=10)
-                glyph(s,i,ix,iy,28,p['text'] if hc else p['accent'] if active else p['text'],2 if hc else 1.75)
-        s.circle(0,0,44,p['inner'],p['line'],2 if hc else 1)
-        if selected is None:
-            s.line(-4,-12,4,-4,p['muted'],1.4)
-            s.line(4,-12,-4,-4,p['muted'],1.4)
-            s.text(0,9,'Cancel',12,p['muted'],align='center')
-        else:
-            s.text(0,-16,APPS[selected],14,p['text'],True,'center')
-            s.text(0,7,'Release',12,p['muted'],align='center')
-        if show_pointer:
-            px,py=point(70,-12) if selected is not None else (4,-4)
-            pointer(s,px,py,theme=='dark',.8)
-
-
-def logo(s, scheme, x, y, size=64, tile=True, color=BLUE, foreground='#FFFFFF'):
-    with s.group(x,y,size/64):
-        if tile:
-            s.rect(0,0,64,64,color,r=14)
-        mark=foreground if tile else color
-        with s.group(32,32):
-            if scheme == 'halo':
-                for a in [-90,30,150]: s.path(wedge(22,14,a,a+105),mark)
-                s.circle(0,0,4,mark)
-            elif scheme == 'petals':
-                for a in range(-90,270,60):
-                    xx,yy=point(19,a)
-                    s.rect(xx-5,yy-5,10,10,mark,r=2.5)
-                s.circle(0,0,4,mark)
-            else:
-                s.path(arc(23,-30,280),stroke=mark,sw=3)
-                s.path(arc(14,150,440),stroke=mark,sw=3)
-                xx,yy=point(23,-50)
-                s.circle(xx,yy,4,mark)
-
-
-def desktop(s,x,y,w,h,dark=False):
-    bg='#141D2A' if dark else '#E8EFF6'
-    panel='#202B39' if dark else '#F8FAFC'
-    edge='#314050' if dark else '#D5DFEB'
-    s.rect(x,y,w,h,bg,r=16)
-    s.path([('M',x,y+h*.72),('C',x+w*.25,y+h*.28,x+w*.65,y+h*.94,x+w,y+h*.25),('L',x+w,y+h),('L',x,y+h),('Z',)], '#243C58' if dark else '#D5E4F3',alpha=.9)
-    px,py,pw,ph=x+30,y+26,w-60,h-56
-    s.rect(px,py,pw,ph,panel,edge,1,10)
-    s.line(px,py+34,px+pw,py+34,edge)
-    for i in range(3): s.circle(px+14+i*12,py+17,2.5,edge)
-    s.text(px+54,py+10,'Workspace',12,'#AAB8CA' if dark else '#7B8A9D')
-    for i in range(6):
-        s.rect(px+20,py+61+i*27,(pw-44)*[.7,.92,.86,.54,.8,.63][i],5,edge,r=2.5,alpha=.55)
-
-
-def footer(s,page,total=12):
-    s.line(64,835,1376,835,LINE)
-    s.text(64,852,'COPILOT REEL  /  QUIET RADIAL UI + OFFICIAL APP IDENTITY  /  v0.8',12,MUTED)
-    s.text(1376,852,f'{page:02d} / {total:02d}',12,MUTED,align='right')
-
-
-def base(page,section,title,subtitle=''):
-    s=Scene()
-    s.rect(0,0,PAGE_W,PAGE_H,'#FFFFFF')
-    s.text(64,42,section,13,BLUE,True)
-    s.text(64,82,title,40,INK,True)
-    if subtitle: s.text(64,142,subtitle,18,MUTED)
-    footer(s,page)
-    return s
-
-
-def note(s,x,y,kicker,title,body,width=380):
-    s.text(x,y,kicker,12,BLUE,True)
-    s.text(x,y+28,title,23,INK,True)
-    return s.wrap(x,y+67,body,width,17,28,MUTED)
-
-
-def swatches(s,x,y,values,width=500):
-    cell=width/len(values)
-    for i,(name,color) in enumerate(values):
-        xx=x+i*cell
-        s.rect(xx,y,cell-14,48,color,LINE,.5,8)
-        s.text(xx,y+61,name,13,MUTED)
-        s.text(xx,y+83,color.upper(),15,INK)
+def _encoded(img, fmt):
+    buf = io.BytesIO()
+    if fmt == 'JPEG':
+        img.convert('RGB').save(buf, 'JPEG', quality=90, subsampling=0, optimize=True)
+    else:
+        img.save(buf, 'PNG', optimize=True)
+    buf.seek(0)
+    return buf
