@@ -14,8 +14,8 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 EXE = ROOT / 'build/Release/CopilotReel.exe'
 CAPTURE = ROOT / 'build/Release/capture-window.exe'
-DATA = ROOT / 'artifacts/qa/visual-v0.3.0'
-OUTPUT = ROOT / 'output/runtime/v0.3.0'
+DATA = ROOT / 'artifacts/qa/visual-v0.3.1'
+OUTPUT = ROOT / 'output/runtime/v0.3.1'
 DATA.mkdir(parents=True, exist_ok=True)
 OUTPUT.mkdir(parents=True, exist_ok=True)
 u = ctypes.WinDLL('user32', use_last_error=True)

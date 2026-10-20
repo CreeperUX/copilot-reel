@@ -7,9 +7,9 @@ def main():
     VECTORS.mkdir(parents=True, exist_ok=True)
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     pages = build_pages()
-    path = PDF_DIR / 'copilot-reel-vi-v0.6.pdf'
+    path = PDF_DIR / 'copilot-reel-vi-v0.7.pdf'
     document = canvas.Canvas(str(path), pagesize=(PAGE_W*PDF_SCALE, PAGE_H*PDF_SCALE), pageCompression=1)
-    document.setTitle('Copilot Reel - Radial OSD and Official App Identity v0.6')
+    document.setTitle('Copilot Reel - Quiet Radial UI and Official App Identity v0.7')
     document.setAuthor('Copilot Reel')
     for page in pages:
         page.draw_pdf(document)
@@ -21,14 +21,14 @@ def main():
         stale.unlink()
     for theme in ['light', 'dark', 'contrast']:
         scene = Scene(420, 420)
-        radial(scene, 210, 210, theme, selected=7)
+        radial(scene, 210, 210, theme, selected=6)
         (VECTORS / f'orbit-{theme}.svg').write_text(scene.svg('Soft Orbit / radial main / '+theme), encoding='utf-8', newline='\n')
         if theme == 'contrast': continue
         for material in ['solid', 'frosted']:
             scene=Scene(420,420)
-            radial(scene,210,210,theme,selected=7,material=material)
+            radial(scene,210,210,theme,selected=6,material=material)
             (VECTORS/f'orbit-{theme}-{material}.svg').write_text(scene.svg('Soft Orbit / '+theme+' / '+material),encoding='utf-8',newline='\n')
-        screens=[('main',MAIN,'Copilot Reel',7,False),
+        screens=[('main',MAIN,'Copilot Reel',6,False),
                  ('settings',SETTINGS,'Settings',0,False),
                  ('language',SETTINGS,'Settings',0,True),
                  ('preferred',MAIN[:6],'Preferred agent',0,False),
@@ -40,19 +40,19 @@ def main():
             (VECTORS/f'radial-{name}-{theme}.svg').write_text(scene.svg('Radial OSD / '+name+' / '+theme),encoding='utf-8',newline='\n')
 
     tokens={
-        'schemaVersion':'0.6','status':'native-implementation-with-runtime-validation-tracked-separately',
+        'schemaVersion':'0.7','status':'native-implementation-with-runtime-validation-tracked-separately',
         'units':'DIP','defaultScheme':'orbit','defaultLanguage':'en-US','supportedLanguages':['en-US','zh-CN'],
         'rendering':'native vector geometry and DirectWrite text; official artwork uses source-appropriate SVG or PNG',
-        'typography':{'preferred':'Segoe UI Variable','fallback':'Segoe UI','cjk':'system fallback','applicationLabel':14,'statusLabel':12},
-        'interaction':{'systemHoldThresholdMs':300,'singleTap':'launch saved preferred agent directly','hold':'open pointer-led reel; release commits a target or opens a radial submenu','centerCancelDiameter':88,'releaseCommitsAtMostOnce':True,'gapsAreNotDeadZones':True,'menuContinuation':'secondary settings remain open for deliberate adjustment','back':'center or Esc returns one level'},
-        'motion':{'appearanceMs':230,'tetherMs':70,'revealMs':160,'exitMs':190,'selectionMs':0,'menuPageMs':0,'appearanceScale':[.85,1.0],'outlineSweepDegrees':360,'iconsRotate':False,'reduceMotion':'instant state changes','implementation':'Windows Composition opacity, scale, clip radius, and geometry TrimEnd; one-shot exit completion only','hidden':'detach composition tree; stop active animations'},
+        'typography':{'preferred':'Segoe UI Variable','fallback':'Segoe UI','cjk':'system fallback','applicationLabel':14,'iconMonogram':16,'helperText':False},
+        'interaction':{'systemHoldThresholdMs':300,'singleTap':'launch saved preferred agent directly','hold':'open at pointer center; release commits a target or opens the unified + hub','centerCancelDiameter':88,'releaseCommitsAtMostOnce':True,'gapsAreNotDeadZones':True,'menuContinuation':'secondary settings remain open for deliberate adjustment','back':'center or Esc returns one level'},
+        'motion':{'appearanceMs':160,'exitMs':120,'selectionMs':0,'menuPageMs':0,'appearanceScale':[.96,1.0],'outlineSweepDegrees':0,'connector':False,'iconsRotate':False,'reduceMotion':'instant state changes','implementation':'Windows Composition opacity and scale; one-shot exit completion only','hidden':'detach composition tree; stop active animations'},
         'colorPolicy':{'surface':'Windows app light/dark neutral theme','accent':'Windows accent for selection outlines and indicators','vendorArtwork':'preserve official proportions and recognizable colors','sampleLight':'#005FB8','sampleDark':'#60CDFF','highContrast':'actual system surfaces and readable outlines; preview colors illustrative'},
         'systemAppearance':{'followSystem':True,'materialPriority':['high-contrast-system-solid','transparency-disabled-or-unavailable-theme-solid','transparency-enabled-and-supported-frosted'],'solid':{'surfaceAlpha':1.0,'backgroundSampling':False,'backgroundBlur':False},'frosted':{'surface':'single compositor backdrop layer','preview':'tonal illustration; native backdrop requires runtime validation'},'delivery':'coalesce on UI thread; preserve menu context and selection'},
         'palettes':PALETTES,
         'schemes':{'orbit':{'name':'Soft Orbit','status':'selected','diameter':336,'icon':40,'orbitRadius':112,'selectionSeat':[60,64]},'halo':{'status':'historical comparison'},'petals':{'status':'historical comparison'}},
         'iconography':{'renderer':'verified vendor artwork plus native command vectors','tileSize':40,'tileRadius':10,'artworkSize':28,'commandStrokeWidth':1.75,'highContrastCommandStrokeWidth':2,'identity':'preserve official artwork and use consistent container geometry','unknown':'neutral application-window symbol','initialsFallback':False,'sourceManifest':'assets/brands/provenance.json','rasterException':'official PNG or same-artwork PNG when SVG unavailable or unsupported; never UI animation frames'},
-        'osd':{'surface':'nested radial menus','primary':['configured agents','Add / change apps','Settings'],'settings':['Language','Preferred agent','Windows appearance'],'language':{'location':'Settings / Language','input':['left chevron','right chevron','A','D'],'arrowHitSize':[44,44],'arrowVisibleSize':[30,30],'arrowCentersFromCenter':[[-60,0],[60,0]],'default':'English','persistence':'immediate'},'management':['existing apps','presets with five items per page','custom app','previous/next when available'],'editor':'focused native task sheet for name and actual launch target','missingPreset':'open focused editor; do not silently change intended application','autostartSetting':False,'primaryRectangularPanel':False},
-        'edgeLayout':{'interior':'place a complete reel near the actual pointer with nominal 168 DIP tether','nominalTetherLength':168,'edge':'clamp complete footprint to current monitor work area','corner':'preserve circle and clamp both axes; tether may exceed nominal length','origin':'final visible center is the armed hit-test origin','cursorWarp':False,'guard':'keep selection empty until center entry when pointer begins outside center zone; early release cancels','smallWorkArea':'scale the complete canvas uniformly; validate reduced text and target sizes','invariants':['item order','item angles','orbit radius','icon size'],'layoutContract':'rendering and hit testing share final center and geometry'},
+        'osd':{'surface':'nested radial menus','primary':['configured agents','+'],'settings':['Language','Windows appearance','Preferred agent','Manage apps','Add app'],'language':{'location':'unified + hub / language tile','input':['left chevron','right chevron','A','D'],'iconStates':['EN','CN'],'arrowHitSize':[40,40],'arrowVisibleSize':[5,10],'arrowBackground':False,'arrowCentersFromCenter':[[-48,-112],[48,-112]],'default':'English','persistence':'immediate'},'management':['existing apps','presets with five items per page','custom app','previous/next when available'],'editor':'focused native task sheet for name and actual launch target','missingPreset':'open focused editor; do not silently change intended application','autostartSetting':False,'primaryRectangularPanel':False,'centerContent':'empty on Main; back chevron on submenus; selected real application name only','captions':False,'appearanceIcon':'sun for system light mode; moon for system dark mode'},
+        'edgeLayout':{'interior':'center the complete reel on the actual pointer with zero offset','pointerOffset':0,'edge':'clamp complete footprint to current monitor work area','corner':'preserve circle and minimally clamp both axes','origin':'final visible center is the armed hit-test origin','cursorWarp':False,'guard':'only when boundary clamping places the pointer outside the center zone, keep selection empty until center entry; early release cancels','smallWorkArea':'scale the complete canvas uniformly; validate reduced text and target sizes','invariants':['item order','item angles','orbit radius','icon size'],'layoutContract':'rendering and hit testing share final center and geometry'},
         'handoff':{'svg':'editable vector UI scenes with embedded verified source artwork','pdf':'embedded fonts and vector UI; official PNG sources retained for review','png':'review snapshots only','architecture':'one process; input/state/layout/theme/renderer/platform services separated','validation':'docs/validation.md'}
     }
     (VI/'tokens.json').write_text(json.dumps(tokens,indent=2)+'\n',encoding='utf-8',newline='\n')

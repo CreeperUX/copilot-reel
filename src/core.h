@@ -32,27 +32,10 @@ inline WheelPlacement PlaceWheel(int pointerX, int pointerY, WorkArea work,
     return result;
 }
 
-// Choose an inward-facing spoke near the pointer. Keep the complete circle on
-// screen; at corners this necessarily lengthens the requested radius tether.
+// The pointer is the origin unless the complete footprint crosses a work-area
+// boundary. In that case use only the minimum translation needed to contain it.
 inline WheelPlacement PlaceOrbit(int x, int y, WorkArea work, int size, double deadZone) {
-    const double radius=size*168.0/384.0;
-    constexpr double directions[][2]={{.70710678,-.70710678},{-.70710678,-.70710678},
-        {.70710678,.70710678},{-.70710678,.70710678},{1,0},{-1,0},{0,-1},{0,1}};
-    WheelPlacement best;
-    double score=1e30;
-    for(const auto& direction:directions) {
-        const int desiredX=x+static_cast<int>(std::round(radius*direction[0]));
-        const int desiredY=y+static_cast<int>(std::round(radius*direction[1]));
-        auto candidate=PlaceWheel(desiredX,desiredY,work,size,deadZone);
-        if(!candidate.fits) return candidate;
-        const double dx=candidate.centerX-desiredX,dy=candidate.centerY-desiredY;
-        const double deviation=dx*dx+dy*dy;
-        if(deviation<score) {best=candidate;score=deviation;}
-        if(deviation<1) break;
-    }
-    const double dx=x-best.centerX,dy=y-best.centerY;
-    best.awaitingCenter=dx*dx+dy*dy>deadZone*deadZone;
-    return best;
+    return PlaceWheel(x,y,work,size,deadZone);
 }
 
 // URI activations can arrive out of process-creation order. An Up tombstone

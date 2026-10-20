@@ -20,9 +20,9 @@ public:
     void SetIcons(const std::vector<HICON>& icons);
     void SetMenuContext(const std::wstring& title, bool isSubmenu, bool languageControl);
     void SetPreferredIndex(int index);
-    // Original pointer position relative to the final wheel center, in DIPs.
+    // Original pointer offset is retained for placement diagnostics only.
     void SetAnchorOffset(float x, float y);
-    // Local canvas DIP rectangles shared with the controller's hit testing.
+    // Local canvas DIP hit rectangles beside the language tile at the top orbit.
     std::pair<D2D1_RECT_F, D2D1_RECT_F> LanguageArrowBounds() const;
     void SetAwaitCenter(bool awaitCenter);
     void SetSelection(int index);

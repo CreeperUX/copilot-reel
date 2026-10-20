@@ -13,6 +13,9 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <vector>
 
 namespace capture = winrt::Windows::Graphics::Capture;
@@ -72,8 +75,10 @@ void SavePng(const wchar_t* path, ID3D11Device* device, ID3D11DeviceContext* con
 }
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 3) {
-        std::wcerr << L"Usage: capture-window.exe <HWND decimal or hexadecimal> <absolute output.png>\n";
+    const bool sequence = argc == 5 && std::wstring_view(argv[3]) == L"--sequence";
+    if (argc != 3 && !sequence) {
+        std::wcerr << L"Usage: capture-window.exe <HWND> <absolute output.png>\n"
+                   << L"       capture-window.exe <HWND> <empty absolute directory> --sequence <milliseconds>\n";
         return 2;
     }
     try {
@@ -103,6 +108,62 @@ int wmain(int argc, wchar_t** argv) {
         auto session = pool.CreateCaptureSession(item);
         session.IsCursorCaptureEnabled(false);
         session.StartCapture();
+        if (sequence) {
+            const std::filesystem::path directory(argv[2]);
+            const unsigned duration = std::wcstoul(argv[4], nullptr, 10);
+            if (!directory.is_absolute() || duration < 100 || duration > 3000 ||
+                (std::filesystem::exists(directory) && !std::filesystem::is_empty(directory)))
+                winrt::throw_hresult(E_INVALIDARG);
+            std::filesystem::create_directories(directory);
+            struct Sample {
+                winrt::com_ptr<ID3D11Texture2D> texture;
+                UINT width, height;
+                int64_t captureTicks;
+            };
+            std::vector<Sample> samples;
+            size_t allocatedBytes = 0;
+            const auto started = std::chrono::steady_clock::now();
+            const auto deadline = started + std::chrono::milliseconds(duration);
+            while (std::chrono::steady_clock::now() < deadline) {
+                auto next = pool.TryGetNextFrame();
+                if (!next) { Sleep(2); continue; }
+                auto access = next.Surface().as<Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+                winrt::com_ptr<ID3D11Texture2D> input;
+                winrt::check_hresult(access->GetInterface(IID_PPV_ARGS(input.put())));
+                D3D11_TEXTURE2D_DESC description{};
+                input->GetDesc(&description);
+                const size_t bytes = static_cast<size_t>(description.Width) * description.Height * 4;
+                if (samples.size() >= 120 || allocatedBytes + bytes > 256 * 1024 * 1024) break;
+                description.BindFlags = 0;
+                description.MiscFlags = 0;
+                winrt::com_ptr<ID3D11Texture2D> copy;
+                winrt::check_hresult(device->CreateTexture2D(&description, nullptr, copy.put()));
+                context->CopyResource(copy.get(), input.get());
+                const auto size = next.ContentSize();
+                samples.push_back({std::move(copy), static_cast<UINT>(size.Width),
+                    static_cast<UINT>(size.Height), next.SystemRelativeTime().count()});
+                allocatedBytes += bytes;
+                next.Close();
+                if (samples.size() == 1) {
+                    // The external fixture may trigger a transition only after
+                    // a real baseline frame proves that capture is established.
+                    std::ofstream(directory / L"ready.txt") << "Capture ready\n";
+                }
+            }
+            session.Close();
+            pool.Close();
+            if (samples.empty()) winrt::throw_hresult(HRESULT_FROM_WIN32(WAIT_TIMEOUT));
+            std::ofstream metadata(directory / L"frames.csv");
+            metadata << "frame,captureMilliseconds,width,height\n";
+            for (size_t index = 0; index < samples.size(); ++index) {
+                const auto& sample = samples[index];
+                const auto name = L"frame-" + std::to_wstring(index) + L".png";
+                SavePng((directory / name).c_str(), device.get(), context.get(), sample.texture.get(), sample.width, sample.height);
+                metadata << index << ',' << (sample.captureTicks - samples.front().captureTicks) / 10000.0
+                         << ',' << sample.width << ',' << sample.height << '\n';
+            }
+            return 0;
+        }
         capture::Direct3D11CaptureFrame frame{nullptr};
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (std::chrono::steady_clock::now() < deadline) {

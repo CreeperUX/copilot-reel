@@ -274,8 +274,9 @@ public:
     void Back() {
         if(!gesture_.Active())return;
         switch(page_) {
-        case MenuPage::Presets:case MenuPage::Entry:Navigate(MenuPage::Manage);break;
-        case MenuPage::Preferred:Navigate(MenuPage::Settings);break;
+        case MenuPage::Presets:Navigate(presetsParent_);break;
+        case MenuPage::Entry:Navigate(MenuPage::Manage);break;
+        case MenuPage::Manage:case MenuPage::Preferred:Navigate(MenuPage::Settings);break;
         case MenuPage::Main:Cancel();break;
         default:Navigate(MenuPage::Main);break;
         }
@@ -348,7 +349,7 @@ public:
         case MenuAction::Launch:gesture_.Cancel();Hide(false);LaunchTarget(entry.visual);Log(L"Gesture committed");break;
         case MenuAction::Manage:Navigate(MenuPage::Manage);break;
         case MenuAction::Settings:Navigate(MenuPage::Settings);break;
-        case MenuAction::Language:languageFocus_=true;renderer_->SetMenuContext(MenuTitle(),true,true);break;
+        case MenuAction::Language:SwitchLanguage();break;
         case MenuAction::Preferred:Navigate(MenuPage::Preferred);break;
         case MenuAction::Appearance:
             gesture_.Cancel();Hide(false);LaunchTarget({L"Windows appearance",TargetKind::Shell,L"ms-settings:colors",L"",L""});break;
@@ -364,7 +365,7 @@ public:
                 if(SaveTargets(candidate,error)){items_=std::move(candidate);Navigate(MenuPage::Manage);}
                 else MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);
             }break;
-        case MenuAction::Presets:presetOffset_=0;Navigate(MenuPage::Presets);break;
+        case MenuAction::Presets:presetsParent_=page_;presetOffset_=0;Navigate(MenuPage::Presets);break;
         case MenuAction::Previous:presetOffset_=presetOffset_>=5?presetOffset_-5:0;Navigate(MenuPage::Presets);break;
         case MenuAction::Next:presetOffset_+=5;Navigate(MenuPage::Presets);break;
         case MenuAction::Custom:OpenEditor(-1);break;
@@ -462,7 +463,7 @@ public:
     }
     void SaveDiagnostics() {
         std::wostringstream text;
-        text<<L"Copilot Reel 0.3.0\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.1\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
@@ -499,6 +500,7 @@ private:
     std::vector<AppTarget> items_,presets_;
     std::vector<MenuEntry> menu_;
     MenuPage page_=MenuPage::Main;
+    MenuPage presetsParent_=MenuPage::Manage;
     size_t presetOffset_=0;
     int editing_=-1;
     bool languageFocus_=false,closing_=false,editorOpen_=false,quitting_=false,placing_=false;

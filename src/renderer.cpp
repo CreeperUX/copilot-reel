@@ -118,21 +118,16 @@ Rgba TileColor(const Appearance& appearance) {
             a.b + (b.b - a.b) * amount, 1.0f};
 }
 
-winrt::Windows::UI::Color CompositionColor(Rgba value) {
-    auto channel = [](float value) {
-        return static_cast<uint8_t>(std::clamp(value, 0.0f, 1.0f) * 255.0f + 0.5f);
-    };
-    return {channel(value.a), channel(value.r), channel(value.g), channel(value.b)};
-}
-
 std::pair<D2D1_RECT_F, D2D1_RECT_F> LanguageBounds() {
-    return {D2D1::RectF(kCenterDip - 82, kCenterDip - 22, kCenterDip - 38, kCenterDip + 22),
-            D2D1::RectF(kCenterDip + 38, kCenterDip - 22, kCenterDip + 82, kCenterDip + 22)};
+    // The language control lives on the top orbit tile, not in the cancel zone.
+    constexpr float y = kCenterDip - 112.0f;
+    return {D2D1::RectF(kCenterDip - 68, y - 20, kCenterDip - 28, y + 20),
+            D2D1::RectF(kCenterDip + 28, y - 20, kCenterDip + 68, y + 20)};
 }
 
 // Internal actions retain the same visual weight as the official application marks.
 bool DrawMenuSymbol(ID2D1RenderTarget* target, const AppTarget& item,
-    const D2D1_RECT_F& bounds, ID2D1SolidColorBrush* brush, float stroke) {
+    const D2D1_RECT_F& bounds, ID2D1SolidColorBrush* brush, float stroke, bool dark) {
     if (!item.target.starts_with(L"reel:")) return false;
     const float x = (bounds.left + bounds.right) * 0.5f;
     const float y = (bounds.top + bounds.bottom) * 0.5f;
@@ -143,24 +138,40 @@ bool DrawMenuSymbol(ID2D1RenderTarget* target, const AppTarget& item,
         target->DrawEllipse(D2D1::Ellipse({x, y}, radius, radius), brush, stroke);
     };
     const auto& action = item.target;
-    if (action == L"reel:add" || action == L"reel:manage") {
+    if (action == L"reel:add") {
         line(-9, 0, 9, 0); line(0, -9, 0, 9);
+    } else if (action == L"reel:manage") {
+        for (const float dx : {-7.0f, 7.0f}) for (const float dy : {-7.0f, 7.0f})
+            target->DrawRoundedRectangle(D2D1::RoundedRect(
+                D2D1::RectF(x + dx - 4, y + dy - 4, x + dx + 4, y + dy + 4),
+                1.5f, 1.5f), brush, stroke);
     } else if (action == L"reel:back") {
         line(-8, 0, 9, 0); line(-8, 0, -1, -7); line(-8, 0, -1, 7);
-    } else if (action == L"reel:language") {
-        ellipse(10);
-        target->DrawEllipse(D2D1::Ellipse({x, y}, 4.5f, 10), brush, stroke);
-        line(-9, -3, 9, -3); line(-9, 3, 9, 3);
     } else if (action == L"reel:preferred") {
         ellipse(10);
         line(-4, 0, -1, 4); line(-1, 4, 6, -5);
     } else if (action == L"reel:appearance") {
-        ellipse(9);
-        line(0, -9, 0, 9);
-        for (int ray = 0; ray != 8; ++ray) {
-            const float angle = std::numbers::pi_v<float> * ray / 4;
-            line(std::cos(angle) * 11, std::sin(angle) * 11,
-                std::cos(angle) * 14, std::sin(angle) * 14);
+        if (dark) {
+            winrt::com_ptr<ID2D1Factory> factory;
+            target->GetFactory(factory.put());
+            winrt::com_ptr<ID2D1PathGeometry> moon;
+            winrt::check_hresult(factory->CreatePathGeometry(moon.put()));
+            winrt::com_ptr<ID2D1GeometrySink> sink;
+            winrt::check_hresult(moon->Open(sink.put()));
+            sink->BeginFigure({x + 3, y - 10}, D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddBezier(D2D1::BezierSegment({x - 11, y - 12}, {x - 14, y + 9}, {x - 1, y + 11}));
+            sink->AddBezier(D2D1::BezierSegment({x + 4, y + 12}, {x + 9, y + 9}, {x + 11, y + 5}));
+            sink->AddBezier(D2D1::BezierSegment({x - 1, y + 10}, {x - 6, y - 4}, {x + 3, y - 10}));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            winrt::check_hresult(sink->Close());
+            target->DrawGeometry(moon.get(), brush, stroke);
+        } else {
+            ellipse(6.5f);
+            for (int ray = 0; ray != 8; ++ray) {
+                const float angle = std::numbers::pi_v<float> * ray / 4;
+                line(std::cos(angle) * 10, std::sin(angle) * 10,
+                    std::cos(angle) * 13, std::sin(angle) * 13);
+            }
         }
     } else if (action == L"reel:settings") {
         ellipse(7); ellipse(2.5f);
@@ -216,11 +227,7 @@ struct OrbitRenderer::Impl {
     wc::ContainerVisual pixelRoot{nullptr};
     wc::ContainerVisual dpiRoot{nullptr};
     wc::ContainerVisual animationRoot{nullptr};
-    wc::SpriteVisual tetherVisual{nullptr};
-    wc::ShapeVisual sweepVisual{nullptr};
     wc::CompositionEllipseGeometry revealGeometry{nullptr};
-    wc::CompositionEllipseGeometry sweepGeometry{nullptr};
-    wc::CompositionColorBrush animationBrush{nullptr};
     wc::SpriteVisual backdropVisual{nullptr};
     wc::SpriteVisual foreground{nullptr};
     wc::CompositionGraphicsDevice graphicsDevice{nullptr};
@@ -231,7 +238,6 @@ struct OrbitRenderer::Impl {
     winrt::com_ptr<IDWriteFactory> dwrite;
     winrt::com_ptr<IDWriteTextFormat> labelFormat;
     winrt::com_ptr<IDWriteTextFormat> centerFormat;
-    winrt::com_ptr<IDWriteTextFormat> hintFormat;
 
     void Safe(const std::function<void()>& operation) noexcept {
         try { operation(); }
@@ -264,30 +270,6 @@ struct OrbitRenderer::Impl {
         dpiRoot.Children().InsertAtTop(animationRoot);
         pixelRoot.Children().InsertAtTop(dpiRoot);
 
-        // The tether and sweep are separate compositor visuals. Application marks
-        // never rotate, and animation does not redraw the Direct2D surface.
-        animationBrush = compositor.CreateColorBrush(CompositionColor(appearance.accent));
-        tetherVisual = compositor.CreateSpriteVisual();
-        tetherVisual.Brush(animationBrush);
-        tetherVisual.CenterPoint({0, 0.75f, 0});
-        tetherVisual.Opacity(0);
-        dpiRoot.Children().InsertAtBottom(tetherVisual);
-        sweepVisual = compositor.CreateShapeVisual();
-        sweepVisual.Size({kCanvasDip, kCanvasDip});
-        sweepVisual.CenterPoint({kCenterDip, kCenterDip, 0});
-        sweepVisual.RotationAngleInDegrees(-90.0f);
-        sweepVisual.Opacity(0);
-        sweepGeometry = compositor.CreateEllipseGeometry();
-        sweepGeometry.Center({kCenterDip, kCenterDip});
-        sweepGeometry.Radius({kRadiusDip, kRadiusDip});
-        auto sweepShape = compositor.CreateSpriteShape(sweepGeometry);
-        sweepShape.StrokeBrush(animationBrush);
-        sweepShape.StrokeThickness(1.7f);
-        sweepShape.StrokeStartCap(wc::CompositionStrokeCap::Round);
-        sweepShape.StrokeEndCap(wc::CompositionStrokeCap::Round);
-        sweepVisual.Shapes().Append(sweepShape);
-        dpiRoot.Children().InsertAtTop(sweepVisual);
-
         backdropVisual = compositor.CreateSpriteVisual();
         backdropVisual.Size({kRadiusDip * 2, kRadiusDip * 2});
         backdropVisual.Offset({kCenterDip - kRadiusDip, kCenterDip - kRadiusDip, 0});
@@ -303,9 +285,8 @@ struct OrbitRenderer::Impl {
         CreateDevices();
         winrt::check_hresult(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
             __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(dwrite.put())));
-        labelFormat = TextFormat(14.0f, DWRITE_FONT_WEIGHT_NORMAL);
+        labelFormat = TextFormat(16.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD);
         centerFormat = TextFormat(14.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-        hintFormat = TextFormat(12.0f, DWRITE_FONT_WEIGHT_NORMAL);
         ready = true;
         ResizeSurface();
         ApplyAppearance();
@@ -361,7 +342,6 @@ struct OrbitRenderer::Impl {
     }
 
     void ApplyAppearance() {
-        animationBrush.Color(CompositionColor(appearance.accent));
         backdrop = false;
         backdropVisual.Brush(nullptr);
         BOOL enable = FALSE;
@@ -435,11 +415,11 @@ struct OrbitRenderer::Impl {
             }
             brush->SetColor(Color(appearance.surface, backdrop ? (appearance.dark ? 0.83f : 0.80f) : 1.0f));
             context->FillEllipse(disk, brush.get());
-            brush->SetColor(Color(appearance.outline, appearance.highContrast ? 1.0f : 0.8f));
+            brush->SetColor(Color(appearance.outline, appearance.highContrast ? 1.0f : 0.45f));
             context->DrawEllipse(disk, brush.get(), appearance.highContrast ? 2.0f : 1.0f);
 
             // Quiet inner guide. Its geometry is stable during selection.
-            brush->SetColor(Color(appearance.outline, appearance.highContrast ? 1.0f : 0.36f));
+            brush->SetColor(Color(appearance.outline, appearance.highContrast ? 1.0f : awaitCenter ? 0.55f : 0.18f));
             context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(kCenterDip, kCenterDip),
                 kDeadZoneDip, kDeadZoneDip), brush.get(), 1.0f);
 
@@ -473,8 +453,11 @@ struct OrbitRenderer::Impl {
                 const bool artworkOnDarkSurface = appearance.highContrast
                     ? appearance.surface.r * 0.2126f + appearance.surface.g * 0.7152f + appearance.surface.b * 0.0722f < 0.5f
                     : appearance.dark;
-                if (!DrawMenuSymbol(context.get(), items[i], iconBounds, brush.get(),
-                    appearance.highContrast ? 2.0f : 1.75f) &&
+                if (items[i].target == L"reel:language") {
+                    Text(context.get(), CurrentLanguage() == Language::English ? L"EN" : L"CN",
+                        iconBounds, labelFormat.get(), brush.get());
+                } else if (!DrawMenuSymbol(context.get(), items[i], iconBounds, brush.get(),
+                    appearance.highContrast ? 2.0f : 1.75f, appearance.dark) &&
                     !DrawOfficialIcon(context.get(), items[i], iconBounds, artworkOnDarkSurface)) {
                     // Missing artwork gets a neutral application glyph, never
                     // an invented approximation of a vendor's official mark.
@@ -494,60 +477,31 @@ struct OrbitRenderer::Impl {
                     brush->SetColor(Color(appearance.highContrast ? appearance.selectionText : appearance.accent));
                     context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, y + 26), 2.0f, 2.0f), brush.get());
                 }
-                if (isSubmenu && languageControl) {
-                    const wchar_t* label = nullptr;
-                    if (items[i].target == L"reel:language") label = Tr(L"Language", L"语言");
-                    else if (items[i].target == L"reel:preferred") label = Tr(L"Preferred", L"首选应用");
-                    else if (items[i].target == L"reel:appearance") label = Tr(L"Appearance", L"外观");
-                    if (label) {
-                        brush->SetColor(Color(selected ? appearance.accent : appearance.secondary));
-                        Text(context.get(), label, D2D1::RectF(x - 55, y + 33, x + 55, y + 51),
-                            hintFormat.get(), brush.get());
-                    }
-                }
             }
-            const bool selected = !awaitCenter && selection >= 0 && static_cast<size_t>(selection) < items.size();
-            brush->SetColor(Color(appearance.foreground));
             if (languageControl && !awaitCenter) {
-                Text(context.get(), CurrentLanguage() == Language::English ? L"English" : L"简体中文",
-                    D2D1::RectF(kCenterDip - 38, kCenterDip - 13, kCenterDip + 38, kCenterDip + 9),
-                    centerFormat.get(), brush.get());
                 const auto bounds = LanguageBounds();
+                brush->SetColor(Color(appearance.highContrast ? appearance.foreground : appearance.secondary));
                 for (const auto& rect : {bounds.first, bounds.second}) {
                     const float x = (rect.left + rect.right) * 0.5f;
                     const float y = (rect.top + rect.bottom) * 0.5f;
-                    brush->SetColor(Color(appearance.highContrast ? appearance.surface : TileColor(appearance)));
-                    context->FillRoundedRectangle(D2D1::RoundedRect(
-                        D2D1::RectF(x - 15, y - 15, x + 15, y + 15), 9, 9), brush.get());
-                    brush->SetColor(Color(appearance.foreground));
                     const float direction = x < kCenterDip ? -1.0f : 1.0f;
                     context->DrawLine({x - direction * 2.5f, y - 5}, {x + direction * 2.5f, y}, brush.get(), 1.6f);
                     context->DrawLine({x + direction * 2.5f, y}, {x - direction * 2.5f, y + 5}, brush.get(), 1.6f);
                 }
-                brush->SetColor(Color(appearance.secondary));
-                Text(context.get(), Tr(L"A / D to change", L"A / D 切换"),
-                    D2D1::RectF(kCenterDip - 70, kCenterDip + 11, kCenterDip + 70, kCenterDip + 29),
-                    hintFormat.get(), brush.get());
-                Text(context.get(), Tr(L"Language", L"语言"),
-                    D2D1::RectF(kCenterDip - 60, kCenterDip - 38, kCenterDip + 60, kCenterDip - 19),
-                    hintFormat.get(), brush.get());
-            } else {
-                const std::wstring heading = awaitCenter ? Tr(L"Move here", L"移入圆心") :
-                    selected ? items[selection].name :
-                    menuTitle.empty() ? Tr(L"Copilot Reel", L"Copilot Reel") : menuTitle;
-                Text(context.get(), heading,
-                    D2D1::RectF(kCenterDip - 66, kCenterDip - 17, kCenterDip + 66, kCenterDip + 5),
+            }
+            const bool selected = !awaitCenter && selection >= 0 && static_cast<size_t>(selection) < items.size();
+            const bool selectedApplication = selected && !items[selection].target.starts_with(L"reel:");
+            if (selectedApplication) {
+                // Only application identity belongs in the center. Commands and
+                // page state are expressed by their icons without captions.
+                brush->SetColor(Color(appearance.foreground));
+                Text(context.get(), items[selection].name,
+                    D2D1::RectF(kCenterDip - 66, kCenterDip - 13, kCenterDip + 66, kCenterDip + 13),
                     centerFormat.get(), brush.get());
-                brush->SetColor(Color(appearance.secondary));
-                std::wstring hint;
-                if (awaitCenter) hint = Tr(L"then choose", L"然后选择");
-                else if (selected && items[selection].target.starts_with(L"reel:"))
-                    hint = Tr(L"Open menu", L"打开菜单");
-                else if (selected) hint = isSubmenu ? Tr(L"Choose", L"选择") : Tr(L"Release to open", L"松开打开");
-                else hint = isSubmenu ? Tr(L"Center to go back", L"点击中心返回") : Tr(L"Choose an app", L"选择应用");
-                Text(context.get(), hint,
-                    D2D1::RectF(kCenterDip - 74, kCenterDip + 7, kCenterDip + 74, kCenterDip + 25),
-                    hintFormat.get(), brush.get());
+            } else if (isSubmenu && !awaitCenter) {
+                brush->SetColor(Color(appearance.secondary, appearance.highContrast ? 1.0f : 0.72f));
+                context->DrawLine({kCenterDip + 3, kCenterDip - 6}, {kCenterDip - 3, kCenterDip}, brush.get(), 1.6f);
+                context->DrawLine({kCenterDip - 3, kCenterDip}, {kCenterDip + 3, kCenterDip + 6}, brush.get(), 1.6f);
             }
         } catch (...) { drawResult = winrt::to_hresult(); }
         HRESULT endResult = interop->EndDraw();
@@ -581,29 +535,11 @@ struct OrbitRenderer::Impl {
     void StopAnimations() {
         animationRoot.StopAnimation(L"Opacity");
         animationRoot.StopAnimation(L"Scale");
-        revealGeometry.StopAnimation(L"Radius");
-        tetherVisual.StopAnimation(L"Opacity");
-        tetherVisual.StopAnimation(L"Scale");
-        sweepVisual.StopAnimation(L"Opacity");
-        sweepGeometry.StopAnimation(L"TrimEnd");
     }
 
     void ResetAnimationState() {
         animationRoot.Opacity(1.0f);
         animationRoot.Scale({1, 1, 1});
-        revealGeometry.Radius({kCenterDip, kCenterDip});
-        tetherVisual.Opacity(0);
-        tetherVisual.Scale({1, 1, 1});
-        sweepVisual.Opacity(0);
-        sweepGeometry.TrimEnd(1);
-    }
-
-    void PositionTether() {
-        const float length = std::hypot(anchorX, anchorY);
-        tetherVisual.Size({length, 1.5f});
-        tetherVisual.Offset({kCenterDip + anchorX, kCenterDip + anchorY - 0.75f, 0});
-        tetherVisual.RotationAngleInDegrees(std::atan2(-anchorY, -anchorX) *
-            180.0f / std::numbers::pi_v<float>);
     }
 
     void Show() {
@@ -612,63 +548,22 @@ struct OrbitRenderer::Impl {
         visible = true;
         StopAnimations();
         ResetAnimationState();
-        PositionTether();
         if (!appearance.animations || appearance.highContrast) return;
 
-        constexpr unsigned duration = 230;
-        const float arrival = std::hypot(anchorX, anchorY) > 2.0f ? 70.0f / duration : 0.0f;
-        auto ease = compositor.CreateCubicBezierEasingFunction({0.16f, 1.0f}, {0.3f, 1.0f});
-        auto linear = compositor.CreateLinearEasingFunction();
-
-        auto tetherScale = compositor.CreateVector3KeyFrameAnimation();
-        tetherScale.Duration(std::chrono::milliseconds(duration));
-        tetherScale.InsertKeyFrame(0.0f, {0, 1, 1});
-        tetherScale.InsertKeyFrame((std::max)(arrival, 0.01f), {1, 1, 1}, ease);
-        tetherScale.InsertKeyFrame(1.0f, {1, 1, 1});
-        tetherVisual.StartAnimation(L"Scale", tetherScale);
-        auto tetherOpacity = compositor.CreateScalarKeyFrameAnimation();
-        tetherOpacity.Duration(std::chrono::milliseconds(duration));
-        tetherOpacity.InsertKeyFrame(0, 0.8f);
-        tetherOpacity.InsertKeyFrame(arrival + 0.16f, 0.8f);
-        tetherOpacity.InsertKeyFrame(arrival + 0.33f, 0, ease);
-        tetherOpacity.InsertKeyFrame(1, 0);
-        tetherVisual.StartAnimation(L"Opacity", tetherOpacity);
-
+        // A restrained settling transition keeps the edge neutral and the
+        // pointer's relationship to the center stable throughout the opening.
+        constexpr unsigned duration = 160;
+        auto ease = compositor.CreateCubicBezierEasingFunction({0.2f, 0}, {0, 1});
         auto opacity = compositor.CreateScalarKeyFrameAnimation();
         opacity.Duration(std::chrono::milliseconds(duration));
         opacity.InsertKeyFrame(0, 0);
-        if (arrival > 0) opacity.InsertKeyFrame(arrival, 0);
-        opacity.InsertKeyFrame(arrival + 0.22f, 1, ease);
-        opacity.InsertKeyFrame(1, 1);
+        opacity.InsertKeyFrame(1, 1, ease);
         animationRoot.StartAnimation(L"Opacity", opacity);
         auto scale = compositor.CreateVector3KeyFrameAnimation();
         scale.Duration(std::chrono::milliseconds(duration));
-        scale.InsertKeyFrame(0, {0.85f, 0.85f, 1});
-        if (arrival > 0) scale.InsertKeyFrame(arrival, {0.85f, 0.85f, 1});
+        scale.InsertKeyFrame(0, {0.96f, 0.96f, 1});
         scale.InsertKeyFrame(1, {1, 1, 1}, ease);
         animationRoot.StartAnimation(L"Scale", scale);
-        auto reveal = compositor.CreateVector2KeyFrameAnimation();
-        reveal.Duration(std::chrono::milliseconds(duration));
-        reveal.InsertKeyFrame(0, {0, 0});
-        if (arrival > 0) reveal.InsertKeyFrame(arrival, {0, 0});
-        reveal.InsertKeyFrame(1, {kCenterDip, kCenterDip}, ease);
-        revealGeometry.StartAnimation(L"Radius", reveal);
-
-        auto sweep = compositor.CreateScalarKeyFrameAnimation();
-        sweep.Duration(std::chrono::milliseconds(duration));
-        sweep.InsertKeyFrame(0, 0);
-        if (arrival > 0) sweep.InsertKeyFrame(arrival, 0);
-        sweep.InsertKeyFrame(0.94f, 1, linear);
-        sweep.InsertKeyFrame(1, 1);
-        sweepGeometry.StartAnimation(L"TrimEnd", sweep);
-        auto sweepOpacity = compositor.CreateScalarKeyFrameAnimation();
-        sweepOpacity.Duration(std::chrono::milliseconds(duration));
-        sweepOpacity.InsertKeyFrame(0, 0);
-        if (arrival > 0) sweepOpacity.InsertKeyFrame(arrival, 0);
-        sweepOpacity.InsertKeyFrame(arrival + 0.05f, 0.85f);
-        sweepOpacity.InsertKeyFrame(0.86f, 0.85f);
-        sweepOpacity.InsertKeyFrame(1, 0, ease);
-        sweepVisual.StartAnimation(L"Opacity", sweepOpacity);
     }
 
     unsigned BeginHide() {
@@ -676,58 +571,19 @@ struct OrbitRenderer::Impl {
             Hide();
             return 0;
         }
-        // Replace the active entry animations without resetting their properties.
-        // StartingValue then inherits the current compositor presentation value.
-        PositionTether();
-        constexpr unsigned duration = 190;
+        constexpr unsigned duration = 120;
         auto ease = compositor.CreateCubicBezierEasingFunction({0.4f, 0}, {1, 1});
-        auto linear = compositor.CreateLinearEasingFunction();
         auto opacity = compositor.CreateScalarKeyFrameAnimation();
         opacity.Duration(std::chrono::milliseconds(duration));
-        // StartingValue preserves continuity when a quick release interrupts entry.
+        // StartingValue preserves continuity when release interrupts opening.
         opacity.InsertExpressionKeyFrame(0, L"this.StartingValue");
-        opacity.InsertKeyFrame(0.64f, 0, ease);
-        opacity.InsertKeyFrame(1, 0);
+        opacity.InsertKeyFrame(1, 0, ease);
         animationRoot.StartAnimation(L"Opacity", opacity);
         auto scale = compositor.CreateVector3KeyFrameAnimation();
         scale.Duration(std::chrono::milliseconds(duration));
         scale.InsertExpressionKeyFrame(0, L"this.StartingValue");
-        scale.InsertKeyFrame(0.64f, {0.85f, 0.85f, 1}, ease);
-        scale.InsertKeyFrame(1, {0.85f, 0.85f, 1});
+        scale.InsertKeyFrame(1, {0.96f, 0.96f, 1}, ease);
         animationRoot.StartAnimation(L"Scale", scale);
-        auto reveal = compositor.CreateVector2KeyFrameAnimation();
-        reveal.Duration(std::chrono::milliseconds(duration));
-        reveal.InsertExpressionKeyFrame(0, L"this.StartingValue");
-        reveal.InsertKeyFrame(0.64f, {0, 0}, ease);
-        reveal.InsertKeyFrame(1, {0, 0});
-        revealGeometry.StartAnimation(L"Radius", reveal);
-        auto sweep = compositor.CreateScalarKeyFrameAnimation();
-        sweep.Duration(std::chrono::milliseconds(duration));
-        sweep.InsertKeyFrame(0, 1);
-        sweep.InsertKeyFrame(0.64f, 0, linear);
-        sweep.InsertKeyFrame(1, 0);
-        sweepGeometry.StartAnimation(L"TrimEnd", sweep);
-        auto sweepOpacity = compositor.CreateScalarKeyFrameAnimation();
-        sweepOpacity.Duration(std::chrono::milliseconds(duration));
-        sweepOpacity.InsertKeyFrame(0, 0);
-        sweepOpacity.InsertKeyFrame(0.08f, 0.55f);
-        sweepOpacity.InsertKeyFrame(0.56f, 0.55f);
-        sweepOpacity.InsertKeyFrame(0.64f, 0);
-        sweepOpacity.InsertKeyFrame(1, 0);
-        sweepVisual.StartAnimation(L"Opacity", sweepOpacity);
-        auto tetherOpacity = compositor.CreateScalarKeyFrameAnimation();
-        tetherOpacity.Duration(std::chrono::milliseconds(duration));
-        tetherOpacity.InsertKeyFrame(0, 0);
-        tetherOpacity.InsertKeyFrame(0.36f, 0.8f);
-        tetherOpacity.InsertKeyFrame(0.83f, 0.8f);
-        tetherOpacity.InsertKeyFrame(1, 0);
-        tetherVisual.StartAnimation(L"Opacity", tetherOpacity);
-        auto tetherScale = compositor.CreateVector3KeyFrameAnimation();
-        tetherScale.Duration(std::chrono::milliseconds(duration));
-        tetherScale.InsertKeyFrame(0, {1, 1, 1});
-        tetherScale.InsertKeyFrame(0.64f, {1, 1, 1});
-        tetherScale.InsertKeyFrame(1, {0, 1, 1}, ease);
-        tetherVisual.StartAnimation(L"Scale", tetherScale);
         return duration;
     }
 
@@ -819,7 +675,7 @@ std::wstring OrbitRenderer::Diagnostics() const {
     return L"Windows Composition + Direct2D/DirectWrite; icons=official-artwork-unified-tiles; " + impl_->backdropStatus +
         L"; center gate=" + (impl_->awaitCenter ? L"waiting" : L"armed") +
         L"; menu=" + impl_->menuTitle + L"; submenu=" + (impl_->isSubmenu ? L"yes" : L"no") +
-        L"; animation=tether-70ms/reveal-160ms/exit-190ms; anchor=" + std::to_wstring(impl_->anchorX) +
+        L"; animation=settle-160ms/exit-120ms; center=quiet; perimeter=neutral; anchor=" + std::to_wstring(impl_->anchorX) +
         L"," + std::to_wstring(impl_->anchorY) +
         L"; DPI=" + std::to_wstring(impl_->dpi) + L"; surface draws=" + std::to_wstring(impl_->surfaceDraws) +
         L"; device=" + (impl_->softwareDevice ? L"WARP" : L"hardware") +

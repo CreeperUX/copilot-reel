@@ -1,10 +1,10 @@
 # Copilot Reel
 
-A native Windows application wheel that opens near the pointer when the Copilot key is held. Move into its center, choose an application, and release to open it. A short Copilot tap directly opens the saved preferred agent.
+A native Windows application wheel that opens centered on the pointer when the Copilot key is held. Move toward an application and release to open it. A short Copilot tap directly opens the saved preferred agent.
 
 The native implementation builds and runs. Soft Orbit rendering, Windows appearance synchronization, configuration, single-instance activation, and launching are implemented. A signed development MSIX has been verified as eligible in Windows Settings. The key route remains user-controlled. Current build, test, installation, and remaining physical-input/display/performance evidence is recorded in [validation](docs/validation.md).
 
-The current interface uses nested radial menus: configured agents, a + entry for app management, and Settings. Settings remains a wheel, including in-place language adjustment through left/right chevrons or A / D, preferred-agent selection, and system appearance. English is the default; Simplified Chinese is a native persistent option. VI v0.6 documents official app artwork in consistent containers and pointer-led reveal/reverse animation. Runtime validation is tracked separately from the visual specification.
+The current interface uses nested radial menus: configured agents and one + entry. The + opens a combined hub for adding, managing, language, preferred-agent selection, and system appearance. EN/CN and sun/moon icons convey state without captions or center instructions. English is the default; Simplified Chinese is a native persistent option. VI v0.7 documents official app artwork in consistent containers, a quiet center, and a short opacity/scale transition. Runtime validation is tracked separately from the visual specification.
 
 ## Behavior
 
@@ -12,10 +12,10 @@ The current interface uses nested radial menus: configured agents, a + entry for
 - The wheel opens without taking keyboard focus. Moving outside its center cancellation zone selects a direction.
 - Releasing commits at most one target, starts the closing animation, and activates that target once.
 - A short Copilot tap opens the preferred agent directly. Optional `Ctrl+Alt+R` opens a click-to-select preview.
-- The + entry opens a manage wheel for 1-8 targets: executables, shortcuts, URIs, and packaged-app AUMIDs. Presets and app selection remain radial; a focused native editor handles text and launch fields.
+- The + entry combines settings and management for 1-8 targets: executables, shortcuts, URIs, and packaged-app AUMIDs. Presets and app selection remain radial; a focused native editor handles text and launch fields.
 - Recognized entries use verified official artwork with common tile size, optical bounds, and selection treatment. Unknown targets use a neutral app glyph. Vendor artwork keeps its identity and proportions; Windows accent colors the selection container.
-- Opening extends a line from the actual pointer to the nearby wheel center, normally 168 DIP away. Edge/corner clamping preserves the complete circle and can lengthen that line. Center entry arms selection; release before entry cancels.
-- Settings is another wheel. Language changes in place with the visible arrows or A / D. Back or Esc returns one radial level.
+- Ordinary opening leaves the mouse at the center. Only boundary conflicts move the canvas inward; if that displacement puts the mouse outside the center zone, center entry arms selection. No connector or accent perimeter is drawn.
+- The + hub stays radial. EN/CN changes in place through the flanking arrows or A / D. The center chevron or Esc returns one level. Main has an empty idle center; only selected application names appear as center text.
 - The Soft Orbit base follows Windows light/dark appearance. Transparency effects request a frosted backdrop when supported; otherwise the base is opaque. Selection uses the system accent. High contrast, disabled animations, and energy saver take precedence where applicable.
 
 Targets inside the wheel do not need to register as Copilot providers. Only Copilot Reel registers with Windows.

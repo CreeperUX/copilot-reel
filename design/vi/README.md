@@ -1,6 +1,6 @@
-# VI source package v0.6
+# VI source package v0.7
 
-Soft Orbit is the selected scheme. This revision replaces the rectangular primary OSD with nested radial menus, defines in-place language arrows and A / D, distinguishes short-tap preferred-agent launch from hold-to-show, and adds pointer-led reveal/reverse motion. Official vendor artwork replaces invented brand approximations inside consistent tiles.
+Soft Orbit now uses one + entry for the combined settings and management hub. Main has an empty idle center; submenus show a back chevron. EN/CN and sun/moon icons express state without captions. Ordinary opening is pointer-centered. A 160 ms opacity/scale arrival and 120 ms exit replace the tether, circular reveal, and blue perimeter sweep.
 
 - `vectors/`: active radial main, Settings, language, preferred-agent, manage, and preset masters in both themes; material and high-contrast variants; historical visual-direction comparisons.
 - `tokens.json`: English semantic design tokens and input/material/artwork policies.
@@ -8,7 +8,7 @@ Soft Orbit is the selected scheme. This revision replaces the rectangular primar
 - `source/scene.py`: vector and official-artwork drawing primitives.
 - `source/radial_pages.py`: 12 English specification pages.
 - `source/build_vi.py`: PDF, SVG, and token generator.
-- [Review PDF](../../output/pdf/copilot-reel-vi-v0.6.pdf).
+- [Review PDF](../../output/pdf/copilot-reel-vi-v0.7.pdf).
 
 ## Rebuild
 

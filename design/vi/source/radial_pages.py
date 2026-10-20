@@ -1,16 +1,17 @@
-"""Radial OSD specification scenes with unchanged, verified vendor artwork."""
+"""Quiet radial UI specification using original vendor artwork."""
 from scene import *
 
 BRANDS = ROOT / 'assets' / 'brands'
-MAIN = ['chatgpt', 'claude', 'antigravity', 'zcode', 'vscode', 'jetbrains', 'add', 'settings']
-SETTINGS = ['language', 'preferred', 'appearance']
+MAIN = ['chatgpt', 'claude', 'antigravity', 'zcode', 'vscode', 'jetbrains', 'add']
+SETTINGS = ['language', 'appearance', 'preferred', 'manage', 'add']
 NAMES = {'chatgpt': 'ChatGPT / Codex', 'claude': 'Claude Desktop', 'science': 'Claude for Science',
          'antigravity': 'Antigravity', 'zcode': 'ZCode', 'dsh': 'DeepSeek Harness', 'vscode': 'VS Code',
          'jetbrains': 'JetBrains', 'junie': 'Junie', 'air': 'Air', 'toolbox': 'Toolbox',
-         'intellij-idea': 'IntelliJ IDEA', 'add': 'Add / change apps', 'settings': 'Settings',
+         'intellij-idea': 'IntelliJ IDEA', 'add': 'Add', 'settings': 'Settings', 'manage': 'Manage apps',
          'language': 'Language', 'preferred': 'Preferred agent', 'appearance': 'Windows appearance',
          'back': 'Back', 'custom': 'Custom app', 'remove': 'Remove', 'edit': 'Edit details',
          'next': 'More presets', 'previous': 'Previous page'}
+COMMANDS = {'add','settings','manage','language','preferred','appearance','back','custom','remove','edit','next','previous'}
 
 
 def chevron(s, x, y, color, back=False, size=5):
@@ -20,7 +21,7 @@ def chevron(s, x, y, color, back=False, size=5):
             ('L', x - size * .5 * direction, y + size)], stroke=color, sw=1.6)
 
 
-def mark(s, key, x, y, size, color, theme='light'):
+def mark(s, key, x, y, size, color, theme='light', language_code='EN'):
     asset_key = 'claude' if key == 'science' else key
     if asset_key == 'chatgpt': asset_key += '-dark' if theme in ['dark', 'contrast'] else '-light'
     source = BRANDS / (asset_key + '.png')
@@ -34,39 +35,41 @@ def mark(s, key, x, y, size, color, theme='light'):
         elif key in ['back', 'previous', 'next']:
             chevron(s, 0, 0, color, key != 'next', 8)
         elif key == 'language':
-            s.circle(0, 0, 10, stroke=color, sw=1.75)
-            s.path([('M',0,-10),('C',-6,-6,-6,6,0,10),('C',6,6,6,-6,0,-10)], stroke=color, sw=1.5)
-            s.line(-9,-3,9,-3,color,1.5);s.line(-9,3,9,3,color,1.5)
+            s.text(0,-8.2,language_code,16,color,True,'center')
         elif key == 'preferred':
             s.circle(0,0,10,stroke=color,sw=1.75)
             s.path([('M',-4,0),('L',-1,4),('L',6,-5)],stroke=color,sw=1.75)
         elif key == 'appearance':
-            s.circle(0,0,9,stroke=color,sw=1.75);s.line(0,-9,0,9,color,1.75)
-            for angle in range(0,360,45):
-                a,b=point(11,angle);c,d=point(14,angle);s.line(a,b,c,d,color,1.5)
-        elif key == 'settings':
-            s.circle(0,0,7,stroke=color,sw=1.75);s.circle(0,0,2.5,stroke=color,sw=1.75)
-            for angle in range(0,360,45):
-                a,b=point(7,angle);c,d=point(10.5,angle);s.line(a,b,c,d,color,1.75)
+            if theme in ['dark','contrast']:
+                s.path([('M',4,-10),('C',-7,-11,-14,2,-6,9),('C',1,15,11,8,11,2),
+                        ('C',4,8,-4,-3,4,-10),('Z',)],stroke=color,sw=1.75)
+            else:
+                s.circle(0,0,6,stroke=color,sw=1.75)
+                for angle in range(0,360,45):
+                    a,b=point(9,angle);c,d=point(12,angle);s.line(a,b,c,d,color,1.5)
+        elif key == 'manage':
+            for xx in [-6,6]:
+                for yy in [-6,6]:s.rect(xx-3.2,yy-3.2,6.4,6.4,stroke=color,sw=1.65,r=1.5)
         elif key == 'remove':
             s.line(-8,-7,8,-7,color,1.75);s.line(-3,-10,3,-10,color,1.75)
             s.path([('M',-6,-7),('L',-5,10),('L',5,10),('L',6,-7)],stroke=color,sw=1.75)
         elif key == 'edit':
             s.path([('M',-8,8),('L',-6,2),('L',5,-9),('L',9,-5),('L',-2,6),('Z',)],stroke=color,sw=1.75)
-        else:
-            glyph(s, 5, 0, 0, 28, color)
+        else:glyph(s, 5, 0, 0, 28, color)
 
 
 def radial(s, x, y, theme='light', items=None, title='Copilot Reel', selected=None,
-           scale=1, language=False, preferred=0, guard=False, material='solid', labels=False):
+           scale=1, language=False, preferred=0, guard=False, material='solid', language_code='EN'):
     items = MAIN if items is None else items
     language = language or items == SETTINGS
+    submenu = title != 'Copilot Reel'
     p = PALETTES[theme]
     with s.group(x, y, scale):
-        if theme != 'contrast': shadow_circle(s, 0, 0, 168, .12)
-        s.circle(0,0,168,p['surface'],p['line'],2 if theme=='contrast' else 1,
-                 alpha=.9 if material=='frosted' and theme!='contrast' else 1)
-        s.circle(0,0,44,stroke=p['line'],sw=1)
+        if theme != 'contrast': shadow_circle(s, 0, 0, 168, .10)
+        s.circle(0,0,168,p['surface'],alpha=.9 if material=='frosted' and theme!='contrast' else 1)
+        s.circle(0,0,168,stroke=p['line'],sw=2 if theme=='contrast' else 1,alpha=1 if theme=='contrast' else .45)
+        # A neutral center affordance stays spatially stable without explanatory copy.
+        s.circle(0,0,44,stroke=p['line'],sw=1,alpha=.55 if guard else .18)
         for index,key in enumerate(items):
             ix,iy=point(112,-90+index*360/len(items))
             active=index==selected and not guard
@@ -74,32 +77,19 @@ def radial(s, x, y, theme='light', items=None, title='Copilot Reel', selected=No
                 s.rect(ix-30,iy-32,60,64,p['active'],p['accent'],1.5,16)
                 s.circle(ix,iy+26,2,p['accent'])
             s.rect(ix-20,iy-20,40,40,p['icon'],r=10)
-            mark(s,key,ix,iy,28,p['accent'] if active else p['text'],theme)
-            if index==preferred and key not in ['back','settings','language']:
+            mark(s,key,ix,iy,28,p['accent'] if active else p['text'],theme,language_code)
+            if index==preferred and key not in COMMANDS:
                 s.circle(ix+18,iy-18,5.5,p['accent'])
                 s.path([('M',ix+15.5,iy-18),('L',ix+17.2,iy-16),('L',ix+20.5,iy-20)],stroke=p['surface'],sw=1.2)
-            if labels:
-                s.text(ix,iy+38,NAMES.get(key,key),9,p['muted'],align='center')
-            elif language and items == SETTINGS:
-                label={'language':'Language','preferred':'Preferred','appearance':'Appearance'}[key]
-                s.text(ix,iy+36,label,12,p['accent'] if active else p['muted'],align='center')
-        if guard:
-            heading,hint='Move here','then choose'
-        elif language:
-            heading,hint='English','A / D to change'
-            s.text(0,-37,'Language',12,p['muted'],align='center')
-            for xx in [-60,60]:
-                s.rect(xx-15,-15,30,30,p['icon'],r=9)
-                chevron(s,xx,0,p['text'],xx<0)
-        elif selected is not None:
-            key=items[selected]
-            heading=NAMES.get(key,key)
-            if len(heading)>16: heading={'chatgpt':'ChatGPT / Codex','claude':'Claude Desktop','preferred':'Preferred agent','add':'Manage apps'}.get(key,heading)
-            hint='Open menu' if key in ['settings','add','language','preferred','appearance'] else 'Choose'
-        else:
-            heading,hint=title,'Choose an app' if title=='Copilot Reel' else 'Center to go back'
-        s.text(0,-16,heading,13 if len(heading)>15 else 14,p['text'],True,'center')
-        s.text(0,8,hint,12,p['muted'],align='center')
+        if language:
+            # Arrows flank the EN/CN tile rather than occupying the center.
+            for xx in [-48,48]:
+                chevron(s,xx,-112,p['text'],xx<0,5)
+        if not guard and selected is not None and items[selected] not in COMMANDS:
+            key=items[selected];label=NAMES.get(key,key)
+            s.text(0,-7,label,12 if len(label)>15 else 14,p['text'],True,'center')
+        elif submenu:chevron(s,0,0,p['muted'],True,6)
+        elif guard:s.circle(0,0,3,p['muted'],alpha=.7)
 
 
 def page(number, tag, title, subtitle=''):
@@ -108,51 +98,52 @@ def page(number, tag, title, subtitle=''):
 
 def build_pages():
     pages=[]
-    s=page(1,'SOFT ORBIT / RADIAL OSD','Every level stays radial.','Copilot Reel visual identity v0.6 - official app identities, nested wheels, and pointer-led motion.')
+    s=page(1,'SOFT ORBIT / QUIET RADIAL UI','Less copy. A clearer point of origin.','Copilot Reel visual identity v0.7 - one + entry, stateful icons, and restrained native motion.')
     desktop(s,64,219,648,480)
     desktop(s,744,219,632,480,True)
-    radial(s,388,455,'light',selected=7,scale=1.1)
-    radial(s,1060,455,'dark',items=SETTINGS,title='Settings',selected=0,scale=1.1,preferred=None)
-    s.text(64,733,'MAIN REEL',14,BLUE,True);s.text(744,733,'SETTINGS REEL',14,BLUE,True)
-    s.text(64,767,'Apps, + management, and Settings in one wheel.',20,INK)
-    s.text(744,767,'Same geometry. A deeper level, not another panel.',20,INK)
+    radial(s,388,455,'light',scale=1.1)
+    radial(s,1060,455,'dark',items=SETTINGS,title='Settings',scale=1.1,preferred=None)
+    s.text(64,733,'MAIN REEL',14,BLUE,True);s.text(744,733,'UNIFIED + HUB',14,BLUE,True)
+    s.text(64,767,'Agents and one +. The center stays quiet.',20,INK)
+    s.text(744,767,'Add, manage, language, appearance, preference.',20,INK)
     pages.append(s)
 
-    s=page(2,'NAVIGATION / SPATIAL MEMORY','One wheel leads to the next.','Keep the center stable while navigating. Back or Esc restores the previous radial level.')
-    data=[(240,'Main',MAIN,7),(720,'Settings',SETTINGS,1),(1200,'Preferred agent',MAIN[:6],0)]
+    s=page(2,'NAVIGATION / ONE ENTRY POINT','One + combines adding and settings.','Keep the center stable through navigation. A center chevron or Esc returns one radial level.')
+    data=[(240,'Main',MAIN,6),(720,'Unified hub',SETTINGS,None),(1200,'Preferred agent',MAIN[:6],0)]
     for x,title,items,selected in data:
-        radial(s,x,441,'light',items,title,selected,.9,preferred=0 if title!='Settings' else None)
+        radial(s,x,441,'light',items,'Copilot Reel' if title=='Main' else title,selected,.9,preferred=0 if title!='Unified hub' else None)
         s.text(x,637,title,22,INK,True,'center')
     for x in [448,928]:
-        s.line(x,441,x+58,441,BLUE,2);chevron(s,x+58,441,BLUE)
-    note(s,64,704,'MAIN +','Add or change applications','Open the manage reel; select an existing target to edit, or open the preset reel.',600)
-    note(s,790,704,'SETTINGS','Language, preferred agent, appearance','Language adjusts in place. The preferred-agent reel defines what a short Copilot tap opens.',570)
+        s.line(x,441,x+58,441,MUTED,1.5);chevron(s,x+58,441,MUTED)
+    note(s,64,704,'PRIMARY','One structural command','Main contains configured agents and a single +. The separate Settings gear is removed.',600)
+    note(s,790,704,'SECONDARY','Five clear icon actions','EN/CN, appearance, preferred agent, app management, and adding. Text entry still uses a focused native editor.',570)
     pages.append(s)
 
-    s=page(3,'SECONDARY SETTINGS / IN-PLACE ADJUSTMENT','Language changes inside the wheel.','English is the default. Clicking the two arrows or pressing A / D cycles the native interface language.')
-    radial(s,360,456,'dark',SETTINGS,'Settings',0,1.18,language=True,preferred=None)
+    s=page(3,'STATEFUL ICONS / LANGUAGE','The language is the icon.','EN and CN identify the active interface language. Small chevrons and A / D switch it in place.')
+    radial(s,360,456,'dark',SETTINGS,'Settings',None,1.18,language=True,preferred=None)
     s.rect(675,228,701,443,'#F4F7FA',LINE,1,14)
-    s.text(715,264,'The adjustment stays local',28,INK,True)
-    s.wrap(715,317,'Language is a setting in the second-level wheel. The current value lives in the center with small left/right chevrons. A and D offer the same action.',610,21,34,MUTED)
-    s.text(715,466,'English  < >  Simplified Chinese',23,BLUE,True)
-    s.wrap(715,522,'Persist immediately. Update wheel hints, tray text, and dialogs together. User-defined app names remain untouched.',610,20,32,MUTED)
-    s.text(64,733,'44 x 44 DIP arrow hit regions; 30 x 30 DIP visible buttons.',19,INK)
-    s.text(64,775,'After entering settings, the menu stays open for deliberate adjustment. Back returns one level.',17,MUTED)
+    for i,code in enumerate(['EN','CN']):
+        x=815+i*286;s.rect(x-44,294,88,88,'#E5E9EF',r=22)
+        mark(s,'language',x,338,60,INK,language_code=code)
+        s.text(x,410,'English' if code=='EN' else 'Simplified Chinese',20,INK,True,'center')
+    s.wrap(715,493,'No Language heading, caption, or keyboard hint is drawn in the wheel. The center remains a back affordance. The active language is visible in the tile itself.',610,20,32,MUTED)
+    s.text(64,733,'40 x 40 DIP arrow hit regions; small unfilled chevrons.',19,INK)
+    s.text(64,775,'The icon changes immediately after a successful save. User-defined app names stay untouched.',17,MUTED)
     pages.append(s)
 
-    s=page(4,'APP MANAGEMENT / PRESETS','Add and edit without leaving the radial hierarchy.','A focused native editor appears only when text or a launch target must be entered.')
-    sets=[('Manage apps',['chatgpt','claude','vscode','add'],3),
+    s=page(4,'APP MANAGEMENT / PRESETS','Adding and editing stay in the same family.','The hub branches into existing apps or presets. A native editor appears only for text and launch details.')
+    sets=[('Manage apps',['chatgpt','claude','vscode','add'],None),
           ('Agent presets',['chatgpt','claude','science','antigravity','zcode','custom','next'],0),
-          ('App actions',['edit','preferred','remove'],0)]
+          ('App actions',['edit','preferred','remove'],None)]
     for i,(title,items,selected) in enumerate(sets):
         x=240+i*480
         radial(s,x,421,'light',items,title,selected,.86,preferred=None)
         s.text(x,610,title,22,INK,True,'center')
-    note(s,64,676,'CONFIGURED APPS','Select an app to change it','The + entry opens presets or a custom target. Pagination preserves readable tile size.',600)
-    note(s,790,676,'MISSING INSTALLATION','Open a focused editor','Keep the preset identity and ask for the actual app, shortcut, or URI. Do not silently substitute an unrelated website.',570)
+    note(s,64,676,'RECOGNITION','Use text only when it identifies an app','An actively selected application may show its name at the center. Structural actions and page names do not fill the center with copy.',600)
+    note(s,790,676,'MISSING INSTALLATION','Keep the intended identity','Open a prefilled focused editor and ask for the actual app, shortcut, or URI. Cancelling leaves the list unchanged.',570)
     pages.append(s)
 
-    s=page(5,'PRESET IDENTITIES / FIRST COLLECTION','Use the official mark. Unify the surrounding UI.','The initial collection covers the requested agents and the JetBrains family without redrawing their logos.')
+    s=page(5,'PRESET IDENTITIES / FIRST COLLECTION','Official marks, in a common visual container.','Preserve vendor silhouettes, proportions, and recognizable color. The launcher supplies a consistent frame.')
     keys=['chatgpt','claude','science','antigravity','zcode','dsh','vscode','jetbrains','junie','air','toolbox','intellij-idea']
     for i,key in enumerate(keys):
         col,row=i%6,i//6;x=64+col*224;y=225+row*236
@@ -164,89 +155,84 @@ def build_pages():
     s.wrap(64,733,'Claude for Science shares the Claude identity. The current installed OpenAI package supplies the ChatGPT / Codex mark. DeepSeek Harness is the dsh preset. Resolve actual launch targets before saving.',1312,18,28,MUTED)
     pages.append(s)
 
-    s=page(6,'ICON SYSTEM / OFFICIAL ARTWORK','Consistency comes from the container.','Keep vendor proportions and recognizable color. Apply common optical bounds, spacing, selection, and focus.')
+    s=page(6,'ICON SYSTEM / STATUS WITHOUT CAPTIONS','Icons carry state; selection carries emphasis.','Language and appearance do not need labels underneath them. A muted surface gives the official marks room.')
     for i,theme in enumerate(['light','dark','contrast']):
         p=PALETTES[theme];x=64+i*448
         s.rect(x,226,416,288,p['surface'],p['line'],1,14)
-        for j,key in enumerate(['chatgpt','claude','vscode']):
+        for j,key in enumerate(['language','appearance','chatgpt']):
             xx=x+78+j*130
-            s.rect(xx-37,314,74,82,p['active'] if j==1 else p['surface'],p['accent'] if j==1 else None,2,18)
             s.rect(xx-28,326,56,56,p['icon'],r=14)
-            mark(s,key,xx,354,39,p['text'],theme)
+            mark(s,key,xx,354,39,p['text'],theme,'EN' if i==0 else 'CN')
         s.text(x+24,458,theme.upper(),16,p['text'],True)
-    note(s,64,569,'GEOMETRY','40 DIP tile / 28 DIP mark','Use a 10 DIP tile radius and 60 x 64 DIP selected seat. Do not recolor, distort, crop, or replace the official mark to force consistency.',600)
-    note(s,790,569,'NATIVE RENDERING','Vector UI with source-aware assets','Direct2D renders supported SVGs. Official PNGs cover sources without usable vector artwork or unsupported SVG masks. These are identity assets, not UI frames.',570)
-    s.text(64,778,'Source ownership, URLs, processing, and SHA-256 checksums: assets/brands/provenance.json.',16,MUTED)
+    note(s,64,569,'GEOMETRY','40 DIP tile / 28 DIP artwork','Use a 10 DIP tile radius. EN/CN are DirectWrite monograms; sun and moon are native vector shapes. Preserve official application marks.',600)
+    note(s,790,569,'EMPHASIS','Keep accent local to selection','No accent perimeter, rotating outline, or decorative connector. The system accent belongs to the chosen tile and preferred marker.',570)
+    s.text(64,778,'Appearance opens Windows color settings. Its icon reflects the current system light/dark mode.',16,MUTED)
     pages.append(s)
 
-    s=page(7,'POINTER ORIGIN / EDGE AND CORNER','The pointer starts the gesture. The whole reel stays visible.','The wheel is placed near the actual pointer on its monitor; it is never opened at a fixed screen center.')
+    s=page(7,'POINTER ORIGIN / EDGE AND CORNER','Inside the work area, the pointer is the center.','Only an actual boundary conflict moves the circle. There is no nominal offset and no opening connector.')
     for i,title in enumerate(['Interior','Screen edge','Screen corner']):
         x=64+i*448;s.rect(x,221,416,397,'#ECF2F8',LINE,1,12)
         s.text(x+18,239,'MONITOR WORK AREA',11,MUTED)
-        cx=x+208;cy=421
-        ax,ay=(cx,cy+134) if i==0 else (x+394,cy) if i==1 else (x+394,595)
-        s.line(ax,ay,cx,cy,BLUE,1.8)
-        radial(s,cx,cy,'light',selected=None,scale=.8,guard=True,preferred=0)
+        cx=x+208 if i==0 else x+416-153.6
+        cy=618-153.6 if i==2 else 421
+        ax,ay=(cx,cy) if i==0 else (x+414,cy) if i==1 else (x+414,616)
+        radial(s,cx,cy,'light',scale=.8,guard=i!=0,preferred=0)
         pointer(s,ax,ay,False,.8)
         s.text(x+24,644,title,22,INK,True)
-        s.wrap(x+24,685,'Nominal tether: 168 DIP.' if i==0 else 'Clamp the full footprint; tether may be longer.',365,18,28,MUTED)
-    s.wrap(64,758,'Never warp the system pointer. If it starts outside the final center zone, wait for center entry before allowing release-to-launch. The visible center is the only armed hit-test origin.',1312,18,28,INK)
+        s.wrap(x+24,685,'Zero offset. Choose a direction immediately.' if i==0 else 'Move only as far inward as the footprint requires.',365,18,28,MUTED)
+    s.wrap(64,758,'Never warp the pointer. If edge clamping leaves it outside the final center zone, keep selection unarmed until center entry. The interior path needs no extra center-entry movement.',1312,18,28,INK)
     pages.append(s)
 
-    s=page(8,'MOTION / POINTER-LED REVEAL','Extend. Sweep. Settle. Reverse to close.','Windows Composition evaluates the timeline. Icons stay upright and the application does not paint every frame.')
-    for i,(title,stamp) in enumerate([('Origin','0 ms'),('Tether reaches center','70 ms'),('Circular reveal','70-230 ms'),('Ready to select','230 ms')]):
+    s=page(8,'MOTION / QUIET ARRIVAL','A short dissolve and a small change in scale.','The circle appears at its final location. No extending line, perimeter sweep, or rotating artwork competes with selection.')
+    for i,(title,stamp,scale) in enumerate([('Initial','0 ms',.96),('Arriving','80 ms',.99),('Ready','160 ms',1),('Closing','60 ms',.98)]):
         x=64+i*336;s.rect(x,227,304,360,'#F2F6FA',LINE,1,12)
-        cx=x+152;cy=407;ax=cx;ay=cy+108
-        if i==0:s.circle(ax,ay,3,BLUE)
-        else:s.line(ax,ay,cx,cy,BLUE,2)
-        if i==2:
-            s.circle(cx,cy,61,'#F4F6F8',LINE,1)
-            with s.group(cx,cy):s.path(arc(107,-90,90),stroke=BLUE,sw=2)
-        if i==3:radial(s,cx,cy,'light',scale=.64,guard=True)
-        pointer(s,ax,ay,False,.72)
+        cx=x+152;cy=407
+        radial(s,cx,cy,'light',scale=.64*scale,preferred=None)
+        if i in [0,1,3]:s.rect(x+2,229,300,356,'#F2F6FA',r=10,alpha={0:1.0,1:.35,3:.65}[i])
+        pointer(s,cx,cy,False,.72)
         s.text(x+18,619,title,18,INK,True)
-        s.text(x+18,653,stamp,16,BLUE)
-    note(s,64,709,'OPEN / 230 MS','Tether 70 ms + reveal 160 ms','Clip radius, opacity, scale, and one full outline sweep run on the compositor.',600)
-    note(s,790,709,'CLOSE / 190 MS','Reverse, then detach','Reverse the reveal and retract the line. A new gesture interrupts closing; reduced motion is immediate.',570)
+        s.text(x+18,653,stamp,16,MUTED)
+    note(s,64,709,'OPEN / 160 MS','Opacity 0 to 1; scale 0.96 to 1','Ease into the final state without overshoot. The pointer remains at the center in the normal interior case.',600)
+    note(s,790,709,'CLOSE / 120 MS','Reverse, then detach','Reverse opacity and scale. Interruption starts from the current presentation value; reduced motion is immediate.',570)
     pages.append(s)
 
-    s=page(9,'SYSTEM APPEARANCE / MATERIALS','Follow the Windows surface and effect preferences.','Neutral light/dark bases; system accent for selection. Frost is optional and never replaces readable content.')
+    s=page(9,'SYSTEM APPEARANCE / MATERIALS','Let Windows determine the base surface.','Neutral light/dark bases, with a subtle boundary. Frost is optional and never replaces readable content.')
     for i,(theme,material) in enumerate([('light','solid'),('light','frosted'),('dark','solid'),('dark','frosted')]):
-        x=64+i*336;p=PALETTES[theme]
+        x=64+i*336
         desktop(s,x,225,304,390,theme=='dark')
-        radial(s,x+152,424,theme,selected=7,scale=.72,material=material)
+        radial(s,x+152,424,theme,scale=.72,material=material)
         s.text(x+152,645,theme.title()+' / '+material.title(),20,INK,True,'center')
-    s.wrap(64,713,'Transparency off: opaque neutral base with no backdrop sampling. Transparency on: a frosted backdrop when available. High contrast, effects capability, and energy saver take precedence. Reduced motion skips decorative transitions.',1312,20,31,INK)
+    s.wrap(64,713,'Transparency off: opaque neutral base with no backdrop sampling. Transparency on: a frosted backdrop when available. High contrast, effects capability, and energy saver take precedence. Reduced motion skips the transition.',1312,20,31,INK)
     s.text(64,795,'Frost previews illustrate tone only. Actual host-backdrop blur requires native runtime validation.',15,MUTED)
     pages.append(s)
 
-    s=page(10,'GEOMETRY / INPUT CONTRACT','Stable sizes. Different intent for tap and hold.','Native vector geometry is shared by layout, drawing, and hit testing at the active monitor DPI.')
-    rows=[('Reel diameter / icon orbit','336 / 112 DIP'),('Center cancellation zone','88 DIP diameter'),('Tile / artwork / corner','40 / 28 / 10 DIP'),('Selection seat','60 x 64 DIP'),('Language arrow hit / visible','44 x 44 / 30 x 30 DIP'),('Body / hints','14 / 12 DIP'),('Normal pointer-to-center distance','168 DIP'),('Entry / exit timeline','230 / 190 ms')]
+    s=page(10,'GEOMETRY / INPUT CONTRACT','Stable sizes, anchored to the actual pointer.','Native vector geometry is shared by layout, drawing, and hit testing at the active monitor DPI.')
+    rows=[('Reel diameter / icon orbit','336 / 112 DIP'),('Center cancellation zone','88 DIP diameter'),('Tile / artwork / corner','40 / 28 / 10 DIP'),('Selection seat','60 x 64 DIP'),('Language arrow hit / glyph','40 x 40 / 5 x 10 DIP'),('Selected app / icon monogram','14 / 16 DIP'),('Interior pointer-to-center offset','0 DIP'),('Entry / exit timeline','160 / 120 ms')]
     for i,(label,value) in enumerate(rows):
         y=223+i*66;s.text(64,y,label,20,INK);s.text(725,y,value,20,INK,True,'right');s.line(64,y+42,725,y+42,LINE)
     note(s,830,224,'COPILOT SHORT TAP','Open the preferred agent','A short tap launches the saved preferred target directly. It does not open a wheel preview.',510)
-    note(s,830,410,'COPILOT HOLD','Open the pointer-led reel','Windows supplies the hold threshold, approximately 300 ms. Release opens one selected agent or enters the chosen radial menu.',510)
-    note(s,830,613,'SETTINGS CONTEXT','Stay open to adjust','Secondary menus accept deliberate clicks and A / D language changes. Back or Esc returns one level.',510)
+    note(s,830,410,'COPILOT HOLD','Open at the pointer','Windows supplies the approximately 300 ms threshold. Move outward to select; release opens once or enters the hub.',510)
+    note(s,830,613,'HUB CONTEXT','Stay open to adjust','The + hub accepts deliberate clicks and A / D language changes. Center or Esc returns one level.',510)
     pages.append(s)
 
-    s=page(11,'PERFORMANCE / ACCESSIBILITY / LIMITS','No fixed frame budget hidden in the design.','Cached content and compositor timelines adapt to presentation cadence; measured behavior remains the acceptance test.')
-    note(s,64,222,'INPUT','Selection owns the action','Each release resolves at most once. Animation cannot change the selected target or repeat launch. Raw pointer traffic is coalesced into state changes.',600)
+    s=page(11,'PERFORMANCE / ACCESSIBILITY / LIMITS','The visual layer remains event driven.','Cached content and compositor timelines follow presentation cadence; measured behavior remains the acceptance test.')
+    note(s,64,222,'INPUT','Selection owns the action','Each release resolves at most once. Animation cannot change the selected target or repeat a launch. Pointer traffic is reduced to meaningful state changes.',600)
     note(s,790,222,'DRAWING','Static content stays cached','Redraw for selection, menu, theme, DPI, or device changes. Decode official assets before the gesture. No permanent 60 Hz application loop.',570)
-    note(s,64,442,'ACCESS','Respect Windows preferences','High contrast uses system surfaces and clear target outlines. Disabled animations skip motion. Text uses Segoe UI Variable with system fallback.',600)
-    note(s,790,442,'DISPLAY','Keep validation separate','Test 60 / 144 / 240 Hz, mixed DPI, multiple monitors, energy saver, hidden wakeups, and rapid interruption. Renderer API success is not a performance result.',570)
+    note(s,64,442,'ACCESS','Respect Windows preferences','High contrast uses system surfaces and clear target outlines. Disabled animations skip motion. Semantic action names remain in the model even when visual captions are absent.',600)
+    note(s,790,442,'DISPLAY','Validate the presentation','Test 60 / 144 / 240 Hz, mixed DPI, multiple monitors, energy saver, hidden wakeups, and rapid interruption. Renderer API success is not a performance result.',570)
     s.rect(64,673,1312,119,'#F1F6FB',r=12)
     s.text(88,694,'Small work areas and accessibility',22,INK,True)
-    s.wrap(88,732,'If the complete canvas cannot fit, scale the whole circle uniformly instead of opening a different dashboard. Very small work areas reduce text and targets; accessibility and usability at those sizes require explicit validation.',1264,17,27,MUTED)
+    s.wrap(88,732,'If the complete canvas cannot fit, scale the whole circle uniformly. Very small work areas reduce text and targets; accessibility and icon discoverability require explicit validation.',1264,17,27,MUTED)
     pages.append(s)
 
-    s=page(12,'HANDOFF / REFERENCES / EVIDENCE','A radial product surface, with explicit source boundaries.','The v0.6 specification replaces the rectangular primary OSD. Focused native editors remain for text entry only.')
-    note(s,64,220,'IMPLEMENTATION CONTRACT','Native wheel and nested navigation','Main: configured agents, + management, Settings. Settings: language adjustment, preferred agent, appearance. Manage: existing targets and preset collection. Missing targets open the editor.',610)
-    note(s,790,220,'ASSET CONTRACT','Official identity, common treatment','Keep source artwork and ownership records. Preserve vendor proportions. A neutral application glyph handles missing assets; do not invent brand approximations.',570)
+    s=page(12,'HANDOFF / REFERENCES / EVIDENCE','Quiet structure, explicit implementation rules.','The v0.7 specification refines the native radial product. Focused native editors remain for text entry only.')
+    note(s,64,220,'IMPLEMENTATION CONTRACT','One + hub; zero interior offset','Main: configured agents and +. Hub: language, appearance, preferred agent, management, and adding. The center has no page heading or explanatory hint.',610)
+    note(s,790,220,'ASSET CONTRACT','Official identity, common treatment','Keep source artwork and ownership records. EN/CN and sun/moon are local status glyphs. Missing vendor artwork uses a neutral app symbol.',570)
     s.line(64,447,1376,447,LINE)
     refs=[('Windows motion','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/motion'),('Composition animation','learn.microsoft.com/en-us/windows/uwp/composition/composition-animation'),('Windows materials','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials'),('Radial precedent: Kando','kando.menu/config-files/#warpmouse'),('Radial precedent: Blender','docs.blender.org/manual/en/latest/editors/preferences/interface.html'),('Asset provenance','assets/brands/provenance.json')]
     for i,(name,url) in enumerate(refs):
         x=64+(i//3)*672;y=476+(i%3)*91
         s.text(x,y,name,18,INK,True);s.wrap(x,y+30,url,620,13,20,MUTED)
-    s.text(64,789,'Specification date: 2026-10-19. Runtime test results and remaining limits belong in docs/validation.md.',15,MUTED)
+    s.text(64,789,'Specification date: 2026-10-20. Runtime evidence and remaining limits belong in docs/validation.md.',15,MUTED)
     pages.append(s)
     return pages

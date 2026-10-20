@@ -62,6 +62,10 @@ int main() {
                     "orbit and shadow stay inside all monitor edges and corners");
                 Check(placement.centerX==placement.left+size/2.0 && placement.centerY==placement.top+size/2.0,
                     "orbit hit-test origin equals its rendered center");
+                const int expectedLeft=std::clamp(x-size/2,work.left,work.right-size);
+                const int expectedTop=std::clamp(y-size/2,work.top,work.bottom-size);
+                Check(placement.left==expectedLeft && placement.top==expectedTop,
+                    "placement uses only the minimum translation required by the work area");
                 const double dx=x-placement.centerX,dy=y-placement.centerY;
                 Check(placement.awaitingCenter==(dx*dx+dy*dy>deadZone*deadZone),
                     "orbit arms only when the original pointer is inside the displayed cancel zone");
@@ -77,15 +81,21 @@ int main() {
     for(int dpi : {96,120,144,192,288,384}) {
         const int size=384*dpi/96;
         const auto placement=PlaceOrbit(0,0,{-5000,-5000,5000,5000},size,44.0*dpi/96);
-        const double length=std::hypot(placement.centerX,placement.centerY);
-        Check(std::abs(length-168.0*dpi/96)<1.0,"unconstrained orbit connector has one outer-radius length");
-        Check(placement.awaitingCenter,"displaced hold cannot preselect the sector under the opening pointer");
+        Check(placement.centerX==0 && placement.centerY==0,
+            "unconstrained wheel opens directly on the pointer at every DPI");
+        Check(!placement.awaitingCenter,"an unconstrained hold is immediately ready for directional selection");
     }
     Check(!PlaceOrbit(0,0,{0,0,300,300},384,44).fits,"orbit rejects a screen smaller than its footprint");
     Check(!PlaceOrbit(0,0,{0,0,1920,1080},0,44).fits,"orbit rejects an empty canvas");
     const auto corner=PlaceOrbit(-3840,-2160,{-3840,-2160,0,0},768,88);
-    Check(std::hypot(corner.centerX+3840,corner.centerY+2160)>336,
-        "corner containment can lengthen the connector instead of clipping the circle");
+    Check(corner.left==-3840 && corner.top==-2160 && corner.awaitingCenter,
+        "a corner shifts the full canvas minimally and guards selection until center entry");
+    const auto smallShift=PlaceOrbit(180,400,{0,0,1920,1080},384,44);
+    Check(smallShift.centerX==192 && smallShift.centerY==400 && !smallShift.awaitingCenter,
+        "small boundary correction within the cancel zone does not add an unnecessary gate");
+    const auto oddCanvas=PlaceOrbit(600,400,{0,0,1920,1080},383,44);
+    Check(std::abs(oddCanvas.centerX-600)<=.5 && std::abs(oddCanvas.centerY-400)<=.5 && !oddCanvas.awaitingCenter,
+        "odd pixel dimensions remain pointer-centered within half a pixel");
     GestureState g;
     Check(!g.Release(), "orphan stop cannot launch");
     Check(g.Start(), "start arms");
@@ -134,13 +144,15 @@ int main() {
         for(size_t i=0;i<count;++i)apps.push_back({L"App "+std::to_wstring(i),TargetKind::Shell,
             L"C:\\Apps\\App"+std::to_wstring(i)+L".exe",L"",L""});
         const auto main=BuildMenu(MenuPage::Main,apps,presets);
-        Check(main.size()==count+2 && main.size()<=12,"main wheel reserves separate manage and settings sectors");
+        Check(main.size()==count+1 && main.size()<=9,"main wheel has exactly one combined plus entry");
         for(size_t i=0;i<count;++i) {
             Check(main[i].action==MenuAction::Launch && main[i].index==static_cast<int>(i) &&
                 main[i].visual.target==apps[i].target,"launch sectors preserve target identity and index");
         }
-        Check(main[count].action==MenuAction::Manage && main[count+1].action==MenuAction::Settings,
-            "main internal routes never become launch targets");
+        Check(main[count].action==MenuAction::Settings && main[count].visual.target==L"reel:add",
+            "the single plus icon opens the combined hub without launching an app");
+        const auto hub=BuildMenu(MenuPage::Settings,apps,presets);
+        Check(hub.size()==(count<8?5u:4u),"hub reserves its Add action only while another app can be saved");
         const auto manage=BuildMenu(MenuPage::Manage,apps,presets);
         Check(manage.size()==count+(count<8?1:0),"manage wheel exposes Add only below the saved-app limit");
         for(size_t i=0;i<count;++i)
@@ -161,9 +173,10 @@ int main() {
     }
     const std::vector<AppTarget> noApps;
     const auto settings=BuildMenu(MenuPage::Settings,noApps,presets);
-    Check(settings.size()==3 && settings[0].action==MenuAction::Language &&
-        settings[1].action==MenuAction::Preferred && settings[2].action==MenuAction::Appearance,
-        "settings remains a wheel with language, preferred agent, and system appearance routes");
+    Check(settings.size()==5 && settings[0].action==MenuAction::Language &&
+        settings[1].action==MenuAction::Appearance && settings[2].action==MenuAction::Preferred &&
+        settings[3].action==MenuAction::Manage && settings[4].action==MenuAction::Presets,
+        "the combined hub contains language, appearance, preferred agent, management, and Add");
     for(const auto& command:settings)Check(command.visual.target.starts_with(L"reel:") && command.action!=MenuAction::Launch,
         "settings metadata cannot be mistaken for an app-launch action");
     for(size_t offset : {0u,5u,10u}) {
@@ -191,5 +204,5 @@ int main() {
     Check(ParseUri(L"copilot-reel://?state=Tap")==Command::Tap, "protocol tap");
     Check(ParseUri(L"copilot-reel://?state=Up&target=evil.exe")==Command::Invalid, "URI cannot inject target");
     Check(ParseUri(L"https://example.com/?state=Down")==Command::Invalid, "foreign URI rejected");
-    std::cout << "Core tests passed: 1-12 sectors, orbit placement at 96-384 DPI and negative monitor origins, cold gesture ordering, exactly-once release, radial routes, preset pagination, and protocol validation.\n";
+    std::cout << "Core tests passed: 1-12 sectors, pointer-centered placement at 96-384 DPI and negative monitor origins, cold gesture ordering, exactly-once release, radial routes, preset pagination, and protocol validation.\n";
 }

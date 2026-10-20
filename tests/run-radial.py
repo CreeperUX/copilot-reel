@@ -253,15 +253,18 @@ def verify_placement(offset, point, held):
     assert right - left == bottom - top, 'The complete circular canvas must keep its aspect ratio.'
     x, y = center()
     distance = math.hypot(x - point[0], y - point[1])
-    expected_radius = 168 * scale()
-    if point == anchor and min(work.right - work.left, work.bottom - work.top) > 720 * scale():
-        assert abs(distance - expected_radius) < 2, 'Ordinary placement must use the requested outer-radius tether.'
-    assert distance > 44 * scale(), 'The reel must emerge near the invocation point, not on its old screen-center anchor.'
-    assert match.group(8) == ('true' if held else 'false')
+    size = right - left
+    expected_left = max(work.left, min(point[0] - size // 2, work.right - size))
+    expected_top = max(work.top, min(point[1] - size // 2, work.bottom - size))
+    assert (left, top) == (expected_left, expected_top), 'Only boundary interference may displace the wheel.'
+    if (expected_left, expected_top) == (point[0] - size // 2, point[1] - size // 2):
+        assert abs(x - point[0]) <= .5 and abs(y - point[1]) <= .5, 'An unconstrained invocation must leave the pointer at the wheel center.'
+    expected_guard = held and distance > 44 * scale()
+    assert match.group(8) == ('true' if expected_guard else 'false')
     placements.append({'pointer': point, 'bounds': [left, top, right, bottom],
-                       'tetherPixels': round(distance, 2), 'outerRadiusPixels': round(expected_radius, 2),
+                       'centerDisplacementPixels': round(distance, 2), 'awaitingCenter': expected_guard,
                        'held': held, 'dpi': u.GetDpiForWindow(hwnd)})
-    time.sleep(.28)
+    time.sleep(.20)
 
 
 def open_at(point=anchor, argument='--hold-start'):
@@ -307,7 +310,7 @@ def animation_interruptions():
     assert u.PostMessageW(hwnd, 0x8001, 1, 0)
     wait(lambda: 'Hold started;' in read_log()[offset:] and u.IsWindowVisible(hwnd), 'quick opening')
     stop_after = time.perf_counter() - began
-    assert stop_after < .23, 'The test must release during the 230 ms opening animation.'
+    assert stop_after < .16, 'The test must release during the 160 ms opening animation.'
     assert u.PostMessageW(hwnd, 0x8001, 2, 0)
     hidden()
     assert count() == before_count, 'Releasing during opening must cancel without launching.'
@@ -323,7 +326,7 @@ def animation_interruptions():
     wait(lambda: 'Canceled' in read_log()[cancel_offset:], 'beginning of exit animation')
     reopen_offset = len(read_log())
     reopen_after = time.perf_counter() - cancelled
-    assert reopen_after < .19, 'The test must reopen before the old 190 ms exit finishes.'
+    assert reopen_after < .12, 'The test must reopen before the old 120 ms exit finishes.'
     assert u.PostMessageW(hwnd, 0x8001, 1, 0)
     wait(lambda: 'Hold started;' in read_log()[reopen_offset:], 'replacement gesture')
     time.sleep(.27)
@@ -351,9 +354,9 @@ def missing_preset_editor():
     before_count = count()
     original_apps = (data / 'apps.ini').read_bytes()
     open_at(argument='--preview')
-    choose(3, 5)
-    page(1, 'Your apps')
     choose(3, 4)
+    page(3, 'Settings')
+    choose(4, 5)
     page(2, 'Add an agent')
     choose(2, 7)
     editor = wait(lambda: u.FindWindowW('CopilotReel.Osd', None), 'missing-preset focused editor')
@@ -367,6 +370,8 @@ def missing_preset_editor():
     page(1, 'Your apps')
     assert (data / 'apps.ini').read_bytes() == original_apps, 'Cancelling a preset must leave the app list unchanged.'
     assert count() == before_count, 'Selecting an unavailable preset must not launch another app.'
+    key(0x1b)
+    page(3, 'Settings')
     key(0x1b)
     page(0, 'Copilot Reel')
     key(0x1b)
@@ -395,16 +400,13 @@ try:
     results.append('warm short tap launches the default first agent directly')
 
     open_at()
-    move(sector(1, 5))
     command('--hold-stop')
     hidden()
-    assert count() == 1, 'Crossing a sector before center entry must not launch.'
-    results.append('held invocation waits for center entry before any sector can launch')
+    assert count() == 1, 'Releasing without leaving the pointer-centered cancel zone must not launch.'
+    results.append('interior hold opens directly on the pointer and an unmoved release cancels')
 
     open_at()
-    move(center())
-    wait(lambda: 'Center entered; direction selection armed' in read_log(), 'center-entry arming')
-    move(sector(2, 5))
+    move(sector(2, 4))
     assert count() == 1, 'Long hold selection must not launch before release.'
     starts_before = read_log().count('Hold started;')
     command('--hold-start')
@@ -415,14 +417,14 @@ try:
     command('--hold-stop')
     time.sleep(.1)
     assert count() == 2, 'Duplicate release must not launch again.'
-    results.append('warm hold arms at center, selects a different agent, and launches once on release')
+    results.append('interior hold selects directly from the pointer center and launches once on release')
 
     move(anchor)
     offset = len(read_log())
     assert u.PostMessageW(hwnd, 0x8001, 1, 0)
     verify_placement(offset, anchor, True)
     move(center())
-    move(sector(0, 5))
+    move(sector(0, 4))
     assert u.PostMessageW(hwnd, 0x8001, 2, 0)
     hidden()
     assert_launch(3, 'Probe 0')
@@ -439,18 +441,28 @@ try:
                    (work.left + 2, work.bottom - 3), (work.right - 3, work.bottom - 3)]
     for point in edge_points:
         open_at(point)
+        move(sector(0, 4))
         command('--hold-stop')
         hidden()
         assert count() == 4
-    results.append('eight screen edges and corners retain the complete circle and cancel safely before center entry')
+    results.append('eight screen edges and corners retain the full circle; crossing a sector before center entry still cancels')
+
+    size = rect()[2] - rect()[0]
+    interior_point = (round(work.left + size / 2 + (work.right - work.left - size) * .25),
+                      round(work.top + size / 2 + (work.bottom - work.top - size) * .75))
+    open_at(interior_point)
+    assert center() == tuple(float(value) for value in interior_point), 'An off-center desktop position must remain the actual wheel center.'
+    command('--hold-stop')
+    hidden()
+    assert count() == 4
+    results.append('a distinct interior desktop point remains the exact wheel center without a guard or cursor warp')
 
     open_at(argument='--preview')
     page(0, 'Copilot Reel')
     stable_draws('visible and stationary')
-    choose(4, 5)
-    page(3, 'Settings')
-    assert not u.FindWindowW('CopilotReel.Osd', None), 'Settings must remain in the reel.'
-    choose(0, 3)
+    choose(3, 4)
+    assert page(3, 'Settings')['menuEntries'] == '5'
+    assert not u.FindWindowW('CopilotReel.Osd', None), 'The combined hub must remain in the reel.'
     key(ord('D'))
     wait(lambda: 'Language=zh-CN' in preference_language(), 'Chinese language preference')
     page(3, '\u8bbe\u7f6e')
@@ -458,14 +470,24 @@ try:
     wait(lambda: 'Language=en-US' in preference_language(), 'English language preference')
     page(3, 'Settings')
     x, y = center()
-    click((x + 60 * scale(), y))
+    click((x + 48 * scale(), y - 112 * scale()))
     wait(lambda: 'Language=zh-CN' in preference_language(), 'right language arrow')
-    click((x - 60 * scale(), y))
+    click((x - 48 * scale(), y - 112 * scale()))
     wait(lambda: 'Language=en-US' in preference_language(), 'left language arrow')
     page(3, 'Settings')
-    results.append('Settings stays radial; focused A/D keys and both small arrows switch and persist language')
+    choose(0, 5)
+    wait(lambda: 'Language=zh-CN' in preference_language(), 'language icon click')
+    choose(0, 5)
+    wait(lambda: 'Language=en-US' in preference_language(), 'second language icon click')
+    results.append('one plus entry opens the combined hub; A/D, language icon, and adjacent arrows persist the language')
 
-    choose(1, 3)
+    choose(4, 5)
+    page(2, 'Add an agent')
+    click(center())
+    page(3, 'Settings')
+    results.append('Add from the combined hub returns to that hub through the center back control')
+
+    choose(2, 5)
     page(4, 'Preferred agent')
     choose(1, 3)
     state = page(3, 'Settings')
@@ -479,6 +501,8 @@ try:
     results.append('radial preferred-agent selection changes short-tap behavior; center and Escape navigate back')
 
     open_at(argument='--preview')
+    choose(3, 4)
+    page(3, 'Settings')
     choose(3, 5)
     page(1, 'Your apps')
     choose(0, 4)
@@ -497,6 +521,10 @@ try:
     assert count() == 5
     results.append('Manage to entry actions to focused editor; cancelling returns to the management reel')
 
+    choose(3, 4)
+    page(2, 'Add an agent')
+    click(center())
+    page(1, 'Your apps')
     choose(3, 4)
     first = page(2, 'Add an agent')
     assert first['presetOffset'] == '0'
@@ -519,6 +547,8 @@ try:
     wait(lambda: not u.FindWindowW('CopilotReel.Osd', None), 'custom editor cancellation')
     page(1, 'Your apps')
     key(0x1b)
+    page(3, 'Settings')
+    key(0x1b)
     page(0, 'Copilot Reel')
     key(0x1b)
     hidden()
@@ -540,7 +570,7 @@ try:
     offset = start('--hold-start')
     verify_placement(offset, anchor, True)
     move(center())
-    move(sector(0, 5))
+    move(sector(0, 4))
     command('--hold-stop')
     hidden()
     assert_launch(7, 'Probe 0')

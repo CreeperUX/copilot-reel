@@ -361,7 +361,7 @@ def desktop(s,x,y,w,h,dark=False):
 
 def footer(s,page,total=12):
     s.line(64,835,1376,835,LINE)
-    s.text(64,852,'COPILOT REEL  /  RADIAL OSD + OFFICIAL APP IDENTITY  /  v0.6',12,MUTED)
+    s.text(64,852,'COPILOT REEL  /  QUIET RADIAL UI + OFFICIAL APP IDENTITY  /  v0.7',12,MUTED)
     s.text(1376,852,f'{page:02d} / {total:02d}',12,MUTED,align='right')
 
 
