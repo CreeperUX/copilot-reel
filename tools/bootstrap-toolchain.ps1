@@ -10,7 +10,10 @@ $manifestPath = Join-Path $PSScriptRoot 'toolchain-manifest.json'
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 $localRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'local'))
 $downloadRoot = Join-Path $localRoot 'downloads'
-if ($manifest.schemaVersion -ne 1 -or $manifest.architecture -ne 'x64') { throw 'Unsupported toolchain manifest.' }
+$targets = @($manifest.targets)
+if ($manifest.schemaVersion -ne 1 -or $manifest.architecture -ne 'x64' -or $targets -notcontains 'x64' -or $targets -notcontains 'arm64') {
+    throw 'Unsupported toolchain manifest. Expected an x64 host with x64 and arm64 targets.'
+}
 if (-not $VerifyOnly) { New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null }
 
 function Get-ContainedPath([string]$Root, [string]$Relative) {
@@ -75,15 +78,24 @@ $sdkRoot = Join-Path $localRoot 'sdk\c'
 $required = @(
     (Join-Path $compilerRoot 'bin\Hostx64\x64\cl.exe'),
     (Join-Path $compilerRoot 'bin\Hostx64\x64\link.exe'),
+    (Join-Path $compilerRoot 'bin\Hostx64\arm64\cl.exe'),
+    (Join-Path $compilerRoot 'bin\Hostx64\arm64\link.exe'),
     (Join-Path $compilerRoot 'include\vector'),
     (Join-Path $compilerRoot 'lib\x64\oldnames.lib'),
+    (Join-Path $compilerRoot 'lib\arm64\oldnames.lib'),
+    (Join-Path $compilerRoot 'lib\arm64\libcmt.lib'),
     (Join-Path $sdkRoot "Include\$($manifest.sdkVersion)\cppwinrt\winrt\Windows.UI.Composition.h"),
     (Join-Path $sdkRoot "bin\$($manifest.sdkVersion)\x64\rc.exe"),
     (Join-Path $sdkRoot "bin\$($manifest.sdkVersion)\x64\makeappx.exe"),
     (Join-Path $sdkRoot "bin\$($manifest.sdkVersion)\x64\signtool.exe"),
     (Join-Path $localRoot 'sdk-x64\c\um\x64\kernel32.lib'),
-    (Join-Path $localRoot 'sdk-x64\c\ucrt\x64\libucrt.lib')
+    (Join-Path $localRoot 'sdk-x64\c\ucrt\x64\libucrt.lib'),
+    (Join-Path $localRoot 'sdk-arm64\c\um\arm64\kernel32.lib'),
+    (Join-Path $localRoot 'sdk-arm64\c\um\arm64\d2d1.lib'),
+    (Join-Path $localRoot 'sdk-arm64\c\um\arm64\dwrite.lib'),
+    (Join-Path $localRoot 'sdk-arm64\c\um\arm64\WindowsApp.lib'),
+    (Join-Path $localRoot 'sdk-arm64\c\ucrt\arm64\libucrt.lib')
 )
 foreach ($path in $required) { if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Toolchain is incomplete: $path" } }
-Write-Host "Toolchain ready: MSVC 14.44 x64; Windows SDK $($manifest.sdkVersion)."
+Write-Host "Toolchain ready: MSVC 14.44 host x64, targets x64 and ARM64; Windows SDK $($manifest.sdkVersion)."
 Write-Host 'No machine PATH, registry, certificate store, or installed applications were changed.'

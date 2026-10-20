@@ -23,7 +23,7 @@ try {
 } finally {$archive.Dispose()}
 $identity=$manifest.Package.Identity
 if($identity.Name -ne 'CopilotReel.Desktop' -or $identity.Publisher -ne 'CN=CopilotReel Development' -or $identity.ProcessorArchitecture -ne 'x64') {
-    throw 'Only the Copilot Reel x64 development package is allowed.'
+    throw "Refusing to install architecture '$($identity.ProcessorArchitecture)'. This host installs only the x64 package; an ARM64 package must not replace the installed x64 app."
 }
 $installed=@(Get-AppxPackage -Name 'CopilotReel.Desktop')
 if($installed.Count -gt 1) {throw 'Unexpected multiple installed Copilot Reel packages.'}
