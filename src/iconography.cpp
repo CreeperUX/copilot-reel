@@ -100,7 +100,10 @@ std::wstring BrandFromPath(std::wstring_view path) {
     if(folder<parts.size() && parts[folder]==L"bin" && folder>0)--folder;
     std::wstring_view install;
     if(folder<parts.size() && !(folder>0 && parts[folder-1]==L"users"))install=parts[folder];
-    if(const auto* brand=BrandFromWords(Words(file.substr(0,file.size()-4)),install))return brand;
+    const auto words=Words(file.substr(0,file.size()-4));
+    // Claude Science ships its own mark; its executable's Shell icon shows it.
+    if(words.size()>=2 && words[0]==L"claude" && words.back()==L"science")return {};
+    if(const auto* brand=BrandFromWords(words,install))return brand;
     if(install==L"anthropicclaude")return L"claude";
     if(install==L"antigravity")return L"antigravity";
     if(install==L"zcode")return L"zcode";

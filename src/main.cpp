@@ -140,6 +140,10 @@ std::atomic<int> launchesInFlight{0};
 // Failures return to the UI thread, which owns the message box and the log order.
 void Launch(const AppTarget& target,HWND owner) {
     Log(L"Launching target: "+target.name);
+    // The reel never takes the foreground, so a launched process cannot raise a window
+    // on its own, and a running target's existing instance just flashes in the taskbar.
+    // Pass on the foreground right the Copilot key event gave this process.
+    if(!AllowSetForegroundWindow(ASFW_ANY))Log(L"Foreground grant unavailable: "+std::to_wstring(GetLastError()));
     ++launchesInFlight;
     try {
         std::thread([target,owner] {
@@ -613,7 +617,7 @@ public:
     void SaveDiagnostics() {
         std::wostringstream text;
         const auto& visual=CurrentVisualOverride();
-        text<<L"Copilot Reel 0.3.4\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.4.1\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
