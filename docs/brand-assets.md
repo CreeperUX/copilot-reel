@@ -28,9 +28,10 @@ installed. The picker must paginate it; the active wheel still has its own limit
 
 The OpenAI package's legacy name contains `Codex`, but its manifest names the
 application ChatGPT. The combined preset uses that verified application ID.
-It does not claim that two distinct application IDs exist. Claude Science uses
-the official Claude family mark until a separate verified Science mark is
-available. It is not given a fabricated science symbol.
+It does not claim that two distinct application IDs exist. An installed Claude
+Science shows the mark embedded in its own executable (Anthropic, PBC) as its
+Shell icon; an unresolved Claude Science preset uses the Claude family mark. It
+is not given a fabricated science symbol.
 
 DSH is resolved to **DeepSeek's own DeepSeek Harness desktop**, not a similarly
 named community wrapper. The official download page links to Windows and macOS

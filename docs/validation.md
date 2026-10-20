@@ -1,6 +1,21 @@
 # Validation status
 
-Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.4.0**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.4.1**. This records demonstrated behavior and its limits, not full release acceptance.
+
+## Verified in v0.3.4.1
+
+0.3.4.1 passes on the foreground right before each launch and shows Claude Science with its own mark. Selecting the already running DeepSeek Harness in 0.3.4.0 launched without error, but its window stayed behind ChatGPT.
+
+| Area | Evidence and scope |
+| --- | --- |
+| Native build | MSVC `/W4` build and all unit tests passed; iconography now has 134 checks (an installed Claude Science executable or shortcut keeps its own Shell icon). |
+| Packaging | After the ARM64 change, `tools/package.ps1` refused every x64 package because it treated the unchanged x64 manifest as missing its architecture token; it now checks for the token itself. The signed `CopilotReel_0.3.4.1_x64.msix` passed `signtool verify /pa`. |
+| Clean installation | 0.3.4.1 replaced 0.3.4.0 after a backup (`artifacts/backups/20261020-211819`); three configuration files were restored. The installed executable SHA-256 `5EF65109…1F6C` equals the build, all 42 packaged asset files match, the provider declaration is valid, and the user's Copilot key selection is unchanged. |
+| Artwork | A 192 DPI capture of the installed reel shows Claude Science's DNA mark beside the Claude mark. |
+| Package context | A process started through ShellExecute from inside the Copilot Reel package has no package identity (`GetCurrentPackageFullName` returned `APPMODEL_ERROR_NO_PACKAGE`), so launched agents keep their own AppData. |
+| ARM64 package | Cross-compiled with `tools/build.ps1 -Architecture arm64` (machine `0xAA64`, not run). `CopilotReel_0.3.4.1_arm64.msix` is signed with the same development certificate and passed `signtool verify /pa`; its executable SHA-256 is `776A7AAD…E219`. |
+
+Not yet verified: whether a running target now comes forward after a physical Copilot-key hold. `run.log` records `Foreground grant unavailable` with the error code when the reel holds no foreground right at commit. `tests/run-radial.py`, language invariance and the capture suite were not rerun for this patch because they drive the pointer.
 
 ## Verified in v0.3.4
 
@@ -42,10 +57,10 @@ The x64 and ARM64 releases share one source tree. There is no architecture-speci
 | Application | `build/arm64/Release/CopilotReel.exe`, `dumpbin` reports `AA64 machine (ARM64)`, PE32+, Windows GUI subsystem. SHA-256 `E9237A3132A361C61C94B7590B9A0051036BDEA5D0D38D775E2896A2A055DFA2` |
 | Unit-test binaries | `core_tests`, `settings_tests`, `behavior_tests`, `iconography_tests`, `local_launch_tests`, `display_names_tests`, and `launch_probe` are all machine `0xAA64`. They were compiled and not started |
 | Host execution | `CreateProcess` on `CopilotReel.exe` failed with "The specified executable is not a valid application for this OS platform." |
-| Package | Unsigned `artifacts/CopilotReel_0.3.4.0_arm64.msix` (1,306,432 bytes). Its staged manifest says `ProcessorArchitecture="arm64"`. The packaged executable hash matches the build. `packaging/AppxManifest.xml` remains the x64 source manifest, and `artifacts/package` was not replaced |
+| Package | `artifacts/CopilotReel_0.3.4.0_arm64.msix`, signed with the development certificate `CN=CopilotReel Development` (`061ED5990CEBC4F2D7C252ABE3EFE7EB99D6239F`). `signtool verify /pa` succeeded. The staged manifest says `ProcessorArchitecture="arm64"`. `packaging/AppxManifest.xml` remains the x64 source manifest, and `artifacts/package` was not replaced |
 | Installation | Not installed. `tools/install-development.ps1` rejects any package whose architecture is not x64 |
 
-An unsigned package is not eligible as a Copilot key provider. Signing and installation remain an ARM64-machine step. Acrylic, high contrast, physical Copilot-key timing, and the unit-test assertions are unchecked on ARM64.
+The signature matches the x64 development package. Installation and Copilot-key registration remain an ARM64-machine step. Acrylic, high contrast, physical Copilot-key timing, and the unit-test assertions are unchecked on ARM64.
 
 ## Verified in v0.3.3
 

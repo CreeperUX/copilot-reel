@@ -33,8 +33,8 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\assets') -Destination 
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\brands') -Destination (Join-Path $stage 'assets') -Recurse -Force
 $manifestPath=Join-Path $stage 'AppxManifest.xml'
 $manifestText=[System.IO.File]::ReadAllText($manifestPath)
+if(-not $manifestText.Contains('ProcessorArchitecture="x64"')) {throw 'AppxManifest.xml has no x64 architecture token to set for this package.'}
 $patched=$manifestText.Replace('ProcessorArchitecture="x64"', "ProcessorArchitecture=`"$Architecture`"")
-if($patched -eq $manifestText) {throw 'AppxManifest.xml has no x64 architecture token to set for this package.'}
 $utf8=New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($manifestPath, $patched, $utf8)
 $stream=[System.IO.File]::OpenRead($binary)

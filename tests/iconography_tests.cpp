@@ -108,6 +108,9 @@ int main() {
     Check(IdentifyBrand(Target(L"C:\\Users\\Claude\\AppData\\Local\\Tool\\tool.exe"))==L"","vendor words in profile paths are ignored");
     Check(IdentifyBrand(Target(L"custom.exe",L"Gemini"))==L"","display names cannot claim vendor artwork");
     Check(IdentifyBrand(Target(L"",L"Claude for Science"))==L"claude","an unresolved preset uses its catalog name");
+    for(const auto* path:{L"C:\\Users\\x\\AppData\\Local\\Programs\\ClaudeScience\\claude-science.exe",
+                          L"C:\\Users\\x\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Claude for Science.lnk"})
+        Check(IdentifyBrand(Target(path))==L"","an installed Claude Science keeps its own Shell icon");
 
     PreloadOfficialIconAssets();
     for(std::size_t i=0;i<vi::kBrandCount;++i)
