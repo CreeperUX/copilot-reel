@@ -32,6 +32,21 @@ The [appearance and performance testing plan](testing-plan.md) records the curre
 
 The proposed unified Copilot confirmation model is also pending. Current 0.3.4 still changes to click/preview navigation after entering a submenu. The testing plan lists the required cross-input and page-transition regressions without marking them passed.
 
+## ARM64 package, cross-compiled 2026-10-20
+
+The x64 and ARM64 releases share one source tree. There is no architecture-specific input or rendering branch. This host is x64, so the ARM64 binaries were compiled with `tools/build.ps1 -Architecture arm64` and were not executed. The existing pointer-injection suite was not repeated; later x64 acceptance belongs to the [testing plan](testing-plan.md). The installed x64 0.3.4 app was left in place.
+
+| Check | Result |
+| --- | --- |
+| Compiler | MSVC 14.44.35229 `Hostx64\arm64\cl.exe`, `/std:c++20 /W4 /O2 /MT`, Windows SDK 10.0.26100.0 ARM64 import libraries |
+| Application | `build/arm64/Release/CopilotReel.exe`, `dumpbin` reports `AA64 machine (ARM64)`, PE32+, Windows GUI subsystem. SHA-256 `E9237A3132A361C61C94B7590B9A0051036BDEA5D0D38D775E2896A2A055DFA2` |
+| Unit-test binaries | `core_tests`, `settings_tests`, `behavior_tests`, `iconography_tests`, `local_launch_tests`, `display_names_tests`, and `launch_probe` are all machine `0xAA64`. They were compiled and not started |
+| Host execution | `CreateProcess` on `CopilotReel.exe` failed with "The specified executable is not a valid application for this OS platform." |
+| Package | Unsigned `artifacts/CopilotReel_0.3.4.0_arm64.msix` (1,306,432 bytes). Its staged manifest says `ProcessorArchitecture="arm64"`. The packaged executable hash matches the build. `packaging/AppxManifest.xml` remains the x64 source manifest, and `artifacts/package` was not replaced |
+| Installation | Not installed. `tools/install-development.ps1` rejects any package whose architecture is not x64 |
+
+An unsigned package is not eligible as a Copilot key provider. Signing and installation remain an ARM64-machine step. Acrylic, high contrast, physical Copilot-key timing, and the unit-test assertions are unchecked on ARM64.
+
 ## Verified in v0.3.3
 
 | Area | Evidence and scope |
@@ -76,6 +91,7 @@ The prior Windows Settings UI Automation check observed a visible, enabled Copil
 - Known limits in 0.3.4: during the 83-133 ms exit a click over the plate is ignored but not passed to the application beneath (`HTTRANSPARENT` forwards only within the thread); retargeting the seat twice within one spring settle measures the shortest arc from the previous target, so a 180-degree flick can swing the long way round.
 - Cold, running, and minimized instances of every preset application. Discovery is verified on this machine for ChatGPT/Codex, Claude, ZCode, and VS Code; the remaining presets ask for their actual installed target.
 - Comprehensive accessibility/UI Automation semantics for custom radial controls. The focused text editor uses native controls.
+- ARM64 runtime. The 2026-10-20 package is a native ARM64 image checked by its PE header and by this x64 host refusing to start it. Behavior, appearance, and Copilot-key registration on ARM64 hardware are still open.
 
 ## Repeatable checks
 

@@ -2,6 +2,8 @@
 
 This plan extends the 0.3.4 application and VI v0.9 baseline. It combines deterministic appearance tests with native rendering and ETW/WPR measurements, and defines regression coverage for the proposed unified menu interaction. Existing results belong in [validation.md](validation.md); the work below is planned unless explicitly marked verified.
 
+The product has two packages, x64 and ARM64, from one source tree. ARM64 is cross-compiled on the x64 development host and is not part of this host's runtime matrix. Further x64 appearance, interaction, and performance acceptance uses the layers in this plan. The existing pointer-injection suite remains historical evidence for 0.3.4; it is not the acceptance run for later x64 work.
+
 Reviewed on 2026-10-20 against application commit `47a63e9` and VI commit `2bc3534`. No new Copilot Reel ETW recording, system-setting change, or interaction implementation was performed during this planning review.
 
 ## Existing coverage and gaps

@@ -22,16 +22,17 @@ Targets inside the wheel do not need to register as Copilot providers. Only Copi
 
 ## Build and preview
 
-The development target is Windows 11 x64. The package declares build 22621 as its minimum; this is not a claim that every Copilot hold-state feature has been verified on that build.
+The two release architectures are Windows 11 x64 and Windows 11 ARM64. Both use the same source and the same Win32, Composition, Direct2D, and DirectWrite contracts. The package declares build 22621 as its minimum; this is not a claim that every Copilot hold-state feature has been verified on that build, and the ARM64 package has not been executed on ARM hardware.
 
 ```powershell
 .\tools\bootstrap-toolchain.ps1
 .\tools\build.ps1
+.\tools\build.ps1 -Architecture arm64
 .\build\Release\CopilotReel.exe --settings
 .\build\Release\CopilotReel.exe --preview
 ```
 
-Bootstrap downloads pinned Microsoft MSVC and Windows SDK packages into the ignored `tools/local` directory, without installing an IDE or changing the machine PATH. Build runs core/configuration tests and produces `build/Release/CopilotReel.exe`. See [toolchain notes](docs/toolchain.md).
+Bootstrap downloads pinned Microsoft MSVC and Windows SDK packages for both architectures into the ignored `tools/local` directory, without installing an IDE or changing the machine PATH. The default build is x64 and produces `build/Release/CopilotReel.exe`. `-Architecture arm64` cross-compiles `build/arm64/Release/CopilotReel.exe` and its unit-test binaries, then checks that their PE machine is ARM64 (`0xAA64`). It does not run them on an x64 host. See [toolchain notes](docs/toolchain.md).
 
 The application uses C++20, Win32, Windows Composition, Direct2D, and DirectWrite. Geometry and text render at the target DPI on the device-pixel grid; official raster artwork is pre-scaled per DPI with high-quality cubic filtering. `design/vi/tokens.json` is the single source of design values: the build generates `src/vi_tokens.h` from it, and the VI generator reads it directly. PNG/PDF UI previews are reference material, never animation frames. State changes and compositor timelines drive rendering instead of a permanent application frame loop.
 
@@ -39,10 +40,11 @@ The application uses C++20, Win32, Windows Composition, Direct2D, and DirectWrit
 
 ```powershell
 .\tools\package.ps1
+.\tools\package.ps1 -Architecture arm64
 .\tools\verify-registration.ps1
 ```
 
-Packaging without a certificate produces an unsigned MSIX for inspection. To sign with an existing certificate whose subject matches the manifest publisher, pass `-CertificateThumbprint`. Neither packaging nor registration verification imports certificates or installs the package automatically. Development trust is machine-specific; the certificate authorized for this machine is recorded in local, ignored signing artifacts.
+Packaging without a certificate produces an unsigned MSIX for inspection. The default package is `artifacts/CopilotReel_<version>_x64.msix`, staged in `artifacts/package`. `-Architecture arm64` stages `artifacts/package-arm64`, writes `ProcessorArchitecture="arm64"` into that package only, and leaves `packaging/AppxManifest.xml` as the x64 source manifest. To sign with an existing certificate whose subject matches the manifest publisher, pass `-CertificateThumbprint`. Neither packaging nor registration verification imports certificates or installs the package automatically. `tools/install-development.ps1` accepts only the x64 package, so an ARM64 package cannot replace the installed x64 app on this host. Development trust is machine-specific; the certificate authorized for this machine is recorded in local, ignored signing artifacts.
 
 The package declares `com.microsoft.windows.copilotkeyprovider` and the private `copilot-reel:` protocol. Existing processes accept the HWND message contract; new instances forward commands to the resident process. Windows controls picker eligibility and the user's selected key binding. See [validation status](docs/validation.md) for demonstrated behavior and remaining checks.
 
