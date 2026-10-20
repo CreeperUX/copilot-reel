@@ -6,9 +6,10 @@ MAIN = ['chatgpt', 'claude', 'antigravity', 'zcode', 'vscode', 'jetbrains', 'add
 SETTINGS = ['language', 'appearance', 'preferred', 'manage', 'add']
 NAMES = {'chatgpt': 'ChatGPT / Codex', 'claude': 'Claude Desktop', 'science': 'Claude for Science',
          'antigravity': 'Antigravity', 'zcode': 'ZCode', 'dsh': 'DeepSeek Harness', 'vscode': 'VS Code',
+         'gemini': 'Gemini', 'perplexity': 'Perplexity',
          'jetbrains': 'JetBrains', 'junie': 'Junie', 'air': 'Air', 'toolbox': 'Toolbox',
-         'intellij-idea': 'IntelliJ IDEA', 'add': 'Add', 'settings': 'Settings', 'manage': 'Manage apps',
-         'language': 'Language', 'preferred': 'Preferred agent', 'appearance': 'Windows appearance',
+         'intellij-idea': 'IntelliJ IDEA', 'add': 'Add app', 'settings': 'Settings', 'manage': 'Manage apps',
+         'language': 'Language', 'preferred': 'Preferred agent', 'appearance': 'Appearance',
          'back': 'Back', 'custom': 'Custom app', 'remove': 'Remove', 'edit': 'Edit details',
          'next': 'More presets', 'previous': 'Previous page'}
 COMMANDS = {'add','settings','manage','language','preferred','appearance','back','custom','remove','edit','next','previous'}
@@ -82,12 +83,12 @@ def radial(s, x, y, theme='light', items=None, title='Copilot Reel', selected=No
                 s.circle(ix+18,iy-18,5.5,p['accent'])
                 s.path([('M',ix+15.5,iy-18),('L',ix+17.2,iy-16),('L',ix+20.5,iy-20)],stroke=p['surface'],sw=1.2)
         if language:
-            # Arrows flank the EN/CN tile rather than occupying the center.
+            # Arrows flank the EN/ZH tile rather than occupying the center.
             for xx in [-48,48]:
                 chevron(s,xx,-112,p['text'],xx<0,5)
-        if not guard and selected is not None and items[selected] not in COMMANDS:
-            key=items[selected];label=NAMES.get(key,key)
-            s.text(0,-7,label,12 if len(label)>15 else 14,p['text'],True,'center')
+        if not guard and selected is not None:
+            key=items[selected];label='Apps and settings' if not submenu and key=='add' else NAMES.get(key,key)
+            s.text(0,-7,label,14,p['text'],True,'center')
         elif submenu:chevron(s,0,0,p['muted'],True,6)
         elif guard:s.circle(0,0,3,p['muted'],alpha=.7)
 
@@ -98,7 +99,7 @@ def page(number, tag, title, subtitle=''):
 
 def build_pages():
     pages=[]
-    s=page(1,'SOFT ORBIT / QUIET RADIAL UI','Less copy. A clearer point of origin.','Copilot Reel visual identity v0.7 - one + entry, stateful icons, and restrained native motion.')
+    s=page(1,'SOFT ORBIT / QUIET RADIAL UI','Less copy. A clearer point of origin.','Copilot Reel visual identity v0.8 - one + entry, stateful icons, and restrained native motion.')
     desktop(s,64,219,648,480)
     desktop(s,744,219,632,480,True)
     radial(s,388,455,'light',scale=1.1)
@@ -116,17 +117,17 @@ def build_pages():
     for x in [448,928]:
         s.line(x,441,x+58,441,MUTED,1.5);chevron(s,x+58,441,MUTED)
     note(s,64,704,'PRIMARY','One structural command','Main contains configured agents and a single +. The separate Settings gear is removed.',600)
-    note(s,790,704,'SECONDARY','Five clear icon actions','EN/CN, appearance, preferred agent, app management, and adding. Text entry still uses a focused native editor.',570)
+    note(s,790,704,'SECONDARY','Five clear icon actions','EN/ZH, appearance, preferred agent, app management, and adding. Text entry still uses a focused native editor.',570)
     pages.append(s)
 
-    s=page(3,'STATEFUL ICONS / LANGUAGE','The language is the icon.','EN and CN identify the active interface language. Small chevrons and A / D switch it in place.')
-    radial(s,360,456,'dark',SETTINGS,'Settings',None,1.18,language=True,preferred=None)
+    s=page(3,'STATEFUL ICONS / LANGUAGE','The language is the icon.','EN and ZH identify the active interface language. Small chevrons and A / D switch it in place.')
+    radial(s,360,456,'dark',SETTINGS,'Settings',0,1.18,language=True,preferred=None)
     s.rect(675,228,701,443,'#F4F7FA',LINE,1,14)
-    for i,code in enumerate(['EN','CN']):
+    for i,code in enumerate(['EN','ZH']):
         x=815+i*286;s.rect(x-44,294,88,88,'#E5E9EF',r=22)
         mark(s,'language',x,338,60,INK,language_code=code)
         s.text(x,410,'English' if code=='EN' else 'Simplified Chinese',20,INK,True,'center')
-    s.wrap(715,493,'No Language heading, caption, or keyboard hint is drawn in the wheel. The center remains a back affordance. The active language is visible in the tile itself.',610,20,32,MUTED)
+    s.wrap(715,493,'Hover the tile or either arrow to see Language at the center. EN/ZH still conveys the active value. The label is one line, with no explanation beneath it; the idle hub returns to its back chevron.',610,20,32,MUTED)
     s.text(64,733,'40 x 40 DIP arrow hit regions; small unfilled chevrons.',19,INK)
     s.text(64,775,'The icon changes immediately after a successful save. User-defined app names stay untouched.',17,MUTED)
     pages.append(s)
@@ -139,12 +140,12 @@ def build_pages():
         x=240+i*480
         radial(s,x,421,'light',items,title,selected,.86,preferred=None)
         s.text(x,610,title,22,INK,True,'center')
-    note(s,64,676,'RECOGNITION','Use text only when it identifies an app','An actively selected application may show its name at the center. Structural actions and page names do not fill the center with copy.',600)
-    note(s,790,676,'MISSING INSTALLATION','Keep the intended identity','Open a prefilled focused editor and ask for the actual app, shortcut, or URI. Cancelling leaves the list unchanged.',570)
+    note(s,64,676,'HOVER RECOGNITION','Name the item under the pointer','A selected application or secondary command shows one concise functional name at the center. Idle Main stays empty; submenu idle state keeps only the back chevron.',600)
+    note(s,790,676,'MISSING INSTALLATION','Keep the intended identity','Missing presets use the focused editor. A missing short-tap target uses a native executable/shortcut picker. Neither flow substitutes a website.',570)
     pages.append(s)
 
     s=page(5,'PRESET IDENTITIES / FIRST COLLECTION','Official marks, in a common visual container.','Preserve vendor silhouettes, proportions, and recognizable color. The launcher supplies a consistent frame.')
-    keys=['chatgpt','claude','science','antigravity','zcode','dsh','vscode','jetbrains','junie','air','toolbox','intellij-idea']
+    keys=['chatgpt','claude','science','antigravity','zcode','dsh','vscode','gemini','perplexity','jetbrains','junie','intellij-idea']
     for i,key in enumerate(keys):
         col,row=i%6,i//6;x=64+col*224;y=225+row*236
         s.rect(x,y,192,203,'#F4F6F8',LINE,.8,14)
@@ -152,21 +153,16 @@ def build_pages():
         mark(s,key,x+96,y+65,50,INK)
         s.text(x+96,y+128,NAMES[key],16,INK,True,'center')
         s.text(x+96,y+159,'Verified vendor artwork',11,MUTED,align='center')
-    s.wrap(64,733,'Claude for Science shares the Claude identity. The current installed OpenAI package supplies the ChatGPT / Codex mark. DeepSeek Harness is the dsh preset. Resolve actual launch targets before saving.',1312,18,28,MUTED)
+    s.wrap(64,733,'Gemini and Perplexity retain their official artwork. Windows Settings and Notepad use recognized native system glyphs. Claude for Science shares Claude artwork; resolve actual launch targets before saving.',1312,18,28,MUTED)
     pages.append(s)
 
-    s=page(6,'ICON SYSTEM / STATUS WITHOUT CAPTIONS','Icons carry state; selection carries emphasis.','Language and appearance do not need labels underneath them. A muted surface gives the official marks room.')
-    for i,theme in enumerate(['light','dark','contrast']):
-        p=PALETTES[theme];x=64+i*448
-        s.rect(x,226,416,288,p['surface'],p['line'],1,14)
-        for j,key in enumerate(['language','appearance','chatgpt']):
-            xx=x+78+j*130
-            s.rect(xx-28,326,56,56,p['icon'],r=14)
-            mark(s,key,xx,354,39,p['text'],theme,'EN' if i==0 else 'CN')
-        s.text(x+24,458,theme.upper(),16,p['text'],True)
-    note(s,64,569,'GEOMETRY','40 DIP tile / 28 DIP artwork','Use a 10 DIP tile radius. EN/CN are DirectWrite monograms; sun and moon are native vector shapes. Preserve official application marks.',600)
-    note(s,790,569,'EMPHASIS','Keep accent local to selection','No accent perimeter, rotating outline, or decorative connector. The system accent belongs to the chosen tile and preferred marker.',570)
-    s.text(64,778,'Appearance opens Windows color settings. Its icon reflects the current system light/dark mode.',16,MUTED)
+    s=page(6,'ICON SYSTEM / HOVER RECOGNITION','A name appears only when it helps.','Keep idle centers quiet. Hovering a command reveals its function without a fixed caption or second line.')
+    for i,(theme,index,title) in enumerate([('light',1,'Appearance'),('dark',3,'Manage apps'),('contrast',2,'Preferred agent')]):
+        x=240+i*480
+        radial(s,x,425,theme,SETTINGS,'Settings',index,.88,preferred=None)
+        s.text(x,621,title,21,INK,True,'center')
+    note(s,64,688,'IDENTITY','One functional name','Use the same name for pointer and keyboard selection. Hovering the language arrows selects Language. Idle submenus return to their small back chevron.',600)
+    note(s,790,688,'TYPE','14 DIP; one line','Keep the selected name centered within 132 DIP. Ellipsis handles unusually long app names. Do not add an instruction or subtitle.',570)
     pages.append(s)
 
     s=page(7,'POINTER ORIGIN / EDGE AND CORNER','Inside the work area, the pointer is the center.','Only an actual boundary conflict moves the circle. There is no nominal offset and no opening connector.')
@@ -207,10 +203,10 @@ def build_pages():
     pages.append(s)
 
     s=page(10,'GEOMETRY / INPUT CONTRACT','Stable sizes, anchored to the actual pointer.','Native vector geometry is shared by layout, drawing, and hit testing at the active monitor DPI.')
-    rows=[('Reel diameter / icon orbit','336 / 112 DIP'),('Center cancellation zone','88 DIP diameter'),('Tile / artwork / corner','40 / 28 / 10 DIP'),('Selection seat','60 x 64 DIP'),('Language arrow hit / glyph','40 x 40 / 5 x 10 DIP'),('Selected app / icon monogram','14 / 16 DIP'),('Interior pointer-to-center offset','0 DIP'),('Entry / exit timeline','160 / 120 ms')]
+    rows=[('Reel diameter / icon orbit','336 / 112 DIP'),('Center cancellation zone','88 DIP diameter'),('Tile / artwork / corner','40 / 28 / 10 DIP'),('Selection seat','60 x 64 DIP'),('Language arrow hit / glyph','40 x 40 / 5 x 10 DIP'),('Hover name / icon monogram','14 / 16 DIP'),('Interior pointer-to-center offset','0 DIP'),('Entry / exit timeline','160 / 120 ms')]
     for i,(label,value) in enumerate(rows):
         y=223+i*66;s.text(64,y,label,20,INK);s.text(725,y,value,20,INK,True,'right');s.line(64,y+42,725,y+42,LINE)
-    note(s,830,224,'COPILOT SHORT TAP','Open the preferred agent','A short tap launches the saved preferred target directly. It does not open a wheel preview.',510)
+    note(s,830,224,'COPILOT SHORT TAP','Open the local application','Use the preferred installed app. If unavailable, a native picker requests an executable or shortcut. Never open a website as the tap fallback.',510)
     note(s,830,410,'COPILOT HOLD','Open at the pointer','Windows supplies the approximately 300 ms threshold. Move outward to select; release opens once or enters the hub.',510)
     note(s,830,613,'HUB CONTEXT','Stay open to adjust','The + hub accepts deliberate clicks and A / D language changes. Center or Esc returns one level.',510)
     pages.append(s)
@@ -225,9 +221,9 @@ def build_pages():
     s.wrap(88,732,'If the complete canvas cannot fit, scale the whole circle uniformly. Very small work areas reduce text and targets; accessibility and icon discoverability require explicit validation.',1264,17,27,MUTED)
     pages.append(s)
 
-    s=page(12,'HANDOFF / REFERENCES / EVIDENCE','Quiet structure, explicit implementation rules.','The v0.7 specification refines the native radial product. Focused native editors remain for text entry only.')
-    note(s,64,220,'IMPLEMENTATION CONTRACT','One + hub; zero interior offset','Main: configured agents and +. Hub: language, appearance, preferred agent, management, and adding. The center has no page heading or explanatory hint.',610)
-    note(s,790,220,'ASSET CONTRACT','Official identity, common treatment','Keep source artwork and ownership records. EN/CN and sun/moon are local status glyphs. Missing vendor artwork uses a neutral app symbol.',570)
+    s=page(12,'HANDOFF / REFERENCES / EVIDENCE','Quiet structure, explicit implementation rules.','The v0.8 specification refines the native radial product. Focused native editors remain for text entry only.')
+    note(s,64,220,'IMPLEMENTATION CONTRACT','One + hub; hover names','Main: configured agents and +. Hub: language, appearance, preferred agent, management, and adding. Idle centers stay quiet; a hovered action gets one concise functional name.',610)
+    note(s,790,220,'LOCAL LAUNCH CONTRACT','Resolve the application first','Defaults discover installed apps. A missing short-tap target opens the native application picker. Only known base-URL defaults migrate, with a backup; custom URLs remain deliberate wheel actions.',570)
     s.line(64,447,1376,447,LINE)
     refs=[('Windows motion','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/motion'),('Composition animation','learn.microsoft.com/en-us/windows/uwp/composition/composition-animation'),('Windows materials','learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials'),('Radial precedent: Kando','kando.menu/config-files/#warpmouse'),('Radial precedent: Blender','docs.blender.org/manual/en/latest/editors/preferences/interface.html'),('Asset provenance','assets/brands/provenance.json')]
     for i,(name,url) in enumerate(refs):

@@ -116,8 +116,8 @@ void TestLimits() {
     Require(!reel::Validate({app}, error), "invalid enum value must be rejected");
 
     auto defaults = reel::Defaults();
-    Require(defaults.size() == 6 && reel::Validate(defaults, error), "first-run defaults must be valid and bounded");
-    Require(defaults[0].target == L"https://chatgpt.com" && defaults[1].target == L"https://claude.ai", "default agents must not assume installed package identities");
+    Require(defaults.size() == 2 && reel::Validate(defaults, error), "fallback defaults must be valid and bounded");
+    Require(defaults[0].target == L"notepad.exe" && defaults[1].target == L"ms-settings:", "fallback defaults remain local; the controller adds discovered installed agents");
 }
 } // namespace
 

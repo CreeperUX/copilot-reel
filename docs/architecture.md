@@ -6,7 +6,7 @@ Copilot Reel uses the official Windows Copilot hardware key provider contract an
 
 The implementation is one native C++20 process with a Win32 message loop. Windows Composition owns the visual tree and property animations; Direct2D and DirectWrite render geometry, icons, and text into reusable surfaces. The first visual scheme is Soft Orbit.
 
-VI v0.7 defines a quiet radial interface with one combined + entry. Main contains configured agents and +; its idle center is empty. The hub contains language, appearance, preferred agent, management, and adding. EN/CN and sun/moon convey state in the icons. Submenus retain a center back chevron; only selected real app names appear as center text. No generic page heading or instruction is drawn.
+VI v0.8 defines a quiet radial interface with one combined + entry. Main contains configured agents and +; its idle center is empty. The hub contains language, appearance, preferred agent, management, and adding. EN/ZH and sun/moon convey state in the icons. Idle submenus retain a center back chevron; selected applications and commands show one concise functional name as center text. No generic page heading or instruction is drawn.
 
 Only the wheel registers as a provider. Its targets are ordinary executables, shortcuts, URIs, or applicable packaged application AUMIDs.
 
@@ -34,7 +34,7 @@ A named mutex and resident controller window provide single-instance behavior. S
 | Visible + hold stop | Resolve once, start exit, and activate the selected target once |
 | Idle + hold stop | Ignore without launching |
 | Duplicate hold start | Preserve the current gesture |
-| Short Copilot tap | Launch the saved preferred agent directly |
+| Short Copilot tap | Launch the preferred local application; request a local target if unavailable |
 | Explicit preview command | Show click-to-select preview |
 | Release on a menu command | Enter the radial submenu and retain a deliberate adjustment context |
 | Right-click or Esc | Return one menu level; cancel at Main |
@@ -92,7 +92,9 @@ Performance validation must cover 60/144/240 Hz, mixed refresh rates, different 
 
 ## Configuration and activation
 
-The native editor supports 1-8 targets. Main contains configured apps and a single +. The + opens the combined hub, ordered Language, Windows appearance, Preferred agent, Manage apps, and Add app. Language displays EN/CN at the top tile with flanking 40 DIP arrow hit regions, or A/D. Appearance uses sun/moon for the current system theme and opens ms-settings:colors. The center chevron or Esc returns one level. Missing presets open the focused native editor with an empty launch target. See [configuration and isolation](configuration.md).
+The native editor supports 1-8 targets. Main contains configured apps and a single +. The + opens the combined hub, ordered Language, Appearance, Preferred agent, Manage apps, and Add app. Language displays EN/ZH at the top tile with flanking 40 DIP arrow hit regions, or A/D. Appearance uses sun/moon for the current system theme and opens ms-settings:colors. The center chevron or Esc returns one level. Missing presets open the focused native editor with an empty launch target. See [configuration and isolation](configuration.md).
+
+Short tap first resolves a usable local target. Installed-agent discovery can replace an exact legacy default website profile with the matching verified native application. Before automatically saving a migration, the existing configuration is backed up. Only known ChatGPT and Claude base-URL default profiles are eligible; arbitrary pages and custom URLs are not migrated. A missing native destination opens the native application picker, restricted to executable or shortcut files, instead of a browser. Selecting a web profile as preferred uses the same picker. A successful choice replaces that launch profile with the chosen local target. Explicit custom web targets remain available to wheel selection, but never serve as a short-tap fallback.
 
 Shell targets use `ShellExecuteExW`; AUMIDs use `IApplicationActivationManager`. Existing instances should use each target's activation contract. Windows foreground rules apply; cold, running, and minimized states need per-application verification.
 

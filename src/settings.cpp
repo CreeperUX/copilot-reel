@@ -99,10 +99,6 @@ bool Validate(const std::vector<AppTarget>& targets, std::wstring& error) {
 
 std::vector<AppTarget> Defaults() {
     return {
-        {L"ChatGPT", TargetKind::Shell, L"https://chatgpt.com", L"", L""},
-        {L"Claude", TargetKind::Shell, L"https://claude.ai", L"", L""},
-        {L"Gemini", TargetKind::Shell, L"https://gemini.google.com", L"", L""},
-        {L"Perplexity", TargetKind::Shell, L"https://www.perplexity.ai", L"", L""},
         {L"Notepad", TargetKind::Shell, L"notepad.exe", L"", L""},
         {L"Windows Settings", TargetKind::Shell, L"ms-settings:", L"", L""}
     };
@@ -221,8 +217,8 @@ void RefreshLanguage(HWND window, SettingsState& state) {
     SetWindowTextW(window, Tr(L"Copilot Reel — Application settings", L"Copilot Reel — 应用设置"));
     label(IdLanguageLabel, Tr(L"Language", L"语言"));
     label(IdInfo, Tr(
-        L"Configure 1–8 entries. Default AI entries open websites; browse to use desktop apps.\r\nSave applies your edits. Add creates another entry from the current form.",
-        L"配置 1–8 个轮盘入口。默认 AI 入口使用网页，可浏览替换为桌面应用。\r\n编辑后可直接保存；“添加”会把当前表单追加为新应用。"));
+        L"Configure 1–8 entries. Choose installed applications for short-tap activation.\r\nSave applies your edits. Add creates another entry from the current form.",
+        L"配置 1–8 个轮盘入口。请为短按启动选择已安装的本机应用。\r\n编辑后可直接保存；“添加”会把当前表单追加为新应用。"));
     label(IdNameLabel, Tr(L"Display name", L"显示名称"));
     label(IdKindLabel, Tr(L"Launch method", L"启动方式"));
     label(IdTargetLabel, Tr(L"Target: application, shortcut, URI, or AUMID", L"目标：程序、快捷方式、网址、协议或 AUMID"));

@@ -39,6 +39,28 @@ builds; the upstream repository identifies the desktop package as
 found in this development machine's Start menu, Appx package list, or standard
 per-user/machine uninstall records at verification time.
 
+## Existing defaults and Windows system targets
+
+The saved default catalog also includes Gemini, Perplexity, Windows Settings,
+and Notepad. Gemini uses Google's 512-pixel sparkle artwork linked by
+[gemini.google.com](https://gemini.google.com/). Perplexity uses its own
+[favicon SVG](https://www.perplexity.ai/favicon.svg) and
+[PNG fallback](https://www.perplexity.ai/favicon.png), both advertised by its
+[official application page](https://www.perplexity.ai/). These source files are
+preserved byte-for-byte and included in the same startup asset cache.
+
+Windows Settings and Notepad use theme-aware native vector command glyphs: a
+gear and a bound notepad. `IdentifySystemIcon` recognizes actual `ms-settings:`
+URIs, executable basenames, and known packaged identifiers. It does not infer
+system identity from localized display names or arbitrary substrings. The
+renderer passes the real target to this system-icon path before falling back to
+a neutral application window. Chinese or user-renamed entries therefore retain
+their system glyph without introducing guessed vendor marks.
+
+`DrawAppSymbol` now draws only those system symbols or the neutral fallback.
+The earlier approximate ChatGPT, Claude, Gemini, Codex, and Perplexity shapes are
+removed; verified vendor artwork is the sole branded rendering source.
+
 ## Files and provenance
 
 [The machine-readable manifest](../assets/brands/provenance.json) records the
@@ -63,8 +85,15 @@ the application never decodes images or reads artwork files during a draw.
 supported by Direct2D. Some official assets, including VS Code and Antigravity,
 contain SVG masks or filters that Direct2D does not implement. Those assets use
 their official PNG, rather than silently rendering a damaged or incomplete SVG.
+Before drawing a supported SVG, its cached in-memory root width and height are
+normalized to numeric viewBox dimensions. This prevents physical units such as
+Perplexity's `270pt` root from expanding to 360 pixels and overflowing the shared
+optical box. The source SVG stays byte-for-byte unchanged. Native WARP/SVG tests
+verify that Perplexity and the Gemini PNG stay inside a 28-DIP rectangle and
+remain centered.
+
 Legacy DC render targets also use the PNG fallback. The wheel geometry, text,
-selection rings, connector, and animation remain vector-based.
+selection rings, system glyphs, and animation remain vector-based.
 
 GPU images are cached by the canonical Direct2D device identity, not by the
 transient device-context pointer returned by a composition surface's
@@ -84,6 +113,8 @@ Reel is an independent launcher and does not imply sponsorship or endorsement.
 - OpenAI and ChatGPT marks belong to OpenAI. See the [OpenAI design guidelines](https://openai.com/brand/).
 - Claude marks belong to Anthropic. The source image is the unmodified official Windows application resource.
 - Antigravity artwork belongs to Google and comes from its [press asset collection](https://antigravity.google/press).
+- Gemini artwork belongs to Google and comes from the official Gemini application page.
+- Perplexity artwork belongs to Perplexity and comes from its official application favicon resources.
 - ZCode artwork belongs to Z.ai and comes from the installed official Windows application resource.
 - DeepSeek Harness is a DeepSeek trademark. Its source repository is MIT licensed; the [license](../assets/brands/deepseek-LICENSE.txt) is retained. Its [brand guidelines](https://github.com/deepseek-ai/deepseek-harness/blob/master/BRAND_GUIDELINES.md) prohibit misleading claims of affiliation.
 - Visual Studio Code artwork belongs to Microsoft. Its [brand guidelines](https://code.visualstudio.com/brand) prohibit redrawing or restyling the icon, so its internal artwork remains unchanged.

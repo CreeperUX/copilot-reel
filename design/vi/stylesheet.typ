@@ -3,7 +3,7 @@
 #set text(font: "Segoe UI", size: 10pt)
 #set page(margin: 24mm)
 = Copilot Reel / Quiet Soft Orbit
-Version 0.7. Dimensions use DIP. Runtime validation is tracked separately.
+Version 0.8. Dimensions use DIP. Runtime validation is tracked separately.
 
 #table(
   columns: (2fr, 1fr, 3fr),
@@ -15,11 +15,11 @@ Version 0.7. Dimensions use DIP. Runtime validation is tracked separately.
   [Official artwork], [28], [Preserve vendor proportions and recognizable colors],
   [Command stroke], [1.75], [2 DIP in high contrast; internal commands only],
   [Selection seat], [60 x 64], [System accent local to selection],
-  [Language icon], [EN / CN], [Active interface language inside the tile],
+  [Language icon], [EN / ZH], [Active interface language inside the tile],
   [Language arrow hit], [40 x 40], [Centers at -48/+48 horizontally and -112 vertically],
   [Language arrow visual], [5 x 10], [Unfilled chevrons flanking the top language tile],
   [Appearance icon], [Sun / moon], [Reflect current Windows app light/dark mode],
-  [Selected app / monogram], [14 / 16], [No generic center title, helper text, or tile captions],
+  [Hover label / monogram], [14 / 16], [One concise selected-item name; no helper text or tile captions],
   [Interior pointer offset], [0], [Mouse remains at the wheel center without cursor warping],
   [Entry animation], [160 ms], [Opacity 0 to 1; scale 0.96 to 1; no overshoot],
   [Exit animation], [120 ms], [Reverse opacity and scale, then detach the tree],
@@ -35,20 +35,23 @@ reduced motion applies the final state immediately.
 == Radial navigation and visual copy
 Main contains configured agents and one + entry. The + opens a five-item hub:
 language, appearance, preferred agent, app management, and adding. No separate
-Settings gear remains on Main. Main's idle center is empty. Submenus show only a
-small back chevron. A selected real app may show its name, without a second line.
-Page titles, command labels, keyboard hints, and instructional center copy do not
-appear inside the product UI. Semantic action names remain in the model.
+Settings gear remains on Main. Main's idle center is empty. Idle submenus show a
+small back chevron. A hovered application or secondary command shows its concise
+functional name at the center, without a second line. Generic page headings,
+keyboard hints, and instructional copy do not appear inside the product UI.
 
 == Language and appearance
-EN/CN encode the active language in the top tile. Two small arrows flank that
+EN/ZH encode the active language in the top tile. Two small arrows flank that
 tile; A / D offers the same adjustment. English is the default. Native text
 editors preserve Chinese input methods. A sun or moon reflects current Windows
 appearance; selecting it opens Windows color settings. No captions sit beneath
 these controls. User app names remain unchanged.
 
 == Copilot input and pointer placement
-A short tap opens the saved preferred agent directly. A hold uses the official
+A short tap opens the preferred local application. Resolve supported legacy web
+defaults through installed-app discovery. If no local target exists, open the
+native executable/shortcut picker; never fall back to a website. Missing presets
+still use the focused editor. A hold uses the official
 Windows threshold and opens the circle centered on the captured pointer.
 Only an actual boundary conflict applies the minimum inward translation needed
 to keep the full canvas inside the work area. Never warp the pointer. If that

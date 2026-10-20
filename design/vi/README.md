@@ -1,6 +1,6 @@
-# VI source package v0.7
+# VI source package v0.8
 
-Soft Orbit now uses one + entry for the combined settings and management hub. Main has an empty idle center; submenus show a back chevron. EN/CN and sun/moon icons express state without captions. Ordinary opening is pointer-centered. A 160 ms opacity/scale arrival and 120 ms exit replace the tether, circular reveal, and blue perimeter sweep.
+Soft Orbit now uses one + entry for the combined settings and management hub. Main has an empty idle center; idle submenus show a back chevron. Hovering any application or secondary action shows one concise functional name at the center, without a second line. EN/ZH and sun/moon icons express state without captions. Short tap opens the preferred local application; unavailable local targets open a native executable/shortcut picker, without a website fallback. Ordinary opening is pointer-centered. A 160 ms opacity/scale arrival and 120 ms exit replace the tether, circular reveal, and blue perimeter sweep.
 
 - `vectors/`: active radial main, Settings, language, preferred-agent, manage, and preset masters in both themes; material and high-contrast variants; historical visual-direction comparisons.
 - `tokens.json`: English semantic design tokens and input/material/artwork policies.
@@ -8,7 +8,7 @@ Soft Orbit now uses one + entry for the combined settings and management hub. Ma
 - `source/scene.py`: vector and official-artwork drawing primitives.
 - `source/radial_pages.py`: 12 English specification pages.
 - `source/build_vi.py`: PDF, SVG, and token generator.
-- [Review PDF](../../output/pdf/copilot-reel-vi-v0.7.pdf).
+- [Review PDF](../../output/pdf/copilot-reel-vi-v0.8.pdf).
 
 ## Rebuild
 

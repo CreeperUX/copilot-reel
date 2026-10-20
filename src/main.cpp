@@ -9,6 +9,7 @@
 #include "presets.h"
 #include "official_icons.h"
 #include "radial_menu.h"
+#include "local_launch.h"
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -17,9 +18,11 @@
 #include <sddl.h>
 #include <wtsapi32.h>
 #include <commctrl.h>
+#include <commdlg.h>
 #include <imm.h>
 #include <winrt/base.h>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <deque>
@@ -183,7 +186,10 @@ public:
         case Command::Preview: Start(true,event.pointer);break;
         case Command::Tap: {
             Cancel();const int preferred=PreferredTargetIndex(items_);
-            if(preferred>=0)LaunchTarget(items_[preferred]);break;
+            if(preferred>=0) {
+                if(IsVerifiedLocalApplication(items_[preferred]))LaunchTarget(items_[preferred]);
+                else ChooseLocalApplication(preferred,true);
+            }break;
         }
         case Command::HoldStart:
             if(!gesture_.Active() && ordering_.Start(event.stamp))Start(false,event.pointer);break;
@@ -295,7 +301,11 @@ public:
     void MovePointer() {
         if(!gesture_.Active())return;
         const POINT local=LocalPointer();
-        if(OnLanguageArrow(local))return;
+        if(OnLanguageArrow(local)) {
+            // Both arrows belong to the language item, including its hover name.
+            if(gesture_.Select(0,static_cast<unsigned>(menu_.size())))renderer_->SetSelection(0);
+            return;
+        }
         POINT p{};GetCursorPos(&p);
         const bool wasAwaiting=gesture_.AwaitingCenter();
         if(gesture_.ObservePointer((p.x-centerX_)*96.0/dpi_,(p.y-centerY_)*96.0/dpi_,static_cast<unsigned>(menu_.size()))) {
@@ -313,7 +323,7 @@ public:
         if(!preview_ || !gesture_.Active())return;
         if(key==VK_ESCAPE || key==VK_BACK) {Back();return;}
         if(page_==MenuPage::Settings && (key=='A'||key=='D'||key==VK_LEFT||key==VK_RIGHT)) {
-            languageFocus_=true;SwitchLanguage();return;
+            languageFocus_=true;gesture_.Select(0,static_cast<unsigned>(menu_.size()));SwitchLanguage();return;
         }
         if(key==VK_TAB || key==VK_LEFT || key==VK_RIGHT) {
             const int count=static_cast<int>(menu_.size());if(!count)return;
@@ -342,6 +352,49 @@ public:
     void LaunchTarget(const AppTarget& target) {
         if(smoke)Log(L"Smoke simulated launch: "+target.name);else Launch(target,window);
     }
+    bool PersistLocalTargets(const std::vector<AppTarget>& candidate,int preferred=-1) {
+        const auto path=ConfigPath();
+        if(GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES) {
+            const auto backup=path+L".before-local-apps."+std::to_wstring(EventStamp())+L".bak";
+            if(!CopyFileW(path.c_str(),backup.c_str(),TRUE)) {Log(L"Local app migration backup failed");return false;}
+        }
+        std::wstring error;
+        if(!SaveTargets(candidate,error)) {Log(L"Local app configuration save failed");return false;}
+        if(preferred<0)preferred=PreferredTargetIndex(items_);
+        if(preferred>=0 && static_cast<size_t>(preferred)<candidate.size() && !SavePreferredTarget(candidate[preferred])) {
+            std::wstring rollbackError;
+            if(!SaveTargets(items_,rollbackError))Log(L"Preference save and configuration rollback failed; backup retained");
+            else Log(L"Preference save failed; original configuration restored");
+            return false;
+        }
+        items_=candidate;
+        return true;
+    }
+    void ChooseLocalApplication(int index,bool launchAfterSelection) {
+        if(index<0 || static_cast<size_t>(index)>=items_.size() || editorOpen_)return;
+        gesture_.Cancel();Hide(false);FinishHide();
+        std::array<wchar_t,32768> path{};
+        OPENFILENAMEW picker{sizeof(picker)};picker.hwndOwner=window;
+        picker.lpstrTitle=Tr(L"Choose a local application",L"选择本机应用");
+        picker.lpstrFilter=Tr(L"Applications and shortcuts\0*.exe;*.lnk\0\0",L"应用程序和快捷方式\0*.exe;*.lnk\0\0");
+        picker.lpstrFile=path.data();picker.nMaxFile=static_cast<DWORD>(path.size());
+        picker.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR|OFN_NODEREFERENCELINKS;
+        editorOpen_=true;
+        const auto previousStyle=GetWindowLongPtrW(window,GWL_EXSTYLE);
+        SetWindowLongPtrW(window,GWL_EXSTYLE,previousStyle&~WS_EX_NOACTIVATE);
+        Log(L"Short tap requires a local application: "+items_[index].name);
+        const bool chosen=GetOpenFileNameW(&picker)!=FALSE;
+        SetWindowLongPtrW(window,GWL_EXSTYLE,previousStyle);
+        editorOpen_=false;
+        if(chosen) {
+            auto candidate=items_;
+            candidate[index]={items_[index].name,TargetKind::Shell,path.data(),L"",L""};
+            if(IsVerifiedLocalApplication(candidate[index]) && PersistLocalTargets(candidate,index)) {
+                if(launchAfterSelection)LaunchTarget(items_[index]);else Start(true,anchor_,MenuPage::Settings);
+            } else MessageBoxW(nullptr,Tr(L"Could not save this local application. Choose an executable or a shortcut to an installed application.",
+                L"无法保存此本机应用。请选择可执行程序或指向已安装应用的快捷方式。"),kAppName,MB_OK|MB_ICONWARNING);
+        } else if(!launchAfterSelection)Start(true,anchor_,MenuPage::Preferred);
+    }
     void Choose(int selected) {
         if(selected<0 || static_cast<size_t>(selected)>=menu_.size())return;
         const auto entry=menu_[selected];
@@ -356,8 +409,11 @@ public:
         case MenuAction::Entry:editing_=entry.index;Navigate(MenuPage::Entry);break;
         case MenuAction::Edit:OpenEditor(entry.index);break;
         case MenuAction::SetPreferred:
-            if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size() && SavePreferredTarget(items_[entry.index])) {
-                Log(L"Preferred agent saved: "+items_[entry.index].name);Navigate(MenuPage::Settings);
+            if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size()) {
+                if(!IsVerifiedLocalApplication(items_[entry.index]))ChooseLocalApplication(entry.index,false);
+                else if(SavePreferredTarget(items_[entry.index])) {
+                    Log(L"Preferred agent saved: "+items_[entry.index].name);Navigate(MenuPage::Settings);
+                }
             }break;
         case MenuAction::Remove:
             if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size() && items_.size()>1) {
@@ -414,7 +470,23 @@ public:
         Log(L"Appearance: "+std::wstring(currentAppearance_.dark?L"dark":L"light")+L", transparency="+(currentAppearance_.transparency?L"on":L"off"));
     }
     void Reload() {
+        const bool firstRun=GetFileAttributesW(ConfigPath().c_str())==INVALID_FILE_ATTRIBUTES;
         std::wstring error;items_=LoadTargets(error);
+        if(error.empty()) {
+            auto candidate=items_;
+            bool changed=false;
+            if(firstRun) {
+                candidate.clear();
+                for(const auto& preset:presets_)if(IsVerifiedLocalApplication(preset) && candidate.size()<6)candidate.push_back(preset);
+                candidate.insert(candidate.end(),items_.begin(),items_.end());
+                changed=candidate.size()!=items_.size();
+            } else {
+                for(auto& item:candidate)if(!IsLocalApplication(item)) {
+                    if(auto replacement=LocalReplacement(item,presets_);replacement && IsVerifiedLocalApplication(*replacement)) {item=*replacement;changed=true;}
+                }
+            }
+            if(changed && PersistLocalTargets(candidate))Log(L"Local application profiles saved; previous configuration backed up");
+        }
         if(gesture_.Active())Navigate(page_);else RenderMenu();
         if(!error.empty()) {
             Log(L"Configuration validation failed; original file preserved, fallback targets loaded.");
@@ -463,7 +535,7 @@ public:
     }
     void SaveDiagnostics() {
         std::wostringstream text;
-        text<<L"Copilot Reel 0.3.1\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.2\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()

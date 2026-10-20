@@ -35,7 +35,7 @@ inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarge
         if(offset+5<presets.size())action(Tr(L"Next",L"下一页"),L"reel:next",MenuAction::Next);break;
     case MenuPage::Settings:
         action(Tr(L"Language",L"语言"),L"reel:language",MenuAction::Language);
-        action(Tr(L"Windows appearance",L"Windows 外观"),L"reel:appearance",MenuAction::Appearance);
+        action(Tr(L"Appearance",L"外观"),L"reel:appearance",MenuAction::Appearance);
         action(Tr(L"Preferred agent",L"首选应用"),L"reel:preferred",MenuAction::Preferred);
         action(Tr(L"Manage apps",L"管理应用"),L"reel:manage",MenuAction::Manage);
         if(apps.size()<8)action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets);break;

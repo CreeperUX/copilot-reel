@@ -48,6 +48,8 @@ std::wstring Identify(const AppTarget& app, bool dark) {
     if (has(L"chatgpt") || has(L"codex") || has(L"chat.openai.com"))
         return dark ? L"chatgpt-dark" : L"chatgpt-light";
     if (has(L"claude") || has(L"anthropic")) return L"claude";
+    if (has(L"gemini")) return L"gemini";
+    if (has(L"perplexity")) return L"perplexity";
     if (has(L"antigravity")) return L"antigravity";
     if (has(L"zcode")) return L"zcode";
     if (has(L"deepseek harness") || has(L"deepseek-harness") || has(L"dsh")) return L"dsh";
@@ -136,7 +138,7 @@ void PreloadOfficialIconAssets() {
     winrt::com_ptr<IWICImagingFactory> factory;
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
         IID_PPV_ARGS(factory.put()));
-    for (const auto* name : {L"chatgpt-light", L"chatgpt-dark", L"claude", L"antigravity",
+    for (const auto* name : {L"chatgpt-light", L"chatgpt-dark", L"claude", L"gemini", L"perplexity", L"antigravity",
                              L"zcode", L"dsh", L"vscode", L"jetbrains", L"toolbox", L"junie",
                              L"intellij-idea", L"pycharm", L"webstorm", L"rider", L"clion",
                              L"goland", L"phpstorm", L"rubymine", L"rustrover", L"air"}) {
@@ -177,7 +179,17 @@ bool DrawOfficialIcon(ID2D1RenderTarget* target, const AppTarget& app,
                     D2D1_SVG_ATTRIBUTE_POD_TYPE_VIEWBOX, &viewBox, sizeof(viewBox))) &&
                     viewBox.width > 0 && viewBox.height > 0) {
                     item.svgSize = D2D1::SizeF(viewBox.width, viewBox.height);
-                    item.svg->SetViewportSize(item.svgSize);
+                    // The cached document uses viewBox units as its viewport.
+                    // Vendor dimensions such as 270pt otherwise resolve to
+                    // 360px and overflow the caller's 28-DIP optical box.
+                    // Normalize only this in-memory document, not source files.
+                    const D2D1_SVG_LENGTH intrinsicWidth{viewBox.width,D2D1_SVG_LENGTH_UNITS_NUMBER};
+                    const D2D1_SVG_LENGTH intrinsicHeight{viewBox.height,D2D1_SVG_LENGTH_UNITS_NUMBER};
+                    if(FAILED(root->SetAttributeValue(L"width",D2D1_SVG_ATTRIBUTE_POD_TYPE_LENGTH,
+                        &intrinsicWidth,sizeof(intrinsicWidth))) ||
+                       FAILED(root->SetAttributeValue(L"height",D2D1_SVG_ATTRIBUTE_POD_TYPE_LENGTH,
+                        &intrinsicHeight,sizeof(intrinsicHeight))) ||
+                       FAILED(item.svg->SetViewportSize(item.svgSize))) item.svg=nullptr;
                 } else {
                     item.svg = nullptr;
                 }

@@ -47,6 +47,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--exe', type=Path, default=ROOT / 'build/Release/CopilotReel.exe')
 parser.add_argument('--probe', type=Path, default=ROOT / 'build/Release/launch_probe.exe')
 parser.add_argument('--output', type=Path, help='New, empty QA directory under artifacts/qa.')
+parser.add_argument('--native-picker-only', action='store_true', help='Run only unresolved website and native picker regression checks.')
 parser.add_argument('--follow-up-only', action='store_true',
                     help='Run only animation interruption and missing-preset editor regression checks.')
 args = parser.parse_args()
@@ -85,6 +86,12 @@ u.SendInput.argtypes = [w.UINT, ctypes.POINTER(Input), ctypes.c_int]
 u.SendInput.restype = w.UINT
 u.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
 u.PostMessageW.restype = w.BOOL
+u.GetClassNameW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
+u.GetDlgCtrlID.argtypes = [w.HWND]
+u.SendMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
+u.SendMessageW.restype = w.LPARAM
+ChildCallback = ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
+u.EnumChildWindows.argtypes = [w.HWND, ChildCallback, w.LPARAM]
 
 assert not u.FindWindowW('CopilotReel.Controller', 'Copilot Reel'), 'Another controller is resident; exit it before testing.'
 original_pointer = w.POINT()
@@ -105,7 +112,7 @@ for index in range(3):
                f'Arguments=--radial-probe={index}\r\nWorkingDirectory=\r\n')
 (data / 'apps.ini').write_text(config, encoding='utf-16', newline='')
 
-results, placements, draw_samples, interruption_samples = [], [], [], []
+results, placements, draw_samples, interruption_samples, hover_samples = [], [], [], [], []
 process = None
 hwnd = None
 opening_pattern = re.compile(
@@ -291,6 +298,39 @@ def preference_language():
     return path.read_text(encoding='utf-16') if path.exists() else ''
 
 
+def center_label(expected, source):
+    text, values = diagnostics()
+    assert 'centerLabel' in values, 'Fresh diagnostics must expose the actual center label.'
+    assert values['centerLabel'] == expected, (source, expected, values['centerLabel'], text)
+    hover_samples.append({'source': source, 'label': values['centerLabel']})
+
+
+def hub_hover_labels(language='en-US', keyboard=False):
+    before_count = count()
+    labels = (['Language', 'Appearance', 'Preferred agent', 'Manage apps', 'Add app']
+              if language == 'en-US' else ['语言', '外观', '首选应用', '管理应用', '添加应用'])
+    for index, label in enumerate(labels):
+        move(sector(index, 5))
+        center_label(label, f'{language} hub pointer sector {index}')
+    x, y = center()
+    for direction in (-1, 1):
+        move((x + direction * 48 * scale(), y - 112 * scale()))
+        center_label(labels[0], f'{language} language arrow {direction}')
+    move(center())
+    center_label('', f'{language} idle hub')
+    if keyboard:
+        for index, label in enumerate(labels):
+            key(0x09)
+            center_label(label, f'{language} hub keyboard sector {index}')
+        key(0x09)
+        center_label(labels[0], f'{language} keyboard wrap')
+        move(center())
+        center_label('', f'{language} idle after keyboard navigation')
+    assert count() == before_count, 'Hovering or selecting with Tab must never launch an app.'
+    results.append(f'{language} hub hover names, language arrows, and idle center are correct'
+                   + (' with keyboard selection and wrap' if keyboard else ''))
+
+
 def stable_draws(state):
     before, _ = diagnostics()
     time.sleep(.35)
@@ -380,12 +420,112 @@ def missing_preset_editor():
     return True
 
 
+def native_picker_short_tap():
+    # An explicit website is permitted in the wheel but must never become a
+    # browser fallback for the preferred short-tap action.
+    before_count = count()
+    website_config = ('[CopilotReel]\r\nVersion=1\r\nCount=1\r\n[App0]\r\n'
+                      'Name=Unresolved web agent\r\nKind=shell\r\n'
+                      'Target=https://example.invalid/agent\r\nArguments=\r\nWorkingDirectory=\r\n')
+    (data / 'apps.ini').write_text(website_config, encoding='utf-16', newline='')
+    before_apps = (data / 'apps.ini').read_bytes()
+    offset = start()
+    command('--tap')
+    picker = wait(lambda: u.FindWindowW('#32770', 'Choose a local application'), 'native local-application picker')
+    picker_process = w.DWORD()
+    u.GetWindowThreadProcessId(picker, ctypes.byref(picker_process))
+    assert picker_process.value == process.pid, 'Only the fixture-owned app picker may be cancelled.'
+    assert not u.IsWindowVisible(hwnd), 'A rejected website short tap must not open the wheel.'
+    assert u.PostMessageW(picker, 0x0010, 0, 0)
+    wait(lambda: not u.FindWindowW('#32770', 'Choose a local application'), 'native picker cancellation')
+    time.sleep(.1)
+    assert count() == before_count, 'A website short tap or picker cancellation must not launch any target.'
+    assert 'Launching target:' not in read_log()[offset:], 'The website must never reach Shell activation.'
+    assert (data / 'apps.ini').read_bytes() == before_apps, 'Cancelling native selection must preserve the website profile.'
+    assert diagnostics()[1]['editorOpen'] == '0', 'Cancelling must release the modal-editor guard.'
+
+    command('--tap')
+    picker = wait(lambda: u.FindWindowW('#32770', 'Choose a local application'), 'second local-application picker')
+    picker_process = w.DWORD()
+    u.GetWindowThreadProcessId(picker, ctypes.byref(picker_process))
+    assert picker_process.value == process.pid
+    filename_text = ctypes.create_unicode_buffer(str(probe))
+    filename_attempts = []
+    observed_controls = []
+
+    def fill_native_filename():
+        nonlocal picker
+        current_picker = u.FindWindowW('#32770', 'Choose a local application')
+        if not current_picker:
+            return False
+        current_process = w.DWORD()
+        u.GetWindowThreadProcessId(current_picker, ctypes.byref(current_process))
+        assert current_process.value == process.pid, 'The live filename dialog must remain owned by this fixture.'
+        picker = current_picker
+        filename_controls = []
+
+        @ChildCallback
+        def filename_control(child, unused):
+            class_name = ctypes.create_unicode_buffer(128)
+            u.GetClassNameW(child, class_name, len(class_name))
+            observed_controls.append({'class': class_name.value, 'id': u.GetDlgCtrlID(child)})
+            if class_name.value == 'Edit' and u.GetDlgCtrlID(child) == 1148:
+                filename_controls.append(child)
+            return True
+
+        u.EnumChildWindows(picker, filename_control, 0)
+        if len(filename_controls) != 1:
+            filename_attempts.append({'matches': len(filename_controls)})
+            return False
+        filename = filename_controls[0]
+        set_result = u.SendMessageW(filename, 0x000c, 0, ctypes.addressof(filename_text))
+        # GetWindowText cannot read another process's edit contents. WM_GETTEXT
+        # marshals the requested native text instead and proves the field is ready.
+        actual = ctypes.create_unicode_buffer(32768)
+        get_result = u.SendMessageW(filename, 0x000d, len(actual), ctypes.addressof(actual))
+        filename_attempts.append({'set': set_result, 'get': get_result, 'text': actual.value})
+        return actual.value == str(probe)
+
+    try:
+        wait(fill_native_filename, 'ready native filename control containing the probe path')
+    finally:
+        (data / 'picker-filename.json').write_text(json.dumps({'attempts': filename_attempts[-3:], 'controls': observed_controls[-80:]}), encoding='utf-8')
+    assert u.GetDlgItem(picker, 1), 'The native Open action must be present.'
+    if u.GetForegroundWindow() == picker:
+        key(0x0d, expected_window=picker)
+    else:
+        # An unrelated desktop window can retain foreground ownership. Invoke
+        # this verified dialog's own Open command rather than typing elsewhere.
+        assert u.PostMessageW(picker, 0x0111, 1, 0)
+    wait(lambda: not u.FindWindowW('#32770', 'Choose a local application'), 'native picker acceptance')
+    wait(lambda: count() == before_count + 1, 'launching the selected harmless native probe')
+    time.sleep(.1)
+    assert count() == before_count + 1, 'Accepting one local executable must dispatch exactly once.'
+    saved_profile = (data / 'apps.ini').read_text(encoding='utf-16')
+    assert 'https://example.invalid/agent' not in saved_profile and encoded(str(probe)) in saved_profile
+    assert 'Name=Unresolved web agent' in saved_profile, 'Choosing a local target retains the user display name.'
+    backups = list(data.glob('apps.ini.before-local-apps.*.bak'))
+    assert backups and any(path.read_bytes() == before_apps for path in backups), 'Target replacement must preserve the original profile backup.'
+    assert re.findall(r'Launching target: ([^\r\n]+)', read_log())[-1] == 'Unresolved web agent'
+    assert (data / 'launch-probe-args.txt').read_text(encoding='utf-8').splitlines()[-1] == ''
+    command('--tap')
+    wait(lambda: count() == before_count + 2, 'subsequent direct native short tap')
+    time.sleep(.1)
+    assert count() == before_count + 2 and not u.FindWindowW('#32770', 'Choose a local application')
+    results.append('native picker acceptance saves the real executable, preserves its backup, launches once, and enables subsequent direct short tap')
+    stop()
+    results.append('an unresolved website short tap opens only the native application picker; cancellation preserves data and never launches a browser')
+
+
 class FollowUpComplete(Exception):
     pass
 
 
 failure = None
 try:
+    if args.native_picker_only:
+        native_picker_short_tap()
+        raise FollowUpComplete()
     start()
     assert 'Configuration validation failed' not in read_log()
     assert not u.IsWindowVisible(hwnd)
@@ -460,12 +600,21 @@ try:
     open_at(argument='--preview')
     page(0, 'Copilot Reel')
     stable_draws('visible and stationary')
+    move(sector(0, 4))
+    center_label('Probe 0', 'main app hover')
+    move(sector(3, 4))
+    center_label('Apps and settings', 'main combined entry hover')
+    move(center())
+    center_label('', 'idle main')
     choose(3, 4)
     assert page(3, 'Settings')['menuEntries'] == '5'
     assert not u.FindWindowW('CopilotReel.Osd', None), 'The combined hub must remain in the reel.'
+    hub_hover_labels(keyboard=True)
+    move(sector(0, 5))
     key(ord('D'))
     wait(lambda: 'Language=zh-CN' in preference_language(), 'Chinese language preference')
     page(3, '\u8bbe\u7f6e')
+    hub_hover_labels('zh-CN')
     key(ord('A'))
     wait(lambda: 'Language=en-US' in preference_language(), 'English language preference')
     page(3, 'Settings')
@@ -587,6 +736,8 @@ try:
     assert count() == 8
     stop()
     results.append('orphan cold and duplicate release events do not open UI or launch an agent')
+
+    native_picker_short_tap()
     assert 'Window error:' not in read_log() and 'Unexpected window error' not in read_log()
 except FollowUpComplete:
     pass
@@ -595,6 +746,13 @@ except Exception:
 finally:
     try:
         if process is not None and process.poll() is None:
+            picker = u.FindWindowW('#32770', 'Choose a local application')
+            if picker:
+                picker_process = w.DWORD()
+                u.GetWindowThreadProcessId(picker, ctypes.byref(picker_process))
+                if picker_process.value == process.pid:
+                    u.PostMessageW(picker, 0x0010, 0, 0)
+                    time.sleep(.1)
             editor = u.FindWindowW('CopilotReel.Osd', None)
             if editor:
                 u.PostMessageW(editor, 0x0010, 0, 0)
@@ -608,7 +766,7 @@ finally:
             process.wait(timeout=5)
     u.SetCursorPos(original_pointer.x, original_pointer.y)
     report = {'passed': results, 'placements': placements, 'drawSamples': draw_samples,
-              'interruptionSamples': interruption_samples, 'error': failure,
+              'interruptionSamples': interruption_samples, 'hoverSamples': hover_samples, 'error': failure,
               'binary': str(exe), 'evidenceDirectory': str(data),
               'note': 'Hardware Copilot delivery, mixed-refresh monitors and physical high-refresh pacing require separate validation.'}
     (data / 'results.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

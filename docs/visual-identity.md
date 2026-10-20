@@ -1,10 +1,10 @@
-# Visual identity v0.7: Quiet Soft Orbit
+# Visual identity v0.8: Quiet Soft Orbit
 
 Soft Orbit uses a restrained native surface, original application marks, and a single `+` entry for both app management and settings. The interface conveys language and appearance through the icons themselves. This specification describes implementation intent; runtime evidence belongs in [validation](validation.md).
 
 ## Deliverables
 
-- [English VI PDF](../output/pdf/copilot-reel-vi-v0.7.pdf): 12 reviewed pages.
+- [English VI PDF](../output/pdf/copilot-reel-vi-v0.8.pdf): 12 reviewed pages.
 - [SVG masters](../design/vi/vectors): Main, unified hub, language, preferred-agent, management, and presets in light/dark variants.
 - [Design tokens](../design/vi/tokens.json): geometry, timing, input, materials, and artwork policy.
 - [Style specification](../design/vi/stylesheet.typ): editable English Typst table; the Python scene generator produces the PDF.
@@ -14,7 +14,7 @@ PDF and PNG previews are review artifacts, never application UI or animation fra
 
 ## Center and visual copy
 
-Main has an empty idle center. Submenus show a small neutral back chevron. A selected real application may show its name on one line so similar marks remain distinguishable. Structural commands do not add center headings, captions, or helper text. There is no Settings title, Language title, Choose an app prompt, release instruction, A/D hint, or Move here instruction in the wheel.
+Main has an empty idle center. Idle submenus show a small neutral back chevron. Hovering an application or command shows one concise functional name at the center, such as Language, Appearance, Preferred agent, Manage apps, or Add app. The label replaces the back chevron while an item is selected. It uses 14 DIP text in a 132 DIP single-line region, with ellipsis for unusually long user names. No generic page heading, second-line explanation, Choose an app prompt, release instruction, A/D hint, or Move here instruction is drawn.
 
 Semantic action names remain in the model and development documentation. The minimal visual surface does not establish complete accessibility support; keyboard discoverability and assistive-technology semantics require their own validation.
 
@@ -30,13 +30,15 @@ Semantic action names remain in the model and development documentation. The min
 | App actions | Edit, set preferred, remove when allowed |
 | Focused native editor | Name, actual launch target, and optional launch details |
 
+A short Copilot tap opens the preferred local application. Defaults favor installed software; recognized legacy website defaults resolve to a verified native target. If that target is unavailable, show a native application picker for an executable or shortcut rather than opening a website. Missing presets still use the focused editor. Explicit web entries remain a deliberate wheel action.
+
 The hub order is stable: language at twelve o'clock, then appearance, preferred agent, management, and adding clockwise. The separate Main Settings gear is removed. The center or Esc returns one level; the menu remains open for deliberate adjustment after the initial hold ends.
 
 ## State in the icon
 
-The language tile displays `EN` or `CN`. Small chevrons flank this tile at local canvas coordinates `(144, 80)` and `(240, 80)`. The visible chevrons are 5 x 10 DIP strokes without filled backgrounds; their hit regions are 40 x 40 DIP. A/D supplies the same language adjustment. English is the default; Simplified Chinese is a native option. The update applies after persistence succeeds and never renames user app data.
+The language tile displays `EN` or `ZH`. Small chevrons flank this tile at local canvas coordinates `(144, 80)` and `(240, 80)`. The visible chevrons are 5 x 10 DIP strokes without filled backgrounds; their hit regions are 40 x 40 DIP. A/D supplies the same language adjustment. English is the default; Simplified Chinese is a native option. The update applies after persistence succeeds and never renames user app data.
 
-Appearance uses a sun for the system light theme and a moon for the system dark theme. Activating it opens Windows color settings. It does not introduce a separate application theme override. Neither language nor appearance has a caption beneath its tile.
+Appearance uses a sun for the system light theme and a moon for the system dark theme. Activating it opens Windows color settings. It does not introduce a separate application theme override. Neither language nor appearance has a caption beneath its tile. Hovering either tile shows its functional name at the center. The language-arrow hit regions also select Language, preserving that label while the pointer moves to an arrow.
 
 ## Geometry and official artwork
 
@@ -49,11 +51,11 @@ Appearance uses a sun for the system light theme and a moon for the system dark 
 | Official artwork bounds | 28 DIP |
 | Internal command stroke | 1.75 DIP; 2 DIP in high contrast |
 | Selection seat | 60 x 64 DIP |
-| Selected app name / language monogram | 14 / 16 DIP |
+| Hover name / language monogram | 14 / 16 DIP |
 | Interior pointer offset | 0 DIP |
 | Opening / closing | 160 / 120 ms |
 
-Use official marks with their original proportions and recognizable colors. The launcher standardizes the container, optical bounds, spacing, selection, and preferred marker. Unknown identities use a neutral app glyph. EN/CN and sun/moon are native status glyphs, not replacements for vendor branding.
+Use official marks with their original proportions and recognizable colors. The launcher standardizes the container, optical bounds, spacing, selection, and preferred marker. Unknown identities use a neutral app glyph. EN/ZH and sun/moon are native status glyphs, not replacements for vendor branding.
 
 The system accent is local to selected tiles and the preferred marker. The base outline is neutral. No blue perimeter sweep, decorative connector, rotating mark, or circular reveal remains.
 

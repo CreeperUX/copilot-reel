@@ -388,6 +388,11 @@ struct OrbitRenderer::Impl {
             bounds, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
     }
 
+    std::wstring CenterLabel() const {
+        if(awaitCenter || selection<0 || static_cast<size_t>(selection)>=items.size())return {};
+        return items[selection].name;
+    }
+
     void DrawOnce() {
         auto interop = surface.as<ICompositionDrawingSurfaceInterop>();
         POINT offset{};
@@ -454,11 +459,13 @@ struct OrbitRenderer::Impl {
                     ? appearance.surface.r * 0.2126f + appearance.surface.g * 0.7152f + appearance.surface.b * 0.0722f < 0.5f
                     : appearance.dark;
                 if (items[i].target == L"reel:language") {
-                    Text(context.get(), CurrentLanguage() == Language::English ? L"EN" : L"CN",
+                    Text(context.get(), CurrentLanguage() == Language::English ? L"EN" : L"ZH",
                         iconBounds, labelFormat.get(), brush.get());
                 } else if (!DrawMenuSymbol(context.get(), items[i], iconBounds, brush.get(),
                     appearance.highContrast ? 2.0f : 1.75f, appearance.dark) &&
-                    !DrawOfficialIcon(context.get(), items[i], iconBounds, artworkOnDarkSurface)) {
+                    !DrawOfficialIcon(context.get(), items[i], iconBounds, artworkOnDarkSurface) &&
+                    !DrawSystemIcon(context.get(), items[i], iconBounds, brush.get(),
+                        appearance.highContrast ? 2.0f : 1.75f)) {
                     // Missing artwork gets a neutral application glyph, never
                     // an invented approximation of a vendor's official mark.
                     DrawAppSymbol(context.get(), AppTarget{}, iconBounds, brush.get(),
@@ -489,13 +496,12 @@ struct OrbitRenderer::Impl {
                     context->DrawLine({x + direction * 2.5f, y}, {x - direction * 2.5f, y + 5}, brush.get(), 1.6f);
                 }
             }
-            const bool selected = !awaitCenter && selection >= 0 && static_cast<size_t>(selection) < items.size();
-            const bool selectedApplication = selected && !items[selection].target.starts_with(L"reel:");
-            if (selectedApplication) {
-                // Only application identity belongs in the center. Commands and
-                // page state are expressed by their icons without captions.
+            const auto label = CenterLabel();
+            if (!label.empty()) {
+                // Hover and keyboard selection identify the current action or
+                // application with one name. Idle state has no instructional copy.
                 brush->SetColor(Color(appearance.foreground));
-                Text(context.get(), items[selection].name,
+                Text(context.get(), label,
                     D2D1::RectF(kCenterDip - 66, kCenterDip - 13, kCenterDip + 66, kCenterDip + 13),
                     centerFormat.get(), brush.get());
             } else if (isSubmenu && !awaitCenter) {
@@ -672,7 +678,8 @@ void OrbitRenderer::Hide() {
 }
 bool OrbitRenderer::UsesBackdrop() const { return impl_->backdrop; }
 std::wstring OrbitRenderer::Diagnostics() const {
-    return L"Windows Composition + Direct2D/DirectWrite; icons=official-artwork-unified-tiles; " + impl_->backdropStatus +
+    return L"centerLabel=" + (impl_->visible ? impl_->CenterLabel() : L"") +
+        L"\r\nWindows Composition + Direct2D/DirectWrite; icons=official-artwork-unified-tiles; " + impl_->backdropStatus +
         L"; center gate=" + (impl_->awaitCenter ? L"waiting" : L"armed") +
         L"; menu=" + impl_->menuTitle + L"; submenu=" + (impl_->isSubmenu ? L"yes" : L"no") +
         L"; animation=settle-160ms/exit-120ms; center=quiet; perimeter=neutral; anchor=" + std::to_wstring(impl_->anchorX) +

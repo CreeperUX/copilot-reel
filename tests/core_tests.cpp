@@ -1,5 +1,6 @@
 #include "core.h"
 #include "radial_menu.h"
+#include "local_launch.h"
 #include <iostream>
 #include <limits>
 #include <cstdlib>
@@ -193,6 +194,56 @@ int main() {
         if(offset+5<presets.size())Check(page[navigation].action==MenuAction::Next,"nonfinal preset pages provide a next route");
     }
     Check(BuildMenu(MenuPage::Presets,noApps,noApps).size()==1,"empty preset catalog still permits a custom app");
+
+    const auto shell=[](const wchar_t* target,const wchar_t* name=L"Saved display name",
+                        const wchar_t* arguments=L"",const wchar_t* directory=L"") {
+        return AppTarget{name,TargetKind::Shell,target,arguments,directory};
+    };
+    Check(IsLocalApplication(shell(L"notepad.exe")),"local executable alias is eligible for short tap");
+    Check(IsLocalApplication(shell(L"C:\\Apps\\Agent.EXE")),"absolute executable path is eligible case-insensitively");
+    Check(IsLocalApplication(shell(L"C:\\Apps\\Agent.lnk")),"local application shortcut is eligible for short tap");
+    Check(IsLocalApplication(shell(L"ms-settings:colors")),"Windows Settings remains a local application route");
+    Check(IsLocalApplication(shell(L"shell:AppsFolder\\Vendor.Agent_family!App")),"packaged AppsFolder activation remains local");
+    Check(IsLocalApplication({L"Native agent",TargetKind::Aumid,L"Vendor.Agent_family!App",L"",L""}),
+        "packaged app activation is eligible for short tap");
+    Check(!IsLocalApplication({L"Invalid package",TargetKind::Aumid,L"",L"",L""}) &&
+        !IsLocalApplication({L"Invalid package",TargetKind::Aumid,L"Vendor.Agent_family",L"",L""}),
+        "empty and incomplete packaged application identities are rejected");
+    Check(!IsLocalApplication({L"Invalid package",TargetKind::Aumid,L"https://example.invalid/Agent!App",L"",L""}),
+        "a URL cannot masquerade as a packaged application identity");
+    for(const auto target:{L"https://chatgpt.com",L"https://example.invalid/agent.exe",L"http://localhost:3000",
+                           L"https://example.invalid/agent.lnk",L"agent://open",L"agent:fake.exe",L"notepad.exe?query=1",L"notepad.exe\n"})
+        Check(!IsLocalApplication(shell(target)),"website, protocol, and malformed targets cannot be dispatched by short tap");
+    const std::vector<AppTarget> nativePresets={
+        {L"ChatGPT / Codex",TargetKind::Aumid,L"OpenAI.Codex_family!App",L"",L""},
+        {L"Claude Desktop",TargetKind::Shell,L"C:\\Apps\\Claude.lnk",L"",L""}
+    };
+    for(const auto url:{L"https://chatgpt.com",L"https://chatgpt.com/",L"HTTPS://CHAT.OPENAI.COM/"}) {
+        const auto replacement=LocalReplacement(shell(url,L"My renamed ChatGPT"),nativePresets);
+        Check(replacement && replacement->name==L"My renamed ChatGPT" && replacement->kind==TargetKind::Aumid &&
+            replacement->target==nativePresets[0].target,"exact legacy OpenAI websites migrate to installed identity while preserving their display name");
+    }
+    const auto claudeReplacement=LocalReplacement(shell(L"https://claude.ai/",L"Research assistant"),nativePresets);
+    Check(claudeReplacement && claudeReplacement->name==L"Research assistant" &&
+        claudeReplacement->target==nativePresets[1].target,"exact legacy Claude website migrates to the discovered shortcut");
+    for(const auto target:{L"https://chatgpt.com/chat/123",L"https://chatgpt.com?mode=1",L"https://chatgpt.com.evil.invalid",
+                           L"http://chatgpt.com",L"chatgpt://open",L"C:\\Users\\Someone\\chatgpt.url",L"https://example.invalid"})
+        Check(!LocalReplacement(shell(target),nativePresets),"unrelated URLs, paths, and protocols are never silently migrated");
+    Check(!LocalReplacement(shell(L"https://chatgpt.com",L"Saved",L"--profile=test"),nativePresets),
+        "legacy targets with arguments are not silently repurposed");
+    Check(!LocalReplacement(shell(L"https://claude.ai",L"Saved",L"",L"C:\\Work"),nativePresets),
+        "legacy targets with a working directory are not silently repurposed");
+    Check(!LocalReplacement(shell(L"https://chatgpt.com"),{}),"a missing installed application never becomes a guessed target");
+    const std::vector<AppTarget> unresolvedPresets={{L"ChatGPT / Codex",TargetKind::Shell,L"",L"",L""},
+        {L"Claude Desktop",TargetKind::Shell,L"https://claude.ai",L"",L""}};
+    Check(!LocalReplacement(shell(L"https://chatgpt.com"),unresolvedPresets) &&
+        !LocalReplacement(shell(L"https://claude.ai"),unresolvedPresets),"unresolved or website presets cannot substitute for a native installation");
+    const auto localProfile=shell(L"C:\\Apps\\Agent.exe",L"Existing native agent",L"--profile=test",L"C:\\Work");
+    const auto unchanged=LocalReplacement(localProfile,nativePresets);
+    Check(unchanged && unchanged->name==localProfile.name && unchanged->target==localProfile.target &&
+        unchanged->arguments==localProfile.arguments && unchanged->workingDirectory==localProfile.workingDirectory,
+        "existing local launch profiles remain unchanged");
+
     SetLanguage(Language::SimplifiedChinese);
     const auto translatedSettings=BuildMenu(MenuPage::Settings,noApps,presets);
     Check(translatedSettings[0].visual.name!=settings[0].visual.name &&
@@ -204,5 +255,5 @@ int main() {
     Check(ParseUri(L"copilot-reel://?state=Tap")==Command::Tap, "protocol tap");
     Check(ParseUri(L"copilot-reel://?state=Up&target=evil.exe")==Command::Invalid, "URI cannot inject target");
     Check(ParseUri(L"https://example.com/?state=Down")==Command::Invalid, "foreign URI rejected");
-    std::cout << "Core tests passed: 1-12 sectors, pointer-centered placement at 96-384 DPI and negative monitor origins, cold gesture ordering, exactly-once release, radial routes, preset pagination, and protocol validation.\n";
+    std::cout << "Core tests passed: 1-12 sectors, pointer-centered placement at 96-384 DPI and negative monitor origins, cold gesture ordering, exactly-once release, radial routes, preset pagination, protocol validation, and native short-tap policy.\n";
 }

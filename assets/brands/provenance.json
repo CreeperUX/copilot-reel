@@ -82,6 +82,15 @@
       "processing": "Unmodified upstream file"
     },
     {
+      "file": "gemini.png",
+      "sha256": "5e7cfecaa53f4f65a313fe89b0f389548126544a78fad8489510c70ae641a4a1",
+      "owner": "Google",
+      "source": "https://www.gstatic.com/lamda/images/gemini_sparkle_4g_512_lt_f94943af3be039176192d.png",
+      "sourcePage": "https://gemini.google.com/",
+      "retrievedOn": "2026-10-20",
+      "processing": "Unmodified vendor-hosted artwork linked from the official application homepage"
+    },
+    {
       "file": "goland.png",
       "sha256": "aeee2142d0f9c6834067ec826af650eb67647cb2fc86c41a575d718704e46040",
       "owner": "JetBrains",
@@ -136,6 +145,24 @@
       "owner": "JetBrains",
       "source": "https://raw.githubusercontent.com/JetBrains/logos/3a800f11772b4d3d883d6f61f9cc8120e13a9ce0/web/junie/junie.svg",
       "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "perplexity.png",
+      "sha256": "0f310164224f649803cf1ae586cd1d881a718e899a86716b5ebf7b878f5be29c",
+      "owner": "Perplexity",
+      "source": "https://www.perplexity.ai/favicon.png",
+      "sourcePage": "https://www.perplexity.ai/",
+      "retrievedOn": "2026-10-20",
+      "processing": "Unmodified vendor-hosted artwork linked from the official application homepage"
+    },
+    {
+      "file": "perplexity.svg",
+      "sha256": "00180a688c194d684a69b247769cdf24a7720712256dbe0f334f97e8a15821e4",
+      "owner": "Perplexity",
+      "source": "https://www.perplexity.ai/favicon.svg",
+      "sourcePage": "https://www.perplexity.ai/",
+      "retrievedOn": "2026-10-20",
+      "processing": "Unmodified vendor-hosted artwork linked from the official application homepage"
     },
     {
       "file": "phpstorm.png",

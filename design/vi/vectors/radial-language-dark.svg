@@ -38,6 +38,6 @@
 </g>
 <path d="M-45.5 -117 L-50.5 -112 L-45.5 -107" fill="none" stroke="#F3F5F8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
 <path d="M45.5 -117 L50.5 -112 L45.5 -107" fill="none" stroke="#F3F5F8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
-<path d="M3 -6 L-3 0 L3 6" fill="none" stroke="#BEC5CE" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="1"/>
+<text x="0" y="4.76" fill="#F3F5F8" font-family="Segoe UI Variable,Segoe UI,Microsoft YaHei,sans-serif" font-size="14" font-weight="600" text-anchor="middle">Language</text>
 </g>
 </svg>
