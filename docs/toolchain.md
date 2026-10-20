@@ -25,3 +25,9 @@ Every archive has a pinned SHA-256. VSIX hashes are copied from the official Mic
 To update the compiler or SDK, update the exact URLs and hashes in the manifest together with the toolset paths in `tools/build.ps1`. Keep the compiler, C++ library headers, and runtime libraries within one compatible toolset. Downloaded development tools remain third-party dependencies and are not included in the application's package.
 
 Validation on this development machine: all seven pinned archives passed SHA-256 checks; all extraction paths were exercised; the compiler, resource compiler, and MSIX packager have valid Microsoft Authenticode signatures. The current application and core tests have been built using this toolchain.
+
+## Planned performance tooling
+
+Release currently uses optimization without a matching application PDB. The [testing plan](testing-plan.md) proposes an optimized symbol-bearing Profile/RelWithDebInfo configuration, preserving Release optimization/link settings and retaining the exact EXE, PDB, tokens and source identity for each measurement. This configuration is not implemented yet; an unoptimized Debug binary is not a substitute for Release performance evidence.
+
+The reviewed external tools are the Windows WPR recorder, Microsoft WPA/WPAExporter, and the local `trace-code-bridge` 0.2.0 repository with its .NET 8 / TraceEvent 3.2.8 ETL adapter. The bridge handles offline CPU locations only. Its current checkout has no commit to pin, so future runs must record a content-hashed snapshot and tool versions. These tools are development dependencies and are not bundled into the Copilot Reel application.

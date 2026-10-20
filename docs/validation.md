@@ -20,6 +20,18 @@ Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed applica
 
 The captures use `COPILOT_REEL_VISUAL_OVERRIDE` and an isolated data directory. Window captures contain only the application HWND: the frosted captures do not show the DWM host backdrop or the desktop beneath, and `contrast=on` exercises the high-contrast code path with the current (non-high-contrast) system colors.
 
+## Testing infrastructure review on 2026-10-20
+
+The [appearance and performance testing plan](testing-plan.md) records the current coverage gaps, proposed injection seams, acceptance matrix, ETW/WPR reuse and implementation order. It is a plan, not additional application acceptance evidence.
+
+- The local `trace-code-bridge` 0.2.0 suite passed all 79 tests. Its existing .NET ETL exporter CLI loaded successfully. Synthetic `correlate` and `review` runs completed; their input explicitly identifies itself as artificial.
+- Readiness evidence is retained in `artifacts/qa/trace-bridge-reuse-20261020-200016/`. No new WPR session, target instrumentation, GPU/frame measurement or system-setting change was performed.
+- The reusable WPR workflow provides bounded recording, unique instances, phase markers and ETL checks. Its existing graphics profile and WPA views require Copilot-specific names, paths and process filters; no Copilot recorder wrapper has been implemented yet.
+- The bridge exports CPU samples and stacks, not GPU or DWM frame metrics. Its tests and synthetic correlation do not establish Copilot rendering correctness or performance.
+- Existing visual overrides are partial environment isolation: high-contrast colors and accents remain host-dependent, and a forced material can override the earlier energy-saver result. Deterministic policy/rendering tests and real-system integration remain distinct planned work.
+
+The proposed unified Copilot confirmation model is also pending. Current 0.3.4 still changes to click/preview navigation after entering a submenu. The testing plan lists the required cross-input and page-transition regressions without marking them passed.
+
 ## Verified in v0.3.3
 
 | Area | Evidence and scope |

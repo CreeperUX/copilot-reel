@@ -51,6 +51,7 @@ The package declares `com.microsoft.windows.copilotkeyprovider` and the private 
 - [Architecture](docs/architecture.md)
 - [Provider research and evidence](docs/research.md)
 - [Validation status](docs/validation.md)
+- [Appearance and performance testing plan](docs/testing-plan.md)
 - [Configuration and isolated tests](docs/configuration.md)
 - [Native toolchain](docs/toolchain.md)
 - [Soft Orbit visual identity](docs/visual-identity.md)

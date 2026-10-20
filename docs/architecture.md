@@ -119,6 +119,8 @@ There is no pre-rendered frame sequence or fixed 60 Hz application timer. The co
 
 Performance validation must cover 60/144/240 Hz, mixed refresh rates, different DPI, integrated graphics, and battery/energy saver. Measure first-visible latency, selection latency, frame-time variation, and static/hidden CPU/GPU activity against an application-closed baseline. See [validation](validation.md).
 
+The [testing plan](testing-plan.md) defines the proposed separation between system-state collection, pure appearance/material policy, injected native rendering and real ETW/WPR measurements. These seams are not yet implemented: current forced high contrast still reads live system colors, and the frosted override can supersede the earlier energy-saver decision. The plan also records a proposed shared Confirm/Back/Adjust interaction contract; it does not describe current menu-open Copilot behavior as already fixed.
+
 ## Language and identity
 
 Text uses the `Segoe UI Variable Text` family (static `Segoe UI` where it is missing) with the interface locale, and one custom DirectWrite fallback maps Han and CJK punctuation to `Microsoft YaHei UI`, so Chinese names never mix Traditional or Japanese faces within a word. `AppDisplayName` localizes recognized Notepad and Windows Settings default labels at the rendering boundary, including historical Chinese names. It does not mutate `AppTarget`, launch fields, or persisted preferences. Both languages pass the same stored target and name into icon identification; menu action labels are localized separately from their invariant `reel:` action IDs. The editor also presents built-in labels in its current language, and its initialization guard prevents presentation changes from becoming edits.
