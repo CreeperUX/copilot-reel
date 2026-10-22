@@ -6,16 +6,30 @@ the still set of tools/capture-v034.py (Main, a selected vendor tile, the hub, t
 edge-gated hold) and, from 0.3.5, the actions page of an app with its reorder chevrons: in the middle of
 the reel, and at the first and the last position, where one chevron is blocked. The reorder happens in
 the variant's own isolated data directory and is undone before the gated capture. Every image that also
-exists in the reference folder is compared pixel by pixel.
+exists in the reference folder is compared pixel by pixel, in every channel; a channel may differ by
+--tolerance levels (default 2, because at rest some anti-aliased edges render up to two levels away
+from 0.3.4), and every changed pixel is counted either way.
 
-The run fails (exit status 1, "passed": false in results.json) when a compared image differs or has
-another size, when a state that existed in 0.3.4 has no reference image, or when a variant cannot be
-captured. New 0.3.5 states without a reference are recorded as new.
+Last, each variant opens Add from the hub once agent discovery has completed and captures every Add page
+with the pointer on the plate center, so nothing is selected. Add lists what is installed on this machine,
+so these captures go to the evidence directory, not the output folder, and have no reference. Instead
+each tile is cropped at its slot and checked against the artwork identities in the diagnostics
+(menuArt): tiles with different identities must differ in at least one pixel, and tiles with equal
+identities must be identical, on one page and across all Add pages of the variant. Frosted tiles are translucent over an acrylic plate that shows what lies
+behind the window, so on frosted variants the result is recorded but not asserted.
+
+The run fails (exit status 1, "passed": false in results.json) when a compared image differs beyond the
+tolerance or has another size, when a state that existed in 0.3.4 has no reference image, when Add
+tiles contradict their identities, or when a variant cannot be captured. New 0.3.5 states without a
+reference are recorded as new.
 
     uv run --python 3.14 --with pillow python tools/capture-seam.py [--reference output/runtime/v0.3.4]
-        [--output output/runtime/v0.3.5] [--variants dark-solid,light-solid,...]
+        [--output output/runtime/vX.Y.Z] [--variants dark-solid,light-solid,...] [--tolerance 2]
+
+Without --output the stills go to the run's evidence directory under artifacts/qa.
 """
 import argparse
+import itertools
 import json
 import math
 import subprocess
@@ -44,6 +58,14 @@ VARIANTS = [('dark-solid', 'theme=dark;material=solid'), ('light-solid', 'theme=
             ('dark-150', 'theme=dark;material=solid;dpi=144')]
 # States captured by 0.3.4: each must have a reference image.
 REFERENCE_STATES = ('main', 'main-claude', 'hub', 'hub-appearance', 'hub-language', 'gated')
+# Every animation has come to rest: captured after 0.35 s, a seat that had just travelled still differed
+# from its resting pixels by up to three levels, while 1 s and 3 s captures are identical.
+SETTLE_SECONDS = 1.0
+ADD_APP, ADD_TITLE, NEXT = 'Add app', 'Add an agent', 'Next'
+# A square inside the 40 DIP tile, clear of its neighbours and of the 48 DIP seat.
+TILE_CROP_DIP = 36
+# The tile check looks within one device pixel of the computed slot, absorbing a rounding tie at the snap.
+SHIFTS = [(dx, dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
 
 
 def slot(reel, index, count, radius=seam.SECTOR_RADIUS_DIP):
@@ -67,7 +89,7 @@ def write_profiles(directory):
 
 def still(reel, output, variant, name, label):
     reel.sync()
-    time.sleep(.35)
+    time.sleep(SETTLE_SECONDS)
     values = reel.diagnostics()
     assert values.get('centerLabel') == label, (variant, name, label, values.get('centerLabel'))
     path = output / f'{variant}-{name}.png'
@@ -86,6 +108,33 @@ def move_until(reel, vk, adjust):
             return
         reel.key(vk)
     assert reel.diagnostics().get('adjust') == adjust, (adjust, reel.diagnostics().get('adjust'))
+
+
+def capture_add(reel, evidence, variant, opened):
+    """Open Add from the hub once discovery has completed and capture every page with nothing selected.
+
+    opened is the run.log offset from before the hub opened. Returns one record per page."""
+    discovered = int(seam.wait(lambda: seam.DISCOVERY.search(reel.read_log()[opened:]), 'agent discovery',
+                               timeout=30).group(1))
+    reel.choose(ADD_APP)
+    pages = []
+    while True:
+        # The plate center selects nothing, so no seat or hover name covers a tile.
+        reel.pointer(reel.center_point())
+        values = reel.diagnostics()
+        assert values.page == seam.PAGE_PRESETS and values.title == ADD_TITLE and values.selected == -1, values.text
+        assert len(values.art) == len(values.names), ('menuArt must name every entry', values.names, values.art)
+        state, path = still(reel, evidence, variant, f'add-{len(pages) + 1}', '')
+        after = reel.diagnostics()
+        assert (after.names, after.art) == (values.names, values.art), 'The Add page changed during its capture.'
+        pages.append({'state': state, 'path': path, 'width': reel.rect()[2] - reel.rect()[0],
+                      'presetOffset': int(values['presetOffset']),
+                      'addCatalog': int(values['addCatalog']), 'addInstalled': int(values['addInstalled']),
+                      'discovered': discovered, 'names': values.names, 'art': values.art})
+        if NEXT not in values.names:
+            return pages
+        assert len(pages) < 10, 'Add page paging must end.'
+        reel.choose(NEXT)
 
 
 def capture_variant(variant, override, output, data):
@@ -153,63 +202,158 @@ def capture_variant(variant, override, output, data):
         shots.append(still(reel, output, variant, 'gated', ''))
         reel.send_command(seam.CANCEL)
         wait_visible(reel, False)
+        # Add, machine-dependent: opening the hub starts discovery, and Add is read once it has completed.
+        opened = len(reel.read_log())
+        reel.pointer(anchor)
+        reel.send_command(seam.SETTINGS, anchor)
+        wait_visible(reel, True)
+        pages = capture_add(reel, data, variant, opened)
+        reel.send_command(seam.CANCEL)
+        wait_visible(reel, False)
         reel.stop()
     finally:
         reel.shutdown()
-    return shots
+    return shots, pages
 
 
-def compare(path, reference):
+def tile_box(index, count, scale, shift=(0, 0)):
+    """The TILE_CROP_DIP square of slot index of count, in device pixels of a capture.
+
+    Slot i sits at i*360/count degrees clockwise from 12 o'clock on the 112 DIP orbit. The renderer
+    snaps each tile's offset to whole device pixels (SnapDip, std::round), so its center rounds the same way."""
+    angle = -math.pi / 2 + 2 * math.pi * index / count
+    x = math.floor((seam.CENTER_DIP + seam.SECTOR_RADIUS_DIP * math.cos(angle)) * scale + .5) + shift[0]
+    y = math.floor((seam.CENTER_DIP + seam.SECTOR_RADIUS_DIP * math.sin(angle)) * scale + .5) + shift[1]
+    half = round(TILE_CROP_DIP * scale / 2)
+    return x - half, y - half, x + half, y + half
+
+
+def check_tiles(page, asserted, seen):
+    """Tile pixels against artwork identities on one Add page and against every identity seen on the
+    earlier Add pages of the variant (the renderer keeps cached artwork across pages, so a shared cache
+    entry can pair tiles on different pages); returns (record, violations) and adds this page to seen."""
+    image = Image.open(page['path']).convert('RGBA')
+    assert image.size == (page['width'], page['width']), f'The capture must be the window: {image.size} != {page["width"]}'
+    scale = image.width / seam.CANVAS_DIP
+    names, art = page['names'], page['art']
+    crops = [{shift: image.crop(tile_box(i, len(art), scale, shift)) for shift in SHIFTS} for i in range(len(art))]
+    pairs, violations = [], []
+    for i, j in itertools.combinations(range(len(art)), 2):
+        same = art[i] == art[j]
+        counts = [differing_pixels(crops[i][(0, 0)], crops[j][shift])[0] for shift in SHIFTS]
+        fewest = min(counts)
+        ok = fewest == 0 if same else fewest > 0
+        pairs.append({'tiles': [i, j], 'sameIdentity': same, 'differingPixels': counts[SHIFTS.index((0, 0))],
+                      'fewestDifferingPixels': fewest, 'ok': ok})
+        if not ok:
+            violations.append(f'tiles {i} {names[i]!r} and {j} {names[j]!r} share {art[i]!r} but differ in {fewest} pixels'
+                              if same else
+                              f'tiles {i} {names[i]!r} ({art[i]}) and {j} {names[j]!r} ({art[j]}) have different '
+                              'identities but identical pixels')
+    earlier = []
+    for i in range(len(art)):
+        for identity, (name, state, crop) in seen.items():
+            same = art[i] == identity
+            fewest = min(differing_pixels(crop, crops[i][shift])[0] for shift in SHIFTS)
+            ok = fewest == 0 if same else fewest > 0
+            earlier.append({'tile': i, 'earlierState': state, 'earlierName': name, 'sameIdentity': same,
+                            'fewestDifferingPixels': fewest, 'ok': ok})
+            if not ok:
+                violations.append(f'tile {i} {names[i]!r} ({art[i]}) and {name!r} on {state} ({identity}) '
+                                  + (f'share an identity but differ in {fewest} pixels' if same else
+                                     'have different identities but identical pixels'))
+    for i in range(len(art)):
+        seen.setdefault(art[i], (names[i], page['state'], crops[i][(0, 0)]))
+    record = {'state': page['state'], 'file': str(page['path'].relative_to(ROOT)), 'presetOffset': page['presetOffset'],
+              'addCatalog': page['addCatalog'], 'addInstalled': page['addInstalled'], 'discovered': page['discovered'],
+              'names': names, 'art': art, 'scale': scale, 'cropPixels': 2 * round(TILE_CROP_DIP * scale / 2),
+              'tileCheck': 'asserted' if asserted else 'recorded only: frosted tiles show the acrylic plate behind them',
+              'violations': violations, 'pairs': pairs, 'earlierPages': earlier}
+    return record, violations if asserted else []
+
+
+def differing_pixels(a, b, tolerance=0):
+    """(count, box) of pixels where some channel of two RGBA images of one size differs by more than tolerance.
+
+    getbbox() of an RGBA difference looks at alpha only, so it would miss every color change between
+    two opaque pixels; the per-pixel maximum over all channels does not."""
+    channels = ImageChops.difference(a, b).split()
+    mask = channels[0]
+    for channel in channels[1:]:
+        mask = ImageChops.lighter(mask, channel)
+    return sum(mask.histogram()[tolerance + 1:]), mask.point(lambda v: 255 if v > tolerance else 0).getbbox()
+
+
+def compare(path, reference, tolerance):
     if not reference.exists():
         return None
     a, b = Image.open(path).convert('RGBA'), Image.open(reference).convert('RGBA')
     if a.size != b.size:
         return {'reference': str(reference.relative_to(ROOT)), 'sizeMismatch': [a.size, b.size]}
-    box = ImageChops.difference(a, b).getbbox()
-    differing = 0
-    if box:
-        differing = sum(1 for p in ImageChops.difference(a, b).getdata() if p != (0, 0, 0, 0))
-    return {'reference': str(reference.relative_to(ROOT)), 'differingPixels': differing, 'box': box}
+    changed, _ = differing_pixels(a, b)
+    differing, box = differing_pixels(a, b, tolerance)
+    return {'reference': str(reference.relative_to(ROOT)), 'differingPixels': differing, 'box': box,
+            'changedPixels': changed, 'tolerance': tolerance}
+
+
+def describe(comparison):
+    if comparison is None:
+        return 'new'
+    if 'sizeMismatch' in comparison:
+        return 'size'
+    within = comparison['changedPixels'] - comparison['differingPixels']
+    return str(comparison['differingPixels']) + (f' ({within} within tolerance)' if within else '')
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--reference', default='output/runtime/v0.3.4')
-    parser.add_argument('--output', default='output/runtime/v0.3.5')
+    # Routine runs write to the evidence directory; publishing a version's stills to
+    # output/runtime/vX.Y.Z is an explicit choice, so tracked evidence is never rewritten by accident.
+    parser.add_argument('--output', default='')
     parser.add_argument('--variants', default=','.join(v for v, _ in VARIANTS))
+    # At rest, anti-aliased edges render up to two 8-bit levels away from 0.3.4: two contrast tile corners
+    # since 0.3.5, and the light hub-language seat, whose 0.3.4 reference was captured just short of rest.
+    # A seat captured mid-travel differs by up to 18 levels. 0 makes every change fail.
+    parser.add_argument('--tolerance', type=int, default=2,
+                        help='Channel levels a reference pixel may differ by (default 2; 0 is exact).')
     args = parser.parse_args()
     for path in (EXE, PROBE, CAPTURE):
         assert path.exists(), f'{path} is missing; run tools/build.ps1 and tools/build-capture-tool.ps1.'
     seam.assert_no_input_injection(Path(__file__), ROOT / 'tests/reel_seam.py')
     seam.assert_seam_binary(EXE)
-    output = (ROOT / args.output).resolve()
-    output.mkdir(parents=True, exist_ok=True)
     reference = (ROOT / args.reference).resolve()
     stamp = time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:6]
     data = ROOT / 'artifacts/qa' / f'capture-seam-{stamp}'
-    data.mkdir(parents=True)
+    output = (ROOT / args.output).resolve() if args.output else data
+    output.mkdir(parents=True, exist_ok=True)
+    data.mkdir(parents=True, exist_ok=True)
     wanted = [name for name in args.variants.split(',') if name]
     unknown = sorted(set(wanted) - {v for v, _ in VARIANTS})
     if unknown:
         raise SystemExit('Unknown variants: ' + ', '.join(unknown))
     evidence = {'captureMethod': 'Windows.Graphics.Capture.CreateForWindow of a seam test instance',
                 'inputInjection': 'none', 'binarySha256': seam.sha256(EXE), 'reference': str(reference),
-                'referenceStates': list(REFERENCE_STATES), 'variants': []}
+                'referenceStates': list(REFERENCE_STATES), 'referenceTolerance': args.tolerance,
+                'addPageCheck': f'{TILE_CROP_DIP} DIP crop per slot, within one device pixel; different menuArt '
+                                'identities must differ in a pixel, equal ones must be identical; machine-dependent, '
+                                'never compared with a reference',
+                'variants': []}
     failures = []
     for variant, override in VARIANTS:
         if variant not in wanted:
             continue
-        entry = {'variant': variant, 'override': override, 'shots': []}
+        entry = {'variant': variant, 'override': override, 'shots': [], 'addPages': []}
         evidence['variants'].append(entry)
         try:
-            shots = capture_variant(variant, override, output, data)
+            shots, pages = capture_variant(variant, override, output, data)
         except Exception as error:
             entry['error'] = f'{type(error).__name__}: {error}'
             failures.append(f'{variant}: capture failed: {entry["error"]}')
             print(variant, 'capture failed:', entry['error'])
             continue
         for state, path in shots:
-            comparison = compare(path, reference / path.name)
+            comparison = compare(path, reference / path.name, args.tolerance)
             entry['shots'].append({'state': state, 'file': str(path.relative_to(ROOT)), 'comparison': comparison})
             if comparison is None:
                 if state in REFERENCE_STATES:
@@ -217,9 +361,25 @@ def main():
             elif 'sizeMismatch' in comparison:
                 failures.append(f'{path.name}: size {comparison["sizeMismatch"][0]} != reference {comparison["sizeMismatch"][1]}')
             elif comparison['differingPixels']:
-                failures.append(f'{path.name}: {comparison["differingPixels"]} differing pixels in {comparison["box"]}')
-        print(variant, ', '.join(f"{s['state']}={'new' if s['comparison'] is None else s['comparison'].get('differingPixels', 'size')}"
-                                 for s in entry['shots']))
+                failures.append(f'{path.name}: {comparison["differingPixels"]} pixels differ by more than '
+                                f'{args.tolerance} levels in {comparison["box"]}')
+        # Machine-dependent and outside the reference comparison: the tiles are checked against their identities.
+        seen = {}
+        for page in pages:
+            try:
+                record, violations = check_tiles(page, 'material=frosted' not in override, seen)
+            except AssertionError as error:
+                entry['addPages'].append({'state': page['state'], 'error': str(error), 'violations': [str(error)],
+                                          'art': page['art'], 'tileCheck': 'failed'})
+                failures.append(f'{page["path"].name}: {error}')
+                continue
+            entry['addPages'].append(record)
+            failures += [f'{page["path"].name}: {violation}' for violation in violations]
+        print(variant, ', '.join(f"{s['state']}={describe(s['comparison'])}" for s in entry['shots']))
+        print(variant, ', '.join(f"{p['state']}={len(p['art'])} tiles, "
+                                 f"{len(set(p['art']))} identities, {len(p['violations'])} violations"
+                                 + {'asserted': '', 'failed': ' (check failed)'}.get(p['tileCheck'], ' (not asserted)')
+                                 for p in entry['addPages']))
     evidence['passed'] = not failures
     evidence['failures'] = failures
     (data / 'results.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')

@@ -70,8 +70,13 @@ foreach($asset in Get-ChildItem -LiteralPath (Join-Path $projectRoot 'assets\bra
     $assetCount++
 }
 $registration=& (Join-Path $PSScriptRoot 'verify-registration.ps1') | ConvertFrom-Json
+# A reinstall turns the startup task on again; restore a task that was off (0 or 1) before it.
+if($startupBefore -in 0,1) {
+    $restore=& (Join-Path $PSScriptRoot 'open-installed.ps1') -View DisableStartupTask
+    Wait-Process -Id $restore.ProcessId -Timeout 15 -ErrorAction SilentlyContinue
+}
 $startupAfter=Get-StartupTaskState
-if($startupBefore -eq 1) {Write-Warning 'The startup task was turned off before this reinstall. Turn Copilot Reel off again under Settings > Apps > Startup.'}
+if($startupBefore -in 0,1 -and $startupAfter -notin 0,1) {Write-Warning 'The startup task was off before this reinstall and could not be turned off again. Turn Copilot Reel off under Settings > Apps > Startup.'}
 $receipt=[pscustomobject]@{
     Version=$current.Version.ToString();Package=$current.PackageFullName;Backup=$backup
     ExecutableSha256=$installedHash;VerifiedAssetFiles=$assetCount

@@ -33,6 +33,11 @@ CANVAS_DIP = 384
 CENTER_DIP = 192
 SECTOR_RADIUS_DIP = 112
 DEAD_ZONE_DIP = 44
+# A hold the edge clamp leaves within the plate selects by direction at once; one left outside
+# it enters the DEAD_ZONE_DIP center first (src/core.h PlaceOrbit).
+PLATE_RADIUS_DIP = 168
+# A page selects nothing until the pointer leaves this square around where it opened (MovePointer).
+OPENING_SLOP_DIP = 4
 # Adjust chevrons of slot 0 (hub language, an app's place in the reel): 40x40 DIP boxes. On an
 # app's actions page they exclude the square within 25 DIP of slot 0's centre, so a click on the
 # seat or the preferred badge confirms the tile; click the chevron centres to adjust.
@@ -289,6 +294,9 @@ class Diagnostics:
         self.values = dict(re.findall(r'^([^=\r\n]+)=([^\r\n]*)', text, re.MULTILINE))
         names = self.values.get('menuNames', '')
         self.names = names.split('|') if names else []
+        # Artwork identities in menuNames order, joined by TAB because an identity contains '|'.
+        art = self.values.get('menuArt', '')
+        self.art = art.split('\t') if art else []
 
     def __getitem__(self, key):
         return self.values[key]

@@ -91,6 +91,13 @@ int main() {
     const auto corner=PlaceOrbit(-3840,-2160,{-3840,-2160,0,0},768,88);
     Check(corner.left==-3840 && corner.top==-2160 && corner.awaitingCenter,
         "a corner shifts the full canvas minimally and guards selection until center entry");
+    // The reel gates at its plate radius (168 of 192 DIP): a clamp that leaves the pointer on the
+    // plate arms at once; only a pointer left outside it enters the center first.
+    const auto onPlate=PlaceOrbit(1920-60,500,{0,0,1920,1080},768,168.0*2);
+    Check(onPlate.left==1920-768 && std::abs(onPlate.centerX-(1920-384))<=.5 && !onPlate.awaitingCenter,
+        "a pointer the edge clamp leaves on the plate selects without re-entering the center");
+    const auto offPlate=PlaceOrbit(1920-4,500,{0,0,1920,1080},768,168.0*2);
+    Check(offPlate.awaitingCenter,"a pointer the clamp leaves outside the plate enters the center first");
     const auto smallShift=PlaceOrbit(180,400,{0,0,1920,1080},384,44);
     Check(smallShift.centerX==192 && smallShift.centerY==400 && !smallShift.awaitingCenter,
         "small boundary correction within the cancel zone does not add an unnecessary gate");
@@ -394,6 +401,13 @@ int main() {
     Check(ParseUri(L"copilot-reel://?state=Up")==Command::HoldStop, "protocol up");
     Check(ParseUri(L"copilot-reel://?state=Tap")==Command::Tap, "protocol tap");
     Check(ParseUri(L"copilot-reel://?state=Up&target=evil.exe")==Command::Invalid, "URI cannot inject target");
+    Check(ParseUri(L"copilot-reel://?state=Tap&inputTimestamp=123456789")==Command::Tap &&
+          ParseUri(L"copilot-reel://?state=Down&inputTimestamp=1")==Command::HoldStart &&
+          ParseUri(L"copilot-reel://?state=Up&inputTimestamp=42")==Command::HoldStop, "the Shell's input timestamp is accepted");
+    for(const auto* uri:{L"copilot-reel://?state=Tap&inputTimestamp=",L"copilot-reel://?state=Tap&inputTimestamp=12x",
+                         L"copilot-reel://?state=Tap&inputTimestamp=1&target=evil.exe",L"copilot-reel://?state=Tap&",
+                         L"copilot-reel://?state=Tapx&inputTimestamp=1",L"copilot-reel://?state=Tap&inputTimestamp=123456789012345678901"})
+        Check(ParseUri(uri)==Command::Invalid, "anything beyond a numeric input timestamp is rejected");
     Check(ParseUri(L"https://example.com/?state=Down")==Command::Invalid, "foreign URI rejected");
     std::cout << "Core tests passed: 1-12 sectors, pointer-centered placement at 96-384 DPI and negative monitor origins, cold gesture ordering, exactly-once release, radial routes, preset pagination, protocol validation, and native short-tap policy.\n";
 }

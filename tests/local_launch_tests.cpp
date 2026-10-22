@@ -39,7 +39,7 @@ struct Fixture {
         Check(CreateDirectoryW(path.c_str(),nullptr)!=FALSE,"owned fixture subdirectory created");
         folders.push_back(path);return path;
     }
-    std::wstring Link(const wchar_t* name,const std::wstring& destination) {
+    std::wstring Link(const wchar_t* name,const std::wstring& destination,const wchar_t* arguments=nullptr) {
         const auto path=Path(name);
 
         winrt::com_ptr<IShellLinkW> link;
@@ -50,6 +50,7 @@ struct Fixture {
             const HRESULT result=link->SetIDList(item);CoTaskMemFree(item);
             winrt::check_hresult(result);
         } else winrt::check_hresult(link->SetPath(destination.c_str()));
+        if(arguments)winrt::check_hresult(link->SetArguments(arguments));
         winrt::check_hresult(link.as<IPersistFile>()->Save(path.c_str(),TRUE));
         files.push_back(path);return path;
     }
@@ -198,6 +199,25 @@ int main() {
         Check(reel::IsVerifiedLocalApplication(Target(notepad)),"existing absolute executable accepted");
         Check(!reel::IsVerifiedLocalApplication(Target(fixture.Path(L"missing.exe"))),"missing absolute executable rejected");
         Check(!reel::IsVerifiedLocalApplication(Target(fixture.Folder(L"folder.exe"))),"a folder named like an executable is rejected");
+        // A network executable is never touched: a slow or disconnected share must not stall the reel.
+        Check(reel::IsVerifiedLocalApplication(Target(L"\\\\copilot-reel-no-such-host\\share\\agent.exe")),"a UNC executable counts as present without a lookup");
+        Check(reel::IsVerifiedLocalApplication(Target(L"\\\\.\\UNC\\copilot-reel-no-such-host\\share\\agent.exe")),
+            "a UNC executable behind the device prefix counts as present without a lookup");
+        for(const auto* path:{L"\\\\server\\share\\a.exe",L"//server/share/a.exe",L"\\\\?\\UNC\\server\\share\\a.exe",
+                              L"\\\\.\\unc\\server\\share\\a.exe"})
+            Check(reel::IsNetworkPath(path),"UNC paths are network paths, with or without a device prefix");
+        for(const auto* path:{L"C:\\Windows\\notepad.exe",L"\\\\?\\C:\\Windows\\notepad.exe",L"\\\\.\\C:\\Windows\\notepad.exe",
+                              L"notepad.exe",L"\\\\?\\Volume{0}\\a.exe",L"\\\\.\\UNCX\\a.exe",L""})
+            Check(!reel::IsNetworkPath(path),"local drives, bare names and volume paths are not network paths");
+        // A shortcut's own arguments decide whether a running window may stand in for it.
+        const auto profiled=fixture.Link(L"profiled.lnk",notepad,L"--profile-directory=\"Work\"");
+        Check(reel::ShortcutArguments(profiled)==L"--profile-directory=\"Work\"" && reel::ShortcutArguments(native).empty(),
+            "shortcut arguments are read without resolving the link");
+        // ShellLink may flatten a chain while saving; when it keeps it, the inner link's arguments count.
+        const auto outer=fixture.Link(L"outer.lnk",profiled);
+        if(reel::LaunchIdentity(reel::ShortcutTarget(outer)).ends_with(L".lnk"))
+            Check(reel::ShortcutArguments(outer)==L"--profile-directory=\"Work\"","arguments of a linked shortcut are found along the chain");
+        Check(reel::ShortcutArguments(fixture.Path(L"missing.lnk")).empty(),"an unreadable shortcut has no arguments");
         Check(reel::IsVerifiedLocalApplication(Target(L"absent-tool.exe")),"bare names keep the search-path policy");
 
         // One identity per launched application, independent of arguments and links.

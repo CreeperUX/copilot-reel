@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('Menu','Reel','Background')][string]$View='Menu')
+param([ValidateSet('Menu','Reel','Background','DisableStartupTask')][string]$View='Menu')
 $ErrorActionPreference='Stop'
 $package=Get-AppxPackage -Name 'CopilotReel.Desktop'
 if(-not $package) {throw 'Copilot Reel is not installed for the current user.'}
@@ -27,7 +27,8 @@ public static class ReelActivation {
 }
 '@
 }
-$argument=@{Menu='--settings';Reel='--preview';Background='--background'}[$View]
+# DisableStartupTask turns the packaged startup task off (it needs the package identity) and exits.
+$argument=@{Menu='--settings';Reel='--preview';Background='--background';DisableStartupTask='--disable-startup-task'}[$View]
 $appId=$package.PackageFamilyName+'!App'
 $appProcessId=[ReelActivation]::Open($appId,$argument)
 [pscustomobject]@{Version=$package.Version.ToString();View=$View;ProcessId=$appProcessId}

@@ -32,6 +32,12 @@ void PrepareArtwork(const std::vector<AppTarget>& items, float dpi);
 // Cheap; any reel:* target is Command. Uses the analysis cached by PrepareArtwork.
 ArtworkClass ClassifyArtwork(const AppTarget& item);
 
+// What DrawArtwork paints for the item: its command, vendor or Shell artwork source, or
+// the generic glyph. Two items draw the same pixels exactly when this is equal, so it is
+// the cache identity. A target is not: catalog entries that still need a target all have
+// an empty one and are told apart by their catalog name.
+std::wstring ArtworkIdentity(const AppTarget& item, bool dark);
+
 // `tile` is the item's 40 x 40 DIP rectangle (corner radius vi::kTileRadius).
 // Plated artwork fills and is clipped to the tile shape; other classes draw centered
 // at their optical size, and the caller draws the neutral tile beneath them.

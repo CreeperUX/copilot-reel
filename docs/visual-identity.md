@@ -106,7 +106,7 @@ Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one
 
 ## Placement and edge gating
 
-The pointer is the plate center whenever the 384 DIP canvas fits (offset 0). At an edge or corner the whole canvas moves inward by the minimum needed; order, angles, radius and icon size are unchanged. Only if that leaves the pointer outside the 44 DIP center zone does selection wait for center entry (gated ring and dot; early release cancels). No cursor warp, no line from the pointer.
+The pointer is the plate center whenever the 384 DIP canvas fits (offset 0). At an edge or corner the whole canvas moves inward by the minimum needed; order, angles, radius and icon size are unchanged. Only if that leaves the pointer outside the plate (168 DIP) does selection wait for center entry (gated ring and dot; early release cancels); on the plate it selects by direction as soon as the pointer moves. No cursor warp, no line from the pointer.
 
 ## Motion (Full tier, Windows.UI.Composition)
 
@@ -148,7 +148,7 @@ Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, s
 - 100, 150 and 200% through the DPI override.
 - Motion strips: open, cancel, seat appear and travel, drill-in with handoff, drill-out, commit (visual evidence, not frame-rate measurement).
 - EN/ZH: idle Main pixel-identical; the hub differs only inside the monogram.
-- Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections match the 0.3.4 captures with 0 differing pixels in five variants; App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam).
+- Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections stay within 2 levels per channel of the 0.3.4 captures in five variants (0.3.5.1, every channel compared; the 0.3.5 report of 0 differing pixels compared only alpha); App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam).
 - Placement: zero interior offset, minimal clamp at eight edge and corner positions, no cursor warp.
 
 Not verified:
