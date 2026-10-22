@@ -26,21 +26,39 @@ For the fast path, `SHGetPropertyStoreForWindow` obtains the HWND property store
 
 A named mutex and resident controller window provide single-instance behavior. Subsequent processes use a bounded `WM_COPYDATA` handoff and exit after acceptance. Handoff and provider messages enter the same state machine. Synthetic tests have passed; Shell discovery of the hidden receiver and physical-key timing remain separate checks.
 
+A packaged startup task (`CopilotReelStartup`) starts the reel in the background at sign-in, so the fast path exists before the first key press; users can turn it off under Settings > Apps > Startup. When the reel is not running anyway, the Shell does not use the documented URI: `twinui.pcshell.dll` activates the provider's AUMID with no arguments for the first press. Every start without arguments is therefore classified before the single-instance handoff, so a forwarded start gets the same meaning as a cold one:
+
+| Start without arguments | Result |
+| --- | --- |
+| Startup task (`AppInstance::GetActivatedEventArgs`) | Background; a second process exits at once if the reel is already resident |
+| Copilot key still down (F23, or Win+Shift) | Open the reel as a hold; its release is polled, because no release message follows |
+| Reel already resident, key up | A deliberate start, for example from Start: the click-to-select preview |
+| Reel not resident, packaged, key up | The key's tap: the preferred agent |
+| Unpackaged build | The click-to-select preview; the Shell's fallback never starts an unpackaged build |
+
+A cold start from Start while the reel is not running cannot be told apart from the Shell's fallback, so it also opens the preferred agent. With the startup task this only happens after the user exits the reel; the tray and `Ctrl+Alt+R` open the preview. `run.log` records the activation kind, the parent process, whether the reel was resident and the key state of every such start.
+
+After a fast-path tap the Shell toggles the provider window: it sends `SC_MINIMIZE` when the reel has the foreground and calls `SwitchToThisWindow` otherwise. The reel ignores minimize, maximize and restore commands; a window minimized by an older build is restored to its new placement before it is shown.
+
+Every input means Confirm, Back or Adjust in every page; only the closed reel gives the Copilot key its two shortcuts. `ReelInput` in `src/core.h` routes the Copilot events and is unit-tested on its own.
+
 | State and event | Result |
 | --- | --- |
-| Idle + hold start | Capture the cursor anchor, start a gesture, show |
-| AwaitCenter + pointer movement | Keep selection empty until entry into the visible center |
-| Armed + pointer movement | Calculate direction from the visible center; center means cancellation |
-| Visible + hold stop | Resolve once, start exit, and activate the selected target once |
-| Idle + hold stop | Ignore without launching |
-| Duplicate hold start | Preserve the current gesture |
-| Short Copilot tap | Launch the preferred local application; request a local target if unavailable |
-| Explicit preview command | Show click-to-select preview |
-| Release on a menu command | Enter the radial submenu and retain a deliberate adjustment context |
-| Right-click or Esc | Return one menu level; cancel at Main |
+| Closed + hold start | Capture the cursor anchor, open Main, select by direction |
+| Closed + short tap | Launch the preferred local application; request a local target if unavailable |
+| Closed + hold stop | Ignore without launching (the tombstone still orders later events) |
+| Opening hold + pointer movement | Keep selection empty until entry into the visible center when the edge clamped the plate; then select by direction, the center cancels |
+| Opening hold + hold stop | Resolve once: launch the item, or enter its submenu; nothing selected closes |
+| Opening hold + tap or duplicate hold start | Ignore; the gesture is preserved |
+| Persistent menu (a submenu, or a preview) + tap | Confirm the selected item; with nothing selected nothing happens |
+| Persistent menu + hold start, then stop | Resume direction selection around the same center without moving the plate; the release confirms |
+| Persistent menu + click, Return or Space | Confirm |
+| Persistent menu + center, Esc, Backspace or right-click | Return one level; close at Main |
+| Persistent menu + A/D, or a chevron beside slot 0 | Adjust slot 0: the language on the hub, an app's place in the reel on its actions page |
+| Focused editor or file picker open | Ignore every Copilot event |
 | Session lock/disconnect, display/power interruption | Cancel |
 
-Release is independent of animation completion. Gesture state owns deduplication and invalidates its generation when canceled. URI handoff packets include the producer process creation time and the pointer captured at its entry point. A release tombstone rejects a delayed older Down, including when Up initializes the resident first. Same-process HWND events use their receipt timestamp. Unit tests cover reordering; native tests cover cold Down, cold Tap, and orphan Up. The provider contract has no physical gesture sequence ID, so process timestamps cannot prove perfect ordering under every Shell scheduling race.
+A page that has just appeared ignores the cursor until it moves 4 DIP, so the release or click that opened it cannot also select the item beneath; an unmoved cursor never overrides a keyboard selection. A click counts only when its press began on the page now shown. Release is independent of animation completion. Gesture state owns deduplication and invalidates its generation when canceled. URI handoff packets include the producer process creation time and the pointer captured at its entry point. A release tombstone rejects a delayed older Down, including when Up initializes the resident first. Same-process HWND events use their receipt timestamp. Unit tests cover reordering; native tests cover cold Down, cold Tap, and orphan Up. The provider contract has no physical gesture sequence ID, so process timestamps cannot prove perfect ordering under every Shell scheduling race.
 
 ## Window and pointer
 
@@ -48,7 +66,7 @@ The held wheel is a non-activating tool popup. Opening a hold preserves keyboard
 
 Layout and hit testing share DIP geometry and the final visible center. The process is Per-Monitor DPI aware. Capture the cursor before initialization or placement. If the complete canvas fits, place its center exactly at that pointer with no offset or cursor warping. At a boundary, apply only the minimum complete-footprint translation into the monitor work area. Arm immediately for ordinary interior opening; require center entry only if clamping leaves the pointer outside the center zone. Tiny work areas scale the full circle uniformly, including text and targets. Mixed-DPI and small-display usability remain part of the validation matrix.
 
-Closing resolves input immediately, starts the short compositor exit, and uses a one-shot timer (the duration `BeginHide` returns) to hide the HWND and detach the visual tree. While closing, and whenever no gesture is active, the window returns `HTTRANSPARENT` and never acts on a click. Windows forwards `HTTRANSPARENT` only to windows of the same thread, so a click over the plate during the 83-133 ms exit still does not reach another application; true pass-through would need `WS_EX_LAYERED | WS_EX_TRANSPARENT`, which is not yet validated with the composition target. A new opening first finishes a pending exit, then places the window; an opening that cannot be placed leaves it hidden. Launches run on a short-lived COM STA worker, exactly once per commit, so Shell activation never holds the exit; failures return to the UI thread for the message box. Because the reel never activates, a launched process could not raise its window, and a running target's existing instance would only flash in the taskbar; before each launch the reel passes on its foreground right with `AllowSetForegroundWindow(ASFW_ANY)` and logs when it holds none. Forced cancellation and reduced motion can hide immediately. The message loop remains; lifecycle timers are not frame timers.
+Closing resolves input immediately, starts the short compositor exit, and uses a one-shot timer (the duration `BeginHide` returns) to hide the HWND and detach the visual tree. While closing, and whenever no gesture is active, the window returns `HTTRANSPARENT` and never acts on a click. Windows forwards `HTTRANSPARENT` only to windows of the same thread, so a click over the plate during the 83-133 ms exit still does not reach another application; true pass-through would need `WS_EX_LAYERED | WS_EX_TRANSPARENT`, which is not yet validated with the composition target. A new opening first finishes a pending exit, then places the window; an opening that cannot be placed leaves it hidden. Launches run on a short-lived COM STA worker, exactly once per commit, so Shell activation never holds the exit; failures return to the UI thread for the message box. A desktop executable target without arguments that is already running is brought forward instead of started again: the reel finds its most recent visible, unowned, uncloaked top-level window by executable path, restores it if minimized and sets the foreground while it still holds the right the Copilot key gave it (falling back to `SwitchToThisWindow`, as the Shell does). Starting such an app again is not equivalent: Cursor and other VS Code forks open an empty window for every start without arguments, and an Electron single-instance handoff only flashes the taskbar once the foreground right has lapsed. A shortcut target is always started, because the shortcut may carry its own arguments (a profile, a project). Packaged targets are activated again through `IApplicationActivationManager`, which hands the activation to the running instance. A launcher stub whose window belongs to another executable (Claude Science runs from `%USERPROFILE%\.claude-science\electron\<version>\`) is not matched and is started again. For every real launch the reel passes on its foreground right with `AllowSetForegroundWindow(ASFW_ANY)` and logs when it holds none. Forced cancellation and reduced motion can hide immediately. The message loop remains; lifecycle timers are not frame timers.
 
 ## Responsibility boundaries
 
@@ -129,7 +147,7 @@ One active profile supplies apps, ordering, favorite, and language. The applicat
 
 ## Configuration and activation
 
-The native editor supports 1-8 targets. Main contains configured apps and a single +. The + opens the combined hub, ordered Language, Appearance, Preferred agent, Manage apps, and Add app. Language displays EN/ZH at the top tile with flanking 40 DIP arrow hit regions, or A/D. Appearance uses sun/moon for the current system theme and opens ms-settings:colors. The center chevron or Esc returns one level. Missing presets open the focused native editor with an empty launch target. See [configuration and isolation](configuration.md).
+The native editor supports 1-8 targets. Main contains configured apps and a single +. The + opens the combined hub, ordered Language, Appearance, Preferred agent, Manage apps, and Add app. Language displays EN/ZH at the top tile with flanking 40 DIP arrow hit regions, or A/D. In Manage, an app's actions page shows the app itself at the top with the same chevrons: each step moves it one place earlier or later in the reel and saves at once, keeping the preferred agent; choosing the app returns to Manage. Add lists the installed agents that are not in the reel yet first (one tap adds them), then catalog entries that still need a target, then Custom. Discovery runs on a worker thread after startup and again whenever the hub or Manage opens; it runs synchronously only when seeding a first profile or migrating a website default needs it. Appearance uses sun/moon for the current system theme and opens ms-settings:colors. The center chevron or Esc returns one level. Missing presets open the focused native editor with an empty launch target. See [configuration and isolation](configuration.md).
 
 Short tap first resolves a usable local target. Installed-agent discovery can replace an exact legacy default website profile with the matching verified native application. Before automatically saving a migration, the existing configuration is backed up. Only known ChatGPT and Claude base-URL default profiles are eligible; arbitrary pages and custom URLs are not migrated. A missing native destination opens the native application picker, restricted to executable or shortcut files, instead of a browser. Selecting a web profile as preferred uses the same picker. A successful choice replaces that launch profile with the chosen local target. Explicit custom web targets remain available to wheel selection, but never serve as a short-tap fallback.
 

@@ -8,7 +8,8 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
 - The product UI defaults to English, with Simplified Chinese (`ZH`) as the option. Both languages share one profile: switching language never changes apps, order, icons or the preferred agent.
 - Every new release on this machine: back up the configuration, uninstall the old package, install the new one, and restore the configuration (`tools/install-development.ps1 -PackagePath <signed msix>`).
 - Commits use the existing author, `baka_sayaka <60833924+bakasayaka@users.noreply.github.com>`, passed per command. Never change git config. Commit or push only when the user asks.
-- `tests/run-radial.py` and the capture tools drive the pointer and need the installed instance to quit first. Restart it afterwards with `tools/open-installed.ps1 -View Background`.
+- Interaction and visual checks run through the test seam: `tests/run-reel-seam.py` and `tools/capture-seam.py` drive a separate unpackaged test instance through its own channel. They never move the pointer, send input or take the foreground, and the installed reel keeps running.
+- `tests/run-radial.py`, `tests/run-language-invariance.py` and `tools/capture-v034.py` are 0.3.4 evidence. They drive the real pointer, need the installed instance to quit first and must not run while the user works. Restart the installed reel afterwards with `tools/open-installed.ps1 -View Background`.
 - Settled decisions; do not reopen them without the user:
   - Soft Orbit with one plate.
   - A quiet center: one name on hover, no titles or captions.
@@ -17,7 +18,9 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
   - Official vendor artwork with one tile treatment.
   - The reel opens centered on the pointer and moves only as far as needed at screen edges, with center gating.
   - No line, perimeter-sweep or accent-stroke opening animation.
-  - A short tap opens the preferred local agent, never a web page; a hold opens the reel.
+  - While the reel is closed, a short tap opens the preferred local agent, never a web page; a hold opens the reel.
+  - Inside an open menu every input confirms, goes back or adjusts: a tap, or a new hold and its release, confirms the selected item (approved 2026-10-21).
+  - The reel starts in the background at sign-in through a packaged startup task (approved 2026-10-21).
 
 ## Sessions
 
@@ -61,7 +64,16 @@ Work, 2026-10-20:
   - the reel passes on its foreground right before a launch, so an already running agent should come forward instead of flashing in the taskbar;
   - an installed Claude Science shows its own mark instead of the Claude mark;
   - `tools/package.ps1` packages x64 again; the ARM64 change had made it refuse every x64 package.
-- Commits: `47a63e9`, `2bc3534`.
+- Commits: `47a63e9`, `2bc3534`, `d905a41`, `eac04da`.
+
+Work, 2026-10-21 to 2026-10-22 (0.3.5, released as the prerelease `v0.3.5-beta` and installed here):
+- Traced two field defects to the Shell (`twinui.pcshell.dll`): it starts a provider that is not running with no arguments, and minimizes the provider window after a fast-path tap. Argument-less starts are now classified (startup task, held key, ready resident, cold tap), a packaged startup task keeps the reel resident from sign-in, and the reel ignores minimize commands.
+- Implemented the unified Confirm / Back / Adjust model the user approved: `ReelInput` (`src/core.h`) and `RouteKey` (`src/radial_menu.h`).
+- Local agent discovery (`src/agent_catalog.h`, `src/presets.cpp`, `InstalledIdentity`): catalog rules by executable and install folder from Start-menu shortcuts, Uninstall keys and folder probes, on a worker thread. Add lists installed agents not yet in the reel first, one tap adds them.
+- Reorder from an app's actions page with per-side chevrons (`src/renderer.cpp`) or A/D.
+- A running desktop agent comes forward instead of starting again (`ActivateRunning`).
+- The test-input seam (`src/test_input.*`), `tests/run-reel-seam.py` and `tools/capture-seam.py`: interaction and pixel checks without touching the pointer, input, focus or the installed reel.
+- A five-lens review with adversarial verification; all confirmed findings fixed. Evidence and limits are in `docs/validation.md` under v0.3.5.
 
 ### Cursor: build, release and distribution
 
@@ -78,24 +90,16 @@ Work, 2026-10-20:
 
 ## Current state
 
-- 0.3.4.1 x64 is installed on this machine and runs in the background. The Copilot key is bound to it. GitHub carries the prereleases `v0.3.4-beta` and `v0.3.4.1-beta`, each with signed x64 and ARM64 packages.
+- 0.3.5.0 x64 is installed on this machine and runs in the background; its startup task is enabled. The Copilot key is bound to it. GitHub carries the prereleases `v0.3.4-beta`, `v0.3.4.1-beta` and `v0.3.5-beta`, each with signed x64 and ARM64 packages.
 - `main` tracks `origin/main` on GitHub. The ARM64 package has never run on ARM hardware.
-- Open validation items are listed under "Remaining checks and known limits" in `docs/validation.md`. For 0.3.4.1, a physical Copilot-key hold still has to show that a running agent comes forward; `run.log` records `Foreground grant unavailable` when it cannot.
-- VI v0.9 still draws the Claude Science preset with the Claude mark.
+- Open validation items are listed in `docs/validation.md`. For 0.3.5 the physical Copilot key still has to confirm: tap and hold inside an open menu, a cold start, the start after sign-in, and a running Cursor or DeepSeek Harness coming forward.
+- VI v0.9 is not regenerated for 0.3.5: it has no App actions scene (`design/vi/source/reel.py` still names `languageControl`) and draws the Claude Science preset with the Claude mark. The tokens already describe the reorder chevrons.
 
-## Next version: local agent discovery
+## Open product questions
 
-Planned: detect where local agent applications are installed, so users can add them and adjust the reel's launch order without browsing for executables.
-
-Starting points:
-- `AgentPresets()` in `src/presets.cpp` already finds some presets from Start-menu shortcuts, a few `%LOCALAPPDATA%\Programs` folders and package families. `Reload()` in `src/main.cpp` uses it to migrate legacy web profiles to local apps.
-- `BrandFromPath()` in `src/iconography.cpp` identifies vendor artwork from the launch target's file and install folder, never from the display name.
-- The native editor already reorders entries (Up/Down), and the preferred agent survives renaming and reordering (`src/behavior.h`).
-
-Gaps seen on this machine on 2026-10-20:
-- Cursor (`%LOCALAPPDATA%\Programs\cursor\Cursor.exe`) is neither a preset nor a known brand, so the reel shows its executable's Shell icon.
-- Cursor has two Start-menu shortcuts: `Programs\Cursor.lnk` and `Programs\Cursor\Cursor.lnk`.
-- DeepSeek Harness has no install-folder fallback in `AgentPresets()`, and its updater rewrote its shortcut today.
+- Start launch while the reel is not running: it cannot be told apart from the Shell's argument-less fallback, so it opens the preferred agent. A hidden provider entry (`AppListEntry="none"`) plus a visible Start entry with `--preview` would separate them; check first that the Settings Copilot-key picker still lists the provider.
+- Launcher stubs (Claude Science's window runs from `%USERPROFILE%\.claude-science\electron\<version>\`) are started again instead of brought forward; matching them needs a per-rule runtime image in `src/agent_catalog.h`.
+- Catalog rules confirmed only from vendor docs or third-party sources: Windsurf/Devin, Kiro, Trae, Trae CN, Antigravity, JetBrains Toolbox folder names. JetBrains Air and Junie are not discovered.
 
 ## This machine
 

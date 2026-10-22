@@ -82,7 +82,10 @@ struct OrbitRenderer::Impl {
     struct Page {
         PageModel model;
         wc::ContainerVisual root{nullptr};
-        wc::SpriteVisual seat{nullptr}, chevrons{nullptr}, chevronsActive{nullptr};
+        wc::SpriteVisual seat{nullptr};
+        // Slot-0 adjust chevrons, one sprite per side: 0 = earlier (left), 1 = later (right).
+        wc::SpriteVisual chevrons[2]{wc::SpriteVisual{nullptr}, wc::SpriteVisual{nullptr}},
+            chevronsActive[2]{wc::SpriteVisual{nullptr}, wc::SpriteVisual{nullptr}};
         wc::CompositionPropertySet seatProps{nullptr};
         std::vector<Item> items;
         int seatIndex = -1;      // item under the seat; -1 when the seat is hidden
@@ -738,20 +741,34 @@ struct OrbitRenderer::Impl {
             p.root.Children().InsertAtTop(item.root);
             p.items.push_back(std::move(item));
         }
-        if (model.languageControl && count) {
+        if (model.adjustControl && count) {
+            // Both glyphs stay in one raster at their usual device pixels; each side shows
+            // its half of it through its own clipped sprite, so the halves fade independently.
+            // The cut runs through the transparent middle, on a device-pixel boundary.
             const D2D1_POINT_2F top{kCenter, kCenter - vi::kOrbitRadius};
-            p.chevrons = MakeSprite(chevronBrush, chevronSize, top);
-            p.chevronsActive = MakeSprite(chevronActiveBrush, chevronSize, top);
-            p.chevronsActive.Opacity(0);
-            p.root.Children().InsertAtTop(p.chevrons);
-            p.root.Children().InsertAtTop(p.chevronsActive);
+            const float half = chevronSize.x / 2;
+            for (int side = 0; side != 2; ++side) {
+                for (const bool active : {false, true}) {
+                    auto sprite = MakeSprite(active ? chevronActiveBrush : chevronBrush, chevronSize, top);
+                    sprite.Clip(compositor.CreateInsetClip(side ? half : 0, 0, side ? 0 : half, 0));
+                    sprite.Opacity(active ? 0 : SideIdle(model, side));
+                    p.root.Children().InsertAtTop(sprite);
+                    (active ? p.chevronsActive : p.chevrons)[side] = sprite;
+                }
+            }
         }
         return result;
+    }
+    static bool SideEnabled(const PageModel& model, int side) { return side ? model.adjustLater : model.adjustEarlier; }
+    static float SideIdle(const PageModel& model, int side) { return SideEnabled(model, side) ? 1.f : vi::kDisabledOpacity; }
+    // A side shows the foreground variant only while slot 0 is selected and that side can move.
+    bool SideActive(const PageModel& model, int side, int selected) const {
+        return model.adjustControl && selected == 0 && !awaitCenter && SideEnabled(model, side);
     }
 
     // Same slots and artwork classes: tile visuals can stay, only state changes.
     static bool SameStructure(const Page& p, const PageModel& model) {
-        if (p.items.size() != model.items.size() || p.model.languageControl != model.languageControl) return false;
+        if (p.items.size() != model.items.size() || p.model.adjustControl != model.adjustControl) return false;
         for (size_t i = 0; i != p.items.size(); ++i) {
             const auto& a = p.items[i].entry.visual;
             const auto& b = model.items[i].visual;
@@ -760,7 +777,7 @@ struct OrbitRenderer::Impl {
         return true;
     }
 
-    // Same slots, new state (language, preferred, enabled): only what changed crossfades.
+    // Same slots, new state (language, preferred, enabled, movable sides): only what changed crossfades.
     void UpdateInPlace(const PageModel& model, bool animate) {
         auto& p = *page;
         for (size_t i = 0; i != p.items.size(); ++i) {
@@ -802,6 +819,11 @@ struct OrbitRenderer::Impl {
         // The seat follows the new state below; force its re-evaluation.
         const int seat = p.seatIndex;
         if (seat >= 0) ItemSelected(p.items[seat], true, false);
+        // A move that reaches or leaves an end dims or restores that side; the active
+        // variant follows in SetSelectionState.
+        for (int side = 0; side != 2; ++side)
+            if (SideEnabled(model, side) != SideEnabled(p.model, side))
+                Opacity(p.chevrons[side], SideIdle(model, side), vi::kLabelFadeMs, animate);
         p.model = model;
     }
 
@@ -914,6 +936,13 @@ struct OrbitRenderer::Impl {
 
     // ---- Selection and center.
 
+    // Which chevron sides the page draws as movable: none, both, earlier, later or blocked.
+    const wchar_t* AdjustState() const {
+        if (!page || !page->model.adjustControl || page->items.empty()) return L"none";
+        const auto& m = page->model;
+        return m.adjustEarlier ? (m.adjustLater ? L"both" : L"earlier") : (m.adjustLater ? L"later" : L"blocked");
+    }
+
     std::wstring CenterText() const {
         if (!page || awaitCenter) return {};
         const int selected = page->model.selection;
@@ -1001,8 +1030,8 @@ struct OrbitRenderer::Impl {
                 }
                 p.seatIndex = seat;
             }
-            const bool chevronsActive = p.model.languageControl && selected == 0 && !awaitCenter;
-            Opacity(p.chevronsActive, chevronsActive ? 1.f : 0.f, vi::kLabelFadeMs, animate);
+            for (int side = 0; side != 2; ++side)
+                Opacity(p.chevronsActive[side], SideActive(p.model, side, selected) ? 1.f : 0.f, vi::kLabelFadeMs, animate);
         }
         UpdateLabel(animate, labelMs);
         UpdateCenter(animate, backDelay);
@@ -1060,8 +1089,10 @@ struct OrbitRenderer::Impl {
             Settle(p.seat, p.seatIndex >= 0 ? 1.f : 0.f);
             if (p.seatIndex >= 0) PlaceSeat(p, p.seatIndex);
             else StopSeat(p);
-            Settle(p.chevrons, 1);
-            Settle(p.chevronsActive, p.model.languageControl && p.model.selection == 0 && !awaitCenter ? 1.f : 0.f);
+            for (int side = 0; side != 2; ++side) {
+                Settle(p.chevrons[side], SideIdle(p.model, side));
+                Settle(p.chevronsActive[side], SideActive(p.model, side, p.model.selection) ? 1.f : 0.f);
+            }
         }
         Settle(labels[activeLabel], labelText.empty() ? 0.f : 1.f);
         Settle(labels[1 - activeLabel], 0);
@@ -1110,7 +1141,7 @@ struct OrbitRenderer::Impl {
             auto& p = *page;
             auto& chosen = p.items[p.seatIndex];
             for (const wc::Visual& visual : std::initializer_list<wc::Visual>{base, backdropVisual, ringIdle, ringGated,
-                     gateDot, back, labels[0], labels[1], p.chevrons, p.chevronsActive})
+                     gateDot, back, labels[0], labels[1], p.chevrons[0], p.chevrons[1], p.chevronsActive[0], p.chevronsActive[1]})
                 Opacity(visual, 0, vi::kCommitFadeMs, true);
             for (auto& item : p.items) if (&item != &chosen) Opacity(item.root, 0, vi::kCommitFadeMs, true);
             for (const wc::Visual& visual : std::initializer_list<wc::Visual>{chosen.root, p.seat}) {
@@ -1206,8 +1237,8 @@ void OrbitRenderer::SetPage(const PageModel& page, PageTransition transition, in
     impl_->Run([&] { impl_->SetPage(page, transition, originIndex); },
                [&] { impl_->SetPage(page, PageTransition::None, -1); });
 }
-std::pair<D2D1_RECT_F, D2D1_RECT_F> OrbitRenderer::LanguageArrowBounds() const {
-    // The language control lives on the top orbit tile, not in the cancel zone.
+std::pair<D2D1_RECT_F, D2D1_RECT_F> OrbitRenderer::AdjustArrowBounds() const {
+    // The adjust control lives on the top orbit tile, not in the cancel zone.
     constexpr float y = kCenter - vi::kOrbitRadius, h = vi::kChevronHit / 2;
     constexpr float left = kCenter - vi::kChevronOffset, right = kCenter + vi::kChevronOffset;
     return {D2D1::RectF(left - h, y - h, left + h, y + h), D2D1::RectF(right - h, y - h, right + h, y + h)};
@@ -1243,7 +1274,7 @@ std::wstring OrbitRenderer::Diagnostics() const {
         L"\r\nWindows Composition + Direct2D/DirectWrite; icons=official-artwork-unified-tiles+segoe-fluent-icons; material=" +
         self.backdropStatus + L"; center gate=" + (self.awaitCenter ? L"waiting" : L"armed") +
         L"; menu=" + (page ? page->model.title : L"") + L"; submenu=" + (page && page->model.isSubmenu ? L"yes" : L"no") +
-        L"; transition=" + self.lastTransition +
+        L"; adjust=" + self.AdjustState() + L"; transition=" + self.lastTransition +
         L"; animation=open-fade83-scale167/close83/commit133/seat-spring/drill250/handoff200; center=quiet; perimeter=neutral" +
         L"; text=" + self.textFamily + L"; DPI=" + std::to_wstring(self.dpi) +
         L"; surface draws=" + std::to_wstring(self.surfaceDraws) +

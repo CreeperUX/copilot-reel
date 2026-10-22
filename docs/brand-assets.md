@@ -5,26 +5,93 @@ The common visual treatment belongs to the surrounding tile: size, padding,
 alignment, corner radius, hover feedback, and the Windows accent-color ring.
 The vendor's silhouette, internal colors, and proportions are preserved.
 
-## First preset catalog
+## Preset catalog
+
+`AgentPresets()` returns the Add page's catalog in the order below. The catalog
+and its matching rules live in `src/agent_catalog.h`. Core products have bundled
+artwork and are always listed; a product that is not installed has an empty
+target. The executable column is the file name and its install folder, which is
+the executable's parent, or the folder above `bin\` for a JetBrains IDE.
 
 | Preset | Verified source | Desktop resolution |
 | --- | --- | --- |
-| ChatGPT / Codex | Installed OpenAI package manifest and icons | Registered `OpenAI.Codex_2p2nqsd0c76g0!App`; otherwise an installed ChatGPT shortcut |
-| Claude Desktop | Installed Anthropic package manifest and icon | Registered `Claude_pzs8sxrjxfjjc!Claude`; otherwise an installed Claude shortcut |
-| Claude Science | [Official product page](https://claude.com/product/claude-science) | Exact installed Claude Science or Claude for Science shortcut |
-| Antigravity | [Google press assets](https://antigravity.google/press) | Installed shortcut or existing per-user Antigravity executable |
-| ZCode | [Official installation guide](https://zcode.z.ai/en/docs/install), installed app artwork | Installed shortcut or existing per-user ZCode executable |
-| DeepSeek Harness (DSH) | [Official desktop download](https://www.deepseek.com/en/download/), [official source repository](https://github.com/deepseek-ai/deepseek-harness) | Exact installed DeepSeek Harness or DSH shortcut |
-| Visual Studio Code | [Microsoft brand assets](https://code.visualstudio.com/brand) | Installed shortcut or existing per-user VS Code executable |
-| JetBrains IDE | [JetBrains product artwork](https://www.jetbrains.com/company/brand/) | Installed IntelliJ IDEA, PyCharm, WebStorm, Rider, CLion, GoLand, PhpStorm, RubyMine, RustRover, or Air shortcuts; names retain their product/version |
-| Junie | [Official product site](https://junie.jetbrains.com/) and JetBrains artwork | Installed Junie or Junie Local shortcut, otherwise the user chooses the actual host |
+| ChatGPT / Codex | Installed OpenAI package manifest and icons | Registered `OpenAI.Codex_2p2nqsd0c76g0!App`. OpenAI ships no desktop build outside the Store, so there is no Win32 rule |
+| Claude Desktop | Installed Anthropic package manifest and icon | Registered `Claude_pzs8sxrjxfjjc!Claude`; only without the package, the legacy Squirrel stub `%LOCALAPPDATA%\AnthropicClaude\claude.exe` |
+| Claude Science | [Official product page](https://claude.com/product/claude-science) | `claude-science.exe` in `ClaudeScience` |
+| Antigravity | [Google press assets](https://antigravity.google/press) | `Antigravity.exe` in `Antigravity` |
+| ZCode | [Official installation guide](https://zcode.z.ai/en/docs/install), installed app artwork | `ZCode.exe` in `ZCode` |
+| DeepSeek Harness (DSH) | [Official desktop download](https://www.deepseek.com/en/download/), [official source repository](https://github.com/deepseek-ai/deepseek-harness) | `DeepSeek Harness.exe` in `DeepSeek Harness` |
+| Visual Studio Code | [Microsoft brand assets](https://code.visualstudio.com/brand) | `Code.exe` in exactly `Microsoft VS Code`; Insiders is a separate product |
+| JetBrains IDE | [JetBrains product artwork](https://www.jetbrains.com/company/brand/) | `idea64`, `pycharm64`, `webstorm64`, `rider64`, `clion64`, `goland64`, `phpstorm64`, `rubymine64` or `rustrover64.exe` in `bin\` of a folder that starts with the product name (`PyCharm 2025.2`, `JetBrains Rider 2025.2`). One row per install, named by its Start-menu shortcut or install folder; a single empty `JetBrains IDE` row when none is found |
+| Junie | [Official product site](https://junie.jetbrains.com/) and JetBrains artwork | Never discovered. Junie has no desktop executable of its own, so the user chooses the actual host |
+
+Discover-only products have no bundled artwork. They are listed only when
+installed, after the core products, and show their executable's own Shell icon:
+
+| Preset | Desktop resolution |
+| --- | --- |
+| Cursor | `Cursor.exe` in `cursor` |
+| Grok Bot | `Grok Bot.exe` in `Grok Bot` |
+| Zed, Zed Preview, Zed Nightly | `Zed.exe` in `Zed`, `Zed Preview` or `Zed Nightly`, one row per channel; `bin\zed.exe` is the CLI |
+| Windsurf, Devin Desktop | `Windsurf.exe` in `Windsurf`; `Devin.exe` or `Windsurf.exe` in `Devin`. The Devin Desktop executable name is not yet confirmed on an install |
+| Kiro | `Kiro.exe` in `Kiro` |
+| Trae, Trae CN | `Trae.exe` in `Trae`; `Trae CN.exe` in `Trae CN` |
+
+### Discovery
+
+Discovery reads four sources. A registered package always wins and is stored as
+its AUMID.
+
+1. **Packages:** `GetPackagesByPackageFamily` for the ChatGPT and Claude families.
+2. **Start-menu shortcuts** in both Programs roots, read with `IShellLink`
+   `GetPath(SLGP_RAWPATH)` with environment strings expanded. `Resolve` is never
+   called. Loading a link costs 1 to 3 ms, so a link is loaded only when its raw
+   bytes contain a catalog executable name in ANSI or UTF-16. On the development
+   machine that is 7 of 277 links.
+3. **Uninstall keys** in HKCU, HKLM and HKLM\WOW6432Node. The executable comes from
+   `DisplayIcon` when it names an `.exe` (with `,N` removed). Otherwise it is
+   `InstallLocation` plus the executable of each rule whose folder matches.
+4. **Exact folder probes:** `%LOCALAPPDATA%\Programs\<folder>\<exe>` and
+   `%ProgramFiles%\<folder>\<exe>`. Folders are never searched recursively.
+
+A candidate is accepted only if all of these hold:
+
+- It matches a rule by executable file name **and** install folder. A display
+  name or shortcut stem alone never identifies a product, so the Claude Code CLI's
+  `claude.exe` in its WinGet folder is not Claude Desktop.
+- It exists and is not a reparse point, such as a 0-byte app execution alias.
+- It is a PE image with the Windows GUI subsystem; console programs are excluded.
+- It is not an uninstaller or updater: `unins*.exe`, `uninst*.exe`,
+  `Uninstall *.exe`, `Update.exe` or `inno_updater.exe`.
+- Its own folder is not an updater staging folder: `_`, `_bak` or
+  `app-<version>`. Folders higher up the path are not checked, so a profile or
+  drive folder with such a name never hides an install.
+
+Win32 products are stored as the **executable path**, not as a shortcut.
+Updaters delete and recreate shortcuts (DSH on 2026-10-20, Cursor on 2026-10-21),
+and an orphaned shortcut can outlive its application. Candidates are de-duplicated
+by their lowercase long path, so Cursor's two shortcuts (`Programs\Cursor.lnk` and
+`Programs\Cursor\Cursor.lnk`) become one row. For a single-row product or
+channel, the first source to find it wins.
+
+`AgentPresets()` can run on any thread with COM initialized, STA or MTA. It shows
+no UI and never executes or resolves a target. On the development machine it
+takes about 80 ms on its first call in a process and about 40 ms (MTA) or 30 ms
+(STA) after that. The first read of a large executable after an antivirus
+signature update can be slower, because the scanner checks the file once.
 
 `AgentPresets()` does not replace saved entries. A missing desktop target is an
 empty `AppTarget.target`; the caller must open the editor or file picker before
 saving it. It must not silently open a marketing website, invent a protocol,
 execute `npx`, install an application, or claim that an IDE has Junie installed.
-The returned catalog can exceed eight entries when several JetBrains IDEs are
-installed. The picker must paginate it; the active wheel still has its own limit.
+The returned catalog can exceed eight entries when several JetBrains IDEs or
+discover-only products are installed. The picker must paginate it; the active
+wheel still has its own limit.
+
+`InstalledIdentity()` (`src/local_launch.h`) names the application that a
+verified target launches. The Add page uses it to hide products that are
+already in the reel, whether they were saved as a package, an executable or a
+shortcut.
 
 The OpenAI package's legacy name contains `Codex`, but its manifest names the
 application ChatGPT. The combined preset uses that verified application ID.
@@ -36,9 +103,13 @@ is not given a fabricated science symbol.
 DSH is resolved to **DeepSeek's own DeepSeek Harness desktop**, not a similarly
 named community wrapper. The official download page links to Windows and macOS
 builds; the upstream repository identifies the desktop package as
-`@deepseek-ai/dsh-desktop` and contains its Windows icon. No DSH installation was
-found in this development machine's Start menu, Appx package list, or standard
-per-user/machine uninstall records at verification time.
+`@deepseek-ai/dsh-desktop` and contains its Windows icon. The development machine
+has a per-user installation at
+`%LOCALAPPDATA%\Programs\DeepSeek Harness\DeepSeek Harness.exe`. It is signed by
+Hangzhou DeepSeek Artificial Intelligence Co., Ltd. and registered under the HKCU
+Uninstall key `1bf39983-50d0-5fe0-9ef4-cece76f67c5e`, which has no Publisher.
+Its Start-menu shortcut is recreated by the updater, which is why discovery
+stores the executable.
 
 ## Existing defaults and Windows system targets
 
@@ -50,8 +121,8 @@ and Notepad. Gemini uses Google's 512-pixel sparkle artwork linked by
 [official application page](https://www.perplexity.ai/). These source files are
 preserved byte-for-byte and included in the same startup asset cache.
 
-Windows Settings, Notepad and every custom application without vendor artwork
-use their own Windows Shell icon (`SHCreateItemFromParsingName` +
+Windows Settings, Notepad, the discover-only products and every custom
+application without vendor artwork use their own Windows Shell icon (`SHCreateItemFromParsingName` +
 `IShellItemImageFactory::GetImage`, 256 px, icon only): `ms-settings:` targets use
 the Settings package identity, Notepad its package, and executables or shortcuts
 their resolved file. Icons are extracted once per target while the configuration
@@ -64,7 +135,9 @@ family of an AUMID, the file name of an executable or shortcut together with its
 install folder, or a URL host. A profile folder such as `C:\Users\<name>` never
 counts, and the display name is consulted only while a preset has no target yet.
 Renaming an app therefore cannot change its artwork, and a user named Claude
-does not stamp the Anthropic mark on unrelated applications.
+does not stamp the Anthropic mark on unrelated applications. The VS Code mark
+requires the install folder `Microsoft VS Code` exactly, so VS Code Insiders
+(`Microsoft VS Code Insiders\Code - Insiders.exe`) keeps its own Shell icon.
 
 The earlier approximate ChatGPT, Claude, Gemini, Codex, and Perplexity shapes and
 the hand-drawn Settings and Notepad glyphs are removed from the reel; verified

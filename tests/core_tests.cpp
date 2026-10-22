@@ -170,12 +170,36 @@ int main() {
             Check(preferred[i].action==MenuAction::SetPreferred && preferred[i].index==static_cast<int>(i),
                 "preferred choice changes preference without launching");
             const auto entry=BuildMenu(MenuPage::Entry,apps,presets,0,static_cast<int>(i));
-            Check(entry.size()==(count>1?3u:2u) && entry[0].action==MenuAction::Edit &&
-                entry[1].action==MenuAction::SetPreferred,"entry wheel provides edit and preferred actions");
+            Check(entry.size()==(count>1?4u:3u) && entry[0].action==MenuAction::Reorder &&
+                entry[1].action==MenuAction::Edit && entry[2].action==MenuAction::SetPreferred,
+                "entry wheel shows the app itself, then edit and preferred actions");
+            Check(entry[0].visual.target==apps[i].target && entry[0].visual.name==apps[i].name &&
+                entry[0].visual.kind==apps[i].kind,"the entry's first slot is the app with its own identity");
             for(const auto& command:entry)Check(command.index==static_cast<int>(i) && command.action!=MenuAction::Launch,
                 "entry submenu preserves its app index and cannot launch");
-            if(count>1)Check(entry[2].action==MenuAction::Remove,"remove is available only while another app remains");
+            if(count>1)Check(entry[3].action==MenuAction::Remove,"remove is available only while another app remains");
+            const auto adjust=AdjustFor(MenuPage::Entry,count,static_cast<int>(i));
+            Check(adjust.control==(count>1) && adjust.earlier==(count>1 && i>0) && adjust.later==(i+1<count),
+                "an app moves earlier or later only where a neighbour exists");
         }
+        for(int i=0;i<static_cast<int>(count);++i)for(int delta:{-1,1}) {
+            auto moved=apps;
+            const bool ok=MoveEntry(moved,i,delta);
+            const int other=i+delta;
+            Check(ok==(other>=0 && other<static_cast<int>(count)),"a move succeeds only inside the reel");
+            if(!ok) {
+                bool same=true;for(size_t k=0;k<count;++k)same=same && moved[k].target==apps[k].target;
+                Check(same,"a blocked move leaves the order unchanged");
+                continue;
+            }
+            Check(moved[other].target==apps[i].target && moved[i].target==apps[other].target,"a move swaps exactly two neighbours");
+            for(int position=0;position<static_cast<int>(count);++position)
+                Check(moved[MovedIndex(position,i,delta)].target==apps[position].target,"MovedIndex follows every entry");
+            MoveEntry(moved,other,-delta);
+            for(size_t k=0;k<count;++k)Check(moved[k].target==apps[k].target,"moving back restores the order");
+        }
+        Check(!MoveEntry(apps,0,0) && !MoveEntry(apps,0,2) && !MoveEntry(apps,-1,1) && !MoveEntry(apps,static_cast<int>(count),-1),
+            "only single steps of an existing entry are moves");
     }
     const std::vector<AppTarget> noApps;
     const auto settings=BuildMenu(MenuPage::Settings,noApps,presets);
@@ -199,6 +223,117 @@ int main() {
         if(offset+5<presets.size())Check(page[navigation].action==MenuAction::Next,"nonfinal preset pages provide a next route");
     }
     Check(BuildMenu(MenuPage::Presets,noApps,noApps).size()==1,"empty preset catalog still permits a custom app");
+
+    for(size_t count:{0u,1u,5u,8u}) {
+        const auto hubAdjust=AdjustFor(MenuPage::Settings,count,-1);
+        Check(hubAdjust.control && hubAdjust.earlier && hubAdjust.later,"the hub language tile always has both chevrons");
+        for(auto page:{MenuPage::Main,MenuPage::Manage,MenuPage::Presets,MenuPage::Preferred})
+            Check(!AdjustFor(page,count,0).control,"only the hub and an app's actions page have an adjustable slot");
+        Check(!AdjustFor(MenuPage::Entry,count,static_cast<int>(count)).control && !AdjustFor(MenuPage::Entry,count,-1).control,
+            "an out-of-range entry is not adjustable");
+    }
+
+    // Identities: AUMIDs compare case-insensitively, shortcuts resolve to their executable.
+    const auto identity=[](const AppTarget& app)->std::wstring {
+        auto key=LaunchIdentity(app.target);
+        if(key.empty() || key.starts_with(L"broken"))return {};
+        if(key==L"c:\\links\\cursor a.lnk" || key==L"c:\\links\\cursor b.lnk")return L"file:c:\\apps\\cursor.exe";
+        if(key==L"c:\\links\\science.lnk")return L"file:c:\\apps\\science.exe";
+        return (app.kind==TargetKind::Aumid?L"aumid:":L"file:")+key;
+    };
+    const std::vector<AppTarget> saved={{L"Work",TargetKind::Aumid,L"OpenAI.Codex_2p2nqsd0c76g0!APP",L"",L""},
+        {L"Science",TargetKind::Shell,L"C:\\Apps\\Science.exe",L"",L""}};
+    const std::vector<AppTarget> catalog={{L"ChatGPT / Codex",TargetKind::Aumid,L"OpenAI.Codex_2p2nqsd0c76g0!App",L"",L""},
+        {L"Claude Science",TargetKind::Shell,L"C:\\Links\\Science.lnk",L"",L""},
+        {L"Antigravity",TargetKind::Shell,L"",L"",L""},
+        {L"ZCode",TargetKind::Shell,L"C:\\Apps\\ZCode.exe",L"",L""},
+        {L"Cursor A",TargetKind::Shell,L"C:\\Links\\Cursor A.lnk",L"",L""},
+        {L"Cursor B",TargetKind::Shell,L"C:\\Links\\Cursor B.lnk",L"",L""},
+        {L"JetBrains IDE",TargetKind::Shell,L"",L"",L""},
+        {L"Broken",TargetKind::Shell,L"broken.lnk",L"",L""}};
+    size_t installed=0;
+    const auto add=AddCatalog(saved,catalog,identity,&installed);
+    std::vector<std::wstring> addNames;for(const auto& item:add)addNames.push_back(item.name);
+    Check(addNames==std::vector<std::wstring>{L"ZCode",L"Cursor A",L"Antigravity",L"JetBrains IDE",L"Broken"} && installed==2,
+        "Add lists installed agents not in the reel first, once each, then entries that still need a target");
+    Check(saved.size()==2 && saved[0].target==L"OpenAI.Codex_2p2nqsd0c76g0!APP","the saved reel is not changed by the Add catalog");
+    const auto addPage=BuildMenu(MenuPage::Presets,saved,add);
+    Check(addPage.size()==6 && addPage[0].index==0 && addPage[5].action==MenuAction::Custom,"the Add page indexes the ordered catalog");
+
+    const auto keyHub=[](UINT key,int selected,bool shift=false){return RouteKey(key,shift,true,selected);};
+    for(int selected:{-1,0,3})Check(keyHub('A',selected)==KeyRoute::Adjust && keyHub('D',selected)==KeyRoute::Adjust,
+        "A and D always adjust an adjustable slot 0");
+    Check(keyHub(VK_LEFT,0)==KeyRoute::Adjust && keyHub(VK_RIGHT,0)==KeyRoute::Adjust,"arrows adjust the selected slot 0");
+    Check(keyHub(VK_LEFT,2)==KeyRoute::Previous && keyHub(VK_RIGHT,-1)==KeyRoute::Next,"arrows move around the ring elsewhere");
+    for(bool adjustable:{false,true}) {
+        Check(RouteKey(VK_ESCAPE,false,adjustable,1)==KeyRoute::Back && RouteKey(VK_BACK,false,adjustable,-1)==KeyRoute::Back,
+            "Esc and Backspace go back on every page");
+        Check(RouteKey(VK_RETURN,false,adjustable,1)==KeyRoute::Confirm && RouteKey(VK_SPACE,false,adjustable,-1)==KeyRoute::Confirm,
+            "Return and Space confirm on every page");
+        Check(RouteKey(VK_TAB,false,adjustable,0)==KeyRoute::Next && RouteKey(VK_TAB,true,adjustable,0)==KeyRoute::Previous,
+            "Tab and Shift+Tab move around the ring");
+    }
+    Check(RouteKey('A',false,false,0)==KeyRoute::None && RouteKey(VK_LEFT,false,false,0)==KeyRoute::Previous,
+        "pages without an adjustable slot never adjust");
+    Check(AdjustDirection('A')==-1 && AdjustDirection(VK_LEFT)==-1 && AdjustDirection('D')==1 && AdjustDirection(VK_RIGHT)==1,
+        "A and Left move earlier, D and Right move later");
+    std::vector<AppTarget> full;
+    for(int i=0;i<8;++i)full.push_back({L"App",TargetKind::Shell,L"C:\\A"+std::to_wstring(i)+L".exe",L"",L""});
+    const auto fullHub=BuildMenu(MenuPage::Settings,full,presets),fullManage=BuildMenu(MenuPage::Manage,full,presets);
+    Check(!CanConfirm(fullHub,4) && !CanConfirm(fullManage,8) && CanConfirm(fullHub,0) && CanConfirm(fullManage,7),
+        "a disabled Add cannot be confirmed; enabled items can");
+    Check(!CanConfirm(fullHub,-1) && !CanConfirm(fullHub,5),"nothing selected or a stale index confirms nothing");
+
+    // Copilot events in every reel state.
+    const ReelContext closed{},open{true,false},blocked{false,true},openBlocked{true,true};
+    {
+        ReelInput input;
+        Check(input.Tap(10,closed)==CopilotRoute::LaunchPreferred,"a tap with the reel closed opens the preferred agent");
+        Check(input.HoldStop(20,closed)==CopilotRoute::Ignore,"an orphan release does nothing");
+        Check(input.HoldStart(19,closed)==CopilotRoute::Ignore,"its tombstone rejects an older delayed hold");
+        Check(input.HoldStart(100,closed)==CopilotRoute::Open,"a hold opens the reel");
+        input.Opened(false,100);
+        Check(input.Held() && !input.Persistent(),"the opening hold is held, not persistent");
+        Check(input.HoldStart(100,open)==CopilotRoute::Ignore && input.HoldStart(150,open)==CopilotRoute::Ignore,
+            "a duplicate hold never resets the opening hold");
+        Check(input.Tap(150,open)==CopilotRoute::Ignore,"a tap during a hold is ignored");
+        Check(input.HoldStop(101,open)==CopilotRoute::Release,"the release of the opening hold resolves it");
+        Check(input.HoldStop(101,open)==CopilotRoute::Ignore,"a duplicate release does nothing");
+        input.PageShown(102);
+        Check(input.Persistent() && !input.Held(),"drilling in leaves a persistent menu");
+        Check(input.HoldStop(101,open)==CopilotRoute::Ignore,"a late release never also chooses a child");
+        Check(input.Tap(103,open)==CopilotRoute::Confirm,"a tap in a persistent menu confirms");
+        Check(input.Tap(102,open)==CopilotRoute::Ignore && input.Tap(90,open)==CopilotRoute::Ignore,
+            "a tap older than the page is stale");
+        Check(input.HoldStart(104,open)==CopilotRoute::Resume && input.Held() && input.Persistent(),
+            "a new hold in a persistent menu resumes direction selection");
+        Check(input.Tap(104,open)==CopilotRoute::Ignore && input.HoldStart(104,open)==CopilotRoute::Ignore,
+            "a tap or duplicate hold during the resumed hold is ignored");
+        Check(input.HoldStop(105,open)==CopilotRoute::Confirm,"the resumed hold's release confirms");
+        Check(input.HoldStop(105,open)==CopilotRoute::Ignore && input.HoldStart(104,open)==CopilotRoute::Ignore,
+            "duplicate and delayed packets of that hold do nothing");
+        Check(input.HoldStart(106,open)==CopilotRoute::Resume,"the next hold resumes again");
+        input.EndHold();
+        Check(input.HoldStop(107,open)==CopilotRoute::Ignore,"a click, key or adjustment consumes the resumed hold");
+        Check(input.HoldStart(108,open)==CopilotRoute::Resume,"and the next hold resumes");
+        input.PageShown(109);
+        Check(input.HoldStop(110,open)==CopilotRoute::Ignore,"a page change consumes the resumed hold");
+        Check(input.Tap(111,openBlocked)==CopilotRoute::Ignore && input.HoldStart(112,openBlocked)==CopilotRoute::Ignore &&
+            input.HoldStop(113,openBlocked)==CopilotRoute::Ignore,"nothing reaches an open reel behind an editor or picker");
+        input.Closed();
+        Check(input.Tap(120,blocked)==CopilotRoute::Ignore && input.HoldStart(121,blocked)==CopilotRoute::Ignore,
+            "a dialog blocks the preferred tap and the opening hold");
+        Check(input.Tap(122,closed)==CopilotRoute::LaunchPreferred && input.HoldStart(123,closed)==CopilotRoute::Open,
+            "after closing, tap and hold have their closed meaning again");
+        Check(input.HoldStop(124,closed)==CopilotRoute::Ignore,"an opening that was never placed cannot be released");
+    }
+    {
+        ReelInput preview;
+        preview.Opened(true,200);
+        Check(preview.HoldStop(201,open)==CopilotRoute::Ignore,"a preview has no hold to release");
+        Check(preview.Tap(201,open)==CopilotRoute::Confirm,"a tap confirms in a preview");
+        Check(preview.Tap(200,open)==CopilotRoute::Ignore,"a tap from before the preview is stale");
+    }
 
     const auto shell=[](const wchar_t* target,const wchar_t* name=L"Saved display name",
                         const wchar_t* arguments=L"",const wchar_t* directory=L"") {

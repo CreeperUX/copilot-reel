@@ -2,9 +2,10 @@
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+ xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
- IgnorableNamespaces="uap uap3 rescap">
-  <Identity Name="CopilotReel.Desktop" Publisher="CN=CopilotReel Development" Version="0.3.4.1" ProcessorArchitecture="x64"/>
+ IgnorableNamespaces="uap uap3 desktop rescap">
+  <Identity Name="CopilotReel.Desktop" Publisher="CN=CopilotReel Development" Version="0.3.5.0" ProcessorArchitecture="x64"/>
   <Properties><DisplayName>Copilot Reel</DisplayName><PublisherDisplayName>Copilot Reel</PublisherDisplayName><Logo>assets\StoreLogo.png</Logo></Properties>
   <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22621.0" MaxVersionTested="10.0.26200.0"/></Dependencies>
   <Resources><Resource Language="en-US"/><Resource Language="zh-CN"/></Resources>
@@ -22,6 +23,9 @@
             </uap3:Properties>
           </uap3:AppExtension>
         </uap3:Extension>
+        <desktop:Extension Category="windows.startupTask" Executable="CopilotReel.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="CopilotReelStartup" Enabled="true" DisplayName="Copilot Reel"/>
+        </desktop:Extension>
       </Extensions>
     </Application>
   </Applications>

@@ -14,4 +14,6 @@ void ShowPresetTargetEditor(HWND owner, const AppTarget& preset);
 void RefreshOsdAppearance();
 // Returns false when the user cancels the unsaved-editor confirmation.
 bool CloseOsd();
+// True while the editor window exists; its destruction posts kTargetEditorClosedMessage.
+bool OsdOpen();
 }

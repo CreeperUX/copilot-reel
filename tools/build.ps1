@@ -72,7 +72,7 @@ try {
     finally { Pop-Location }
     $flags=@('/nologo','/std:c++20','/utf-8','/EHsc','/MT','/W4','/DUNICODE','/D_UNICODE','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN','/D_WIN32_WINNT=0x0A00',"/I$projectRoot\src")
     if($Configuration -eq 'Debug') { $flags+=@('/Od','/Zi') } else { $flags+=@('/O2','/DNDEBUG') }
-    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','artwork.cpp','acrylic.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
+    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','artwork.cpp','acrylic.cpp','test_input.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
     $libraries=@('d3d11.lib','d2d1.lib','dwrite.lib','dxgi.lib','dxguid.lib','dwmapi.lib','windowsapp.lib','CoreMessaging.lib','user32.lib','gdi32.lib','shell32.lib','ole32.lib','oleaut32.lib','propsys.lib','shlwapi.lib','comdlg32.lib','comctl32.lib','advapi32.lib','wtsapi32.lib','windowscodecs.lib','uuid.lib','imm32.lib')
     Push-Location $buildRoot
     try {
@@ -100,6 +100,9 @@ try {
         & $compiler @flags "$projectRoot\tests\display_names_tests.cpp" "$projectRoot\src\iconography.cpp" "$projectRoot\src\behavior.cpp" "$projectRoot\src\localization.cpp" "$projectRoot\src\settings.cpp" /Fe:display_names_tests.exe /link @machineLink d2d1.lib windowsapp.lib user32.lib gdi32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib
         if($LASTEXITCODE -ne 0) {throw 'Display name tests compilation failed.'}
         Invoke-CompiledTest 'display_names_tests.exe'
+        & $compiler @flags "$projectRoot\tests\test_input_tests.cpp" "$projectRoot\src\test_input.cpp" /Fe:test_input_tests.exe /link @machineLink user32.lib
+        if($LASTEXITCODE -ne 0) {throw 'Test input seam tests compilation failed.'}
+        Invoke-CompiledTest 'test_input_tests.exe'
         & $compiler @flags "$projectRoot\tests\launch_probe.cpp" /Fe:launch_probe.exe /link /SUBSYSTEM:WINDOWS @machineLink user32.lib
         if($LASTEXITCODE -ne 0) {throw 'Launch probe compilation failed.'}
         Assert-PeMachine (Join-Path $buildRoot 'launch_probe.exe')
