@@ -25,8 +25,10 @@
 #include <commdlg.h>
 #include <imm.h>
 #include <dwmapi.h>
+#include <appmodel.h>
 #include <tlhelp32.h>
 #include <winrt/base.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.ApplicationModel.Activation.h>
 #include <algorithm>
@@ -112,6 +114,28 @@ bool BareLaunch() {
     int count=0; auto args=CommandLineToArgvW(GetCommandLineW(),&count);
     LocalFree(args); return count==1;
 }
+bool DisableStartupTaskCommand() {
+    int count=0; auto args=CommandLineToArgvW(GetCommandLineW(),&count);
+    const bool result=count==2 && std::wstring_view(args[1])==L"--disable-startup-task";
+    LocalFree(args); return result;
+}
+// The startup task's state lives outside the package data, so removing and reinstalling the
+// package turns it on again. An app may turn its own task off (only the user can turn it on),
+// which restores the user's choice; the packaged identity is required.
+bool DisableStartupTask() {
+    bool disabled=false;
+    std::thread([&disabled] {
+        try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            const auto task=winrt::Windows::ApplicationModel::StartupTask::GetAsync(L"CopilotReelStartup").get();
+            task.Disable();
+            disabled=task.State()==winrt::Windows::ApplicationModel::StartupTaskState::Disabled;
+            winrt::uninit_apartment();
+        } catch(...) {}
+    }).join();
+    Log(disabled?L"Startup task turned off":L"Startup task could not be turned off");
+    return disabled;
+}
 
 // The Copilot key is Win+Shift+F23; while it is held, F23 or Win+Shift stay down.
 bool CopilotKeyHeld() {
@@ -141,6 +165,24 @@ std::wstring ParentImage() {
     }
     const auto image=parent?ProcessImage(parent):std::wstring();
     return image.empty()?L"unknown":std::filesystem::path(image).filename().wstring();
+}
+// The window that had the foreground when this process started, as "<exe>:<class>". A start
+// from Start or search leaves one of those in front; the Shell's start for a key
+// press leaves the user's own app there.
+std::wstring WindowOwner(HWND window) {
+    if(!window)return L"none";
+    wchar_t name[128]{};GetClassNameW(window,name,128);
+    DWORD pid=0;GetWindowThreadProcessId(window,&pid);
+    const auto image=ProcessImage(pid);
+    return (image.empty()?std::wstring(L"unknown"):std::filesystem::path(image).filename().wstring())+L":"+name;
+}
+// The taskbar is not one of them: it keeps the foreground after Win+T, Win+B or a click on a
+// taskbar button, and a key tap made then must still open the preferred agent.
+bool ShellLauncherWindow(HWND window) {
+    if(!window)return false;
+    DWORD pid=0;GetWindowThreadProcessId(window,&pid);
+    const auto file=LaunchIdentity(std::filesystem::path(ProcessImage(pid)).filename().wstring());
+    return file==L"startmenuexperiencehost.exe" || file==L"searchhost.exe" || file==L"searchapp.exe";
 }
 // Packaged activations only; an unpackaged process has no activation arguments.
 winrt::Windows::ApplicationModel::Activation::ActivationKind ActivatedKind(bool& known) {
@@ -220,17 +262,53 @@ void Launch(const AppTarget& target,HWND owner) {
 void WaitForLaunches() {
     for(int i=0;i<500 && (launchesInFlight.load() || workersInFlight.load());++i)Sleep(10);
 }
-// A desktop app that is already running comes forward instead of starting again: VS Code
-// forks open an empty window for every start without arguments, and an Electron
-// single-instance handoff only flashes the taskbar once the foreground right has lapsed.
-// Runs on the UI thread while the reel still holds the right the Copilot key gave it.
-// A shortcut can carry its own arguments (a profile, a project), so only a direct executable
-// without arguments is raised.
+std::wstring ProcessAumid(DWORD pid) {
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
+    if(!process)return {};
+    std::wstring aumid(APPLICATION_USER_MODEL_ID_MAX_LENGTH,L'\0');UINT32 length=static_cast<UINT32>(aumid.size());
+    if(GetApplicationUserModelId(process,&length,aumid.data())!=ERROR_SUCCESS)length=1;
+    CloseHandle(process);aumid.resize(length-1);return aumid;
+}
+std::map<DWORD,DWORD> ParentProcesses() {
+    std::map<DWORD,DWORD> parents;
+    HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
+    if(snapshot==INVALID_HANDLE_VALUE)return parents;
+    PROCESSENTRY32W entry{sizeof(entry)};
+    for(BOOL ok=Process32FirstW(snapshot,&entry);ok;ok=Process32NextW(snapshot,&entry))parents[entry.th32ProcessID]=entry.th32ParentProcessID;
+    CloseHandle(snapshot);return parents;
+}
+// An agent that is already running comes forward instead of starting again: VS Code forks
+// open an empty window for every start without arguments, and an Electron single-instance
+// handoff only flashes the taskbar once the foreground right has lapsed. Runs on the UI
+// thread while the reel still holds the right the Copilot key gave it.
+// A window stands for the target when its process has the target's AUMID (a package), is the
+// target's executable, or is a same-named child of it: a launcher stub such as Claude
+// Science's keeps running while the app runs from another folder. A shortcut with arguments
+// of its own (a profile, a project) is always started.
 bool ActivateRunning(const AppTarget& target) {
-    if(target.kind!=TargetKind::Shell || !target.arguments.empty() || !LaunchIdentity(target.target).ends_with(L".exe"))return false;
+    // A working directory set on the entry is a deliberate session (a CLI agent in one folder).
+    if(!target.arguments.empty() || !target.workingDirectory.empty())return false;
     const auto identity=InstalledIdentity(target);
-    if(!identity.starts_with(L"file:") || identity.find(L'\\')==std::wstring::npos)return false;
-    struct Search { std::wstring executable; std::map<DWORD,bool> matches; HWND found=nullptr; } search{identity.substr(5)};
+    struct Search {
+        std::wstring aumid,executable;std::map<DWORD,DWORD> parents;std::map<DWORD,bool> matches;HWND found=nullptr;
+        bool Matches(DWORD pid) {
+            if(!aumid.empty())return LaunchIdentity(ProcessAumid(pid))==aumid;
+            const auto image=LaunchIdentity(ProcessImage(pid));
+            if(image==executable)return true;
+            if(image.empty() || std::filesystem::path(image).filename()!=std::filesystem::path(executable).filename())return false;
+            const auto parent=parents.find(pid);
+            for(DWORD ancestor=parent==parents.end()?0:parent->second,depth=0;ancestor && depth<2;++depth) {
+                if(LaunchIdentity(ProcessImage(ancestor))==executable)return true;
+                const auto next=parents.find(ancestor);ancestor=next==parents.end()?0:next->second;
+            }
+            return false;
+        }
+    } search;
+    if(identity.starts_with(L"aumid:"))search.aumid=identity.substr(6);
+    else if(identity.starts_with(L"file:") && identity.find(L'\\')!=std::wstring::npos) {
+        if(LaunchIdentity(target.target).ends_with(L".lnk") && !ShortcutArguments(target.target).empty())return false;
+        search.executable=identity.substr(5);search.parents=ParentProcesses();
+    } else return false;
     // EnumWindows walks top-level windows in z-order, so the first match is the most recent window.
     EnumWindows([](HWND hwnd,LPARAM data)->BOOL {
         auto& s=*reinterpret_cast<Search*>(data);
@@ -238,8 +316,9 @@ bool ActivateRunning(const AppTarget& target) {
         BOOL cloaked=FALSE;
         if(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_CLOAKED,&cloaked,sizeof(cloaked))) && cloaked)return TRUE;
         DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);
+        if(pid==GetCurrentProcessId())return TRUE;
         auto [match,inserted]=s.matches.try_emplace(pid,false);
-        if(inserted)match->second=LaunchIdentity(ProcessImage(pid))==s.executable;
+        if(inserted)match->second=s.Matches(pid);
         if(!match->second)return TRUE;
         s.found=hwnd;return FALSE;
     },reinterpret_cast<LPARAM>(&search));
@@ -418,7 +497,7 @@ public:
             dpi=std::max(1,MulDiv(size,96,static_cast<int>(kCanvasDip)));
             size=MulDiv(static_cast<int>(kCanvasDip),dpi,96);
         }
-        const auto placement=PlaceOrbit(pointer.x,pointer.y,{work.left,work.top,work.right,work.bottom},size,kDeadZoneDip*dpi/96.0);
+        const auto placement=PlaceOrbit(pointer.x,pointer.y,{work.left,work.top,work.right,work.bottom},size,kRadiusDip*dpi/96.0);
         if(!placement.fits) {Log(L"Opening skipped: the work area cannot contain the reel");return false;}
         previousForeground_=GetForegroundWindow();
         page_=page;anchor_=pointer;dpi_=dpi;
@@ -435,7 +514,9 @@ public:
         placing_=false;
         input_.Opened(preview,stamp?stamp:EventStamp());
         gesture_.Start(!preview && placement.awaitingCenter);
-        observed_=false;moved_=true;
+        // The opening position itself selects nothing: an edge can leave the pointer over a tile,
+        // and a release before the pointer moves must cancel, as it does at the center.
+        pageCursor_=pointer;observed_=false;moved_=false;
         renderer_->Resize(dpi_);renderer_->SetAppearance(currentAppearance_);
         pageShown_=false;RenderMenu();
         ShowWindow(window,SW_SHOWNOACTIVATE);renderer_->Show();
@@ -854,17 +935,20 @@ public:
     void SaveDiagnostics() {
         std::wostringstream text;
         const auto& visual=CurrentVisualOverride();
-        std::wstring names;
+        std::wstring names,art;
         for(const auto& entry:menu_)names+=(names.empty()?L"":L"|")+AppDisplayName(entry.visual);
+        // What each tile should show, independently of the renderer's cache: tiles with different
+        // identities must render differently (tools/capture-seam.py compares their pixels).
+        for(const auto& entry:menu_)art+=(art.empty()?L"":L"\t")+ArtworkIdentity(entry.visual,currentAppearance_.dark);
         const auto adjust=AdjustFor(page_,items_.size(),editing_);
         const wchar_t* adjustName=!adjust.control?L"none":adjust.earlier && adjust.later?L"both":adjust.earlier?L"earlier":adjust.later?L"later":L"blocked";
-        text<<L"Copilot Reel 0.3.5\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.5.1\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
             <<L"\r\ngestureSelected="<<gesture_.Selected()<<L"\r\ngestureAwaitingCenter="<<gesture_.AwaitingCenter()
             <<L"\r\npreview="<<input_.Persistent()<<L"\r\nheld="<<input_.Held()<<L"\r\neditorOpen="<<editorOpen_
-            <<L"\r\nmenuNames="<<names<<L"\r\nadjust="<<adjustName<<L"\r\naddCatalog="<<addCatalog_.size()<<L"\r\naddInstalled="<<addInstalled_
+            <<L"\r\nmenuNames="<<names<<L"\r\nmenuArt="<<art<<L"\r\nadjust="<<adjustName<<L"\r\naddCatalog="<<addCatalog_.size()<<L"\r\naddInstalled="<<addInstalled_
             <<L"\r\ndataPath="<<ConfigPath()<<L"\r\nlanguage="<<LocaleName(CurrentLanguage())
             <<L"\r\nvisualOverride="<<(visual.raw.empty()?std::wstring(L"none"):visual.raw)
             // Captured pointer relative to the plate center in DIP; nonzero only when an edge clamped the plate.
@@ -1094,12 +1178,15 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
     using namespace reel;
     try {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        // tools/install-development.ps1 restores a turned-off startup task after a reinstall.
+        if(DisableStartupTaskCommand())return DisableStartupTask()?0:10;
         const bool bare=BareLaunch();
         const Command command=CommandLine();
         // Capture before COM, icon decode, preset discovery, and GPU startup. A held Copilot
         // key can be released while the process starts, so read it first.
         const bool keyHeld=bare && !CurrentTestInput().active && CopilotKeyHeld();
         const std::wstring keys=bare?CopilotKeyState():std::wstring();
+        const HWND foreground=bare?GetForegroundWindow():nullptr;
         CommandPacket initialEvent=CaptureCommand(command,true);
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         LoadLanguage();
@@ -1127,9 +1214,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
             // Without arguments this is the startup task, the Shell's fallback for a Copilot key
             // press while no fast-path window exists (it activates the provider's AUMID with no
             // arguments), or a deliberate start from Start or Explorer. Only the last asks for a
-            // preview, and it can only be told apart while the reel is already resident; a cold
-            // start without a held key is taken as the key's tap. An unpackaged build cannot
-            // receive the Shell's fallback, so it previews.
+            // preview. Both reach the app as the same activation of the same AUMID, and the
+            // provider cannot be moved to a hidden entry (the Settings key picker drops it), so a
+            // deliberate start is recognized while the reel is resident, or when Start or search still
+            // had the foreground; otherwise a cold start without a held key is
+            // taken as the key's tap. An unpackaged build cannot receive the Shell's fallback.
             using winrt::Windows::ApplicationModel::Activation::ActivationKind;
             bool known=false;const auto kind=ActivatedKind(known);
             const bool startup=known && kind==ActivationKind::StartupTask;
@@ -1138,11 +1227,14 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
             if(exists)if(HANDLE probe=OpenEventW(SYNCHRONIZE,FALSE,readyName.c_str())) {
                 residentReady=WaitForSingleObject(probe,0)==WAIT_OBJECT_0;CloseHandle(probe);
             }
-            initialEvent.command=startup?Command::Background:keyHeld?Command::KeyHold:residentReady || !known?Command::Preview:Command::Tap;
+            const bool fromShell=ShellLauncherWindow(foreground);
+            initialEvent.command=startup?Command::Background:keyHeld?Command::KeyHold:
+                residentReady || fromShell || !known?Command::Preview:Command::Tap;
             const std::wstring kindName=!known?L"none":kind==ActivationKind::Launch?L"Launch":startup?L"StartupTask":
                 kind==ActivationKind::Protocol?L"Protocol":std::to_wstring(static_cast<int>(kind));
             Log(L"Started without arguments; activation="+kindName+L"; parent="+ParentImage()+L"; resident="+(residentReady?L"ready":exists?L"starting":L"no")+
-                L"; "+keys+L"; command="+(startup?L"background":keyHeld?L"hold":initialEvent.command==Command::Preview?L"preview":L"tap"));
+                L"; foreground="+WindowOwner(foreground)+L"; "+keys+L"; command="+
+                (startup?L"background":keyHeld?L"hold":initialEvent.command==Command::Preview?L"preview":L"tap"));
             // A sign-in start after an earlier cold start has nothing to add.
             if(startup && exists) {CloseHandle(mutex);return 0;}
         }

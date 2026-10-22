@@ -51,7 +51,8 @@ bool Verify(const AppTarget& app,std::wstring& destination) {
             return VerifyShortcut(app.target,4,visited,destination);
         } catch(...) {return false;}
     }
-    if(LaunchIdentity(app.target).ends_with(L".exe") && std::filesystem::path(app.target).is_absolute())return IsFile(app.target);
+    if(LaunchIdentity(app.target).ends_with(L".exe") && std::filesystem::path(app.target).is_absolute())
+        return IsNetworkPath(app.target) || IsFile(app.target);
     return true;
 }
 }
@@ -70,6 +71,27 @@ std::wstring ShortcutTarget(const std::wstring& link) {
     const DWORD required=ExpandEnvironmentStringsW(raw.data(),expanded.data(),static_cast<DWORD>(expanded.size()));
     if(!required || required>expanded.size())return {};
     return expanded.data();
+}
+
+std::wstring ShortcutArguments(const std::wstring& link) {
+    // A shortcut to a shortcut launches with the arguments of every link on the way; the
+    // verifier follows up to four of them, so the first non-empty arguments on that chain count.
+    std::wstring path=link;
+    for(int hop=0;hop<4 && LaunchIdentity(path).ends_with(L".lnk");++hop) {
+        winrt::com_ptr<IShellLinkW> shell;
+        if(FAILED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(shell.put()))))return {};
+        const auto persisted=shell.try_as<IPersistFile>();
+        if(!persisted || FAILED(persisted->Load(path.c_str(),STGM_READ)))return {};
+        std::array<wchar_t,32768> arguments;arguments[0]=0;
+        if(SUCCEEDED(shell->GetArguments(arguments.data(),static_cast<int>(arguments.size()))) && arguments[0])
+            return arguments.data();
+        auto next=ShortcutTarget(path);
+        if(next.empty())return {};
+        std::filesystem::path resolved(next);
+        if(resolved.is_relative())resolved=std::filesystem::path(path).parent_path()/resolved;
+        path=resolved.lexically_normal().wstring();
+    }
+    return {};
 }
 
 bool IsVerifiedLocalApplication(const AppTarget& app) {

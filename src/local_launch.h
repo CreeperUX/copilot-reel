@@ -9,7 +9,8 @@ namespace reel {
 // Checks shortcut destinations without executing or rewriting them. Requires
 // COM on the calling thread; unresolved, cyclic, and non-application links fail.
 // An absolute .exe must exist as a file; a bare name such as notepad.exe is found
-// on the search path at launch.
+// on the search path at launch. An executable on a network path is not touched here:
+// a slow or disconnected share must never stall the caller, so it counts as present.
 bool IsVerifiedLocalApplication(const AppTarget& app);
 
 // The application a verified target launches, all lowercase: "aumid:<family!app>" for
@@ -23,9 +24,29 @@ std::wstring InstalledIdentity(const AppTarget& app);
 // Resolve; empty when the link cannot be read. Requires COM.
 std::wstring ShortcutTarget(const std::wstring& link);
 
+// The arguments a shortcut launches with (a profile, a project, a URL): the first non-empty
+// arguments along a chain of up to four links, read without Resolve; empty when there are
+// none or a link cannot be read. Requires COM.
+std::wstring ShortcutArguments(const std::wstring& link);
+
 inline std::wstring LaunchIdentity(std::wstring value) {
     std::transform(value.begin(),value.end(),value.begin(),[](wchar_t c){return static_cast<wchar_t>(std::towlower(c));});
     return value;
+}
+
+// UNC paths (also behind the \\?\UNC\ and \\.\UNC\ device prefixes) and mapped network
+// drives. GetDriveTypeW reads the local drive mapping and never contacts the share, so this
+// is safe on the UI thread; nothing that can wait on a server should touch such a path there.
+inline bool IsNetworkPath(std::wstring_view path) {
+    const auto separator=[&](size_t i){return i<path.size() && (path[i]==L'\\' || path[i]==L'/');};
+    if(separator(0) && separator(1) && path.size()>=4 && (path[2]==L'?' || path[2]==L'.') && separator(3)) {
+        path.remove_prefix(4);
+        if(path.size()>=3 && (path[0]==L'U' || path[0]==L'u') && (path[1]==L'N' || path[1]==L'n') &&
+           (path[2]==L'C' || path[2]==L'c') && (path.size()==3 || separator(3)))return true;
+    } else if(separator(0) && separator(1))return true;
+    if(path.size()<2 || path[1]!=L':')return false;
+    const wchar_t root[]{path[0],L':',L'\\',0};
+    return GetDriveTypeW(root)==DRIVE_REMOTE;
 }
 
 // Short tap is an application activation, never a browser fallback. Explicit

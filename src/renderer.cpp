@@ -582,15 +582,17 @@ struct OrbitRenderer::Impl {
             SolidBrush(context, Color(appearance.highContrast ? appearance.selectionText : appearance.accent)).get(), w);
     }
 
+    // Vendor light/dark variants follow the actual plate: high-contrast themes keep the
+    // app's light/dark mode but paint the plate with their own window color.
+    bool DarkPlate() const {
+        const auto& plate = appearance.surface;
+        return appearance.highContrast ? plate.r * .2126f + plate.g * .7152f + plate.b * .0722f < .5f : appearance.dark;
+    }
     void DrawItemArt(ID2D1DeviceContext* context, wn::float2 size, const AppTarget& visual, bool preferred, bool selected) {
         const float h = size.x / 2, t = vi::kTile / 2;
         const auto tile = D2D1::RectF(h - t, h - t, h + t, h + t);
         const auto glyph = Color(selected && appearance.highContrast ? appearance.selectionText : appearance.foreground);
-        // Vendor light/dark variants follow the actual plate: high-contrast themes keep the
-        // app's light/dark mode but paint the plate with their own window color.
-        const auto& plate = appearance.surface;
-        const bool darkPlate = appearance.highContrast
-            ? plate.r * .2126f + plate.g * .7152f + plate.b * .0722f < .5f : appearance.dark;
+        const bool darkPlate = DarkPlate();
         if (visual.target == kLanguageTarget) {
             DrawCentered(context, language == Language::English ? L"EN" : L"ZH", monogramFormat.get(),
                 vi::kMonogramSize, {h, h}, vi::kTile, glyph);
@@ -615,9 +617,9 @@ struct OrbitRenderer::Impl {
     std::wstring ArtKey(const AppTarget& visual, bool preferred, bool selected) const {
         std::wstring key = selected ? L"S" : L"N";
         key += preferred ? L"P|" : L"-|";
-        key += visual.kind == TargetKind::Aumid ? L"A|" : L"T|";
-        key += visual.target;
-        // A Shell icon that appears later (a drive or package becoming available) changes the class.
+        // The artwork source, not the target: catalog entries without a target share an empty one.
+        // A Shell icon that appears later (a drive or package becoming available) changes it.
+        key += ArtworkIdentity(visual, DarkPlate());
         key += L"|" + std::to_wstring(static_cast<int>(ClassifyArtwork(visual)));
         if (visual.target == kLanguageTarget) key += language == Language::English ? L"|EN" : L"|ZH";
         return key;

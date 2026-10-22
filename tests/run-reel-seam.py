@@ -99,10 +99,12 @@ def verify_placement(g, offset, point, held):
     distance = math.hypot(x - point[0], y - point[1])
     if (expected_left, expected_top) == (point[0] - size // 2, point[1] - size // 2):
         assert abs(x - point[0]) <= .5 and abs(y - point[1]) <= .5, 'An unconstrained opening is centered on the pointer.'
-    guarded = held and distance > seam.DEAD_ZONE_DIP * reel.scale()
-    assert match.group(8) == ('true' if guarded else 'false'), 'Only a displaced hold waits for center entry.'
+    guarded = held and distance > seam.PLATE_RADIUS_DIP * reel.scale()
+    assert match.group(8) == ('true' if guarded else 'false'), \
+        'Only a hold the clamp leaves outside the plate waits for center entry.'
     EVIDENCE.placements.append({'group': g.name, 'pointer': list(point), 'bounds': [left, top, right, bottom],
-                                'centerDisplacementPixels': round(distance, 2), 'awaitingCenter': guarded,
+                                'centerDisplacementPixels': round(distance, 2),
+                                'centerDisplacementDip': round(distance / reel.scale(), 2), 'awaitingCenter': guarded,
                                 'held': held, 'dpi': seam.user32.GetDpiForWindow(reel.hwnd)})
     return guarded
 
@@ -205,10 +207,71 @@ def interior_points(size):
 
 
 def edge_points():
+    """2 px inside each edge and corner: the clamp leaves these pointers outside the plate."""
     left, top, right, bottom = seam.work_area(ANCHOR)
     x, y = ANCHOR
     return [(left + 2, y), (right - 3, y), (x, top + 2), (x, bottom - 3),
             (left + 2, top + 2), (right - 3, top + 2), (left + 2, bottom - 3), (right - 3, bottom - 3)]
+
+
+def on_plate_points(scale):
+    """30 DIP inside the right and the top edge: the clamp moves the plate, but the pointer stays on it."""
+    left, top, right, bottom = seam.work_area(ANCHOR)
+    inset = round(30 * scale)
+    return [('right', (right - inset, ANCHOR[1])), ('top', (ANCHOR[0], top + inset))]
+
+
+def sector_index(dx, dy, count):
+    """src/core.h HitTest outside the center: slot 0 at 12 o'clock, then clockwise."""
+    angle = (math.atan2(dy, dx) + math.pi / 2) % (2 * math.pi)
+    step = 2 * math.pi / count
+    return int((angle + step / 2) // step) % count
+
+
+def toward(point, origin, distance):
+    """point moved distance pixels along the direction from origin to point."""
+    dx, dy = point[0] - origin[0], point[1] - origin[1]
+    length = math.hypot(dx, dy)
+    return round(point[0] + dx / length * distance), round(point[1] + dy / length * distance)
+
+
+def on_plate_hold(g, side, point, launched):
+    """A hold clamped at an edge with the pointer still on the plate. Returns the launch count."""
+    reel = g.reel
+    offset = len(reel.read_log())
+    assert not open_hold(g, point), f'A {side}-edge hold left on the plate needs no center entry.'
+    center = reel.center()
+    scale = reel.scale()
+    distance = math.hypot(point[0] - center[0], point[1] - center[1]) / scale
+    assert seam.DEAD_ZONE_DIP < distance <= seam.PLATE_RADIUS_DIP, \
+        f'The {side}-edge hold must be clamped off center yet stay on the plate ({distance:.1f} DIP).'
+    state = reel.diagnostics()
+    assert state['gestureAwaitingCenter'] == '0' and state.selected == -1, state.text
+    # The opening point lies over a sector, yet neither it nor a move inside the slop selects.
+    reel.pointer(point)
+    assert reel.diagnostics().selected == -1, 'The opening position itself must not select.'
+    reel.pointer(toward(point, center, -max(1, round(3 * scale))))
+    assert reel.diagnostics().selected == -1, f'A move within the {seam.OPENING_SLOP_DIP} DIP opening slop must not select.'
+    release(g)
+    reel.hidden()
+    assert 'Gesture canceled before selection' in reel.read_log()[offset:], 'An unmoved release cancels.'
+    assert_no_launch(g, launched)
+
+    offset = len(reel.read_log())
+    assert not open_hold(g, point)
+    # 10 DIP farther out: past the slop, in the direction the pointer already points.
+    moved = toward(point, center, round(10 * scale))
+    reel.pointer(moved)
+    state = reel.diagnostics()
+    expected = sector_index(moved[0] - center[0], moved[1] - center[1], len(state.names))
+    assert state.selected == expected and state['gestureAwaitingCenter'] == '0', \
+        f'Moving 10 DIP must select sector {expected} at once: {state.text}'
+    name = state.names[expected]
+    release(g)
+    reel.hidden()
+    assert 'Center entered' not in reel.read_log()[offset:], 'An on-plate hold never waits for the center.'
+    assert_launch(g, launched + 1, name)
+    return launched + 1, name
 
 
 def stable_draws(g, state):
@@ -282,15 +345,19 @@ def preflight(g):
 
 
 def group_a(g):
-    """Opening hold: placement, sector release, duplicates, edges, Escape, interruption and re-hold."""
+    """Opening hold: placement, sector release, duplicates, Escape, edges off and on the plate, opening slop, interruption."""
     reel = g.reel
     reel.start()
+    offset = len(reel.read_log())
     open_hold(g, ANCHOR)
     state = reel.diagnostics()
     assert state.page == seam.PAGE_MAIN and state.names == APPS + [PLUS], state.names
     assert state.flag('held') and not state.flag('preview') and state['gestureAwaitingCenter'] == '0'
+    reel.pointer(ANCHOR)
+    assert reel.diagnostics().selected == -1
     release(g)
     reel.hidden()
+    assert 'Gesture canceled before selection' in reel.read_log()[offset:], 'An unmoved interior release cancels.'
     assert_no_launch(g, 0)
     g.passed('an interior hold opens on the synthetic pointer with 0 px center displacement; an unmoved release cancels')
 
@@ -322,7 +389,7 @@ def group_a(g):
     g.passed('Escape during an opening hold cancels, and its late release launches nothing')
 
     for point in edge_points():
-        assert open_hold(g, point), 'An edge or corner hold waits for center entry.'
+        assert open_hold(g, point), 'An edge or corner hold that leaves the pointer off the plate waits for center entry.'
         state = reel.diagnostics()
         reel.pointer(reel.sector(0, len(state.names)))
         state = reel.diagnostics()
@@ -344,7 +411,8 @@ def group_a(g):
     release(g)
     reel.hidden()
     assert_launch(g, 2, 'Probe 1')
-    g.passed('eight edges and corners clamp minimally; selection arms only after center entry and then launches once')
+    g.passed('eight edges and corners 2 px inside the work area clamp minimally and leave the pointer off the plate; '
+             'selection arms only after center entry and then launches once')
 
     # Wall-clock delays are recorded, never asserted: the reel's own markers decide.
     state = reel.diagnostics()
@@ -423,6 +491,13 @@ def group_a(g):
     EVIDENCE.interruptions.append({'group': g.name, 'scenario': 're-hold during commit exit',
                                    'interruptedExit': line.endswith(seam.INTERRUPTED_EXIT), 'exitAnimated': animated})
     g.passed('a re-hold during a commit exit survives, launches nothing extra and opens at the synthetic cursor')
+
+    launched = 3
+    for side, point in on_plate_points(reel.scale()):
+        launched, name = on_plate_hold(g, side, point, launched)
+        g.passed(f'a hold 30 DIP inside the {side} edge clamps minimally and stays on the plate without center entry; '
+                 f'neither the opening point nor a 3 DIP move selects and the release cancels; '
+                 f'10 DIP of movement selects {name!r} at once and its release launches it once')
     assert_quiet(g)
     reel.stop()
 

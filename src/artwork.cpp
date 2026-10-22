@@ -1,5 +1,6 @@
 #include "artwork.h"
 #include "iconography.h"
+#include "local_launch.h"
 #include "official_icons.h"
 #include "vi_tokens.h"
 
@@ -611,11 +612,17 @@ bool ShellImage(const std::wstring& parsing, std::vector<BYTE>& pixels, UINT& wi
     return true;
 }
 
+// A target on a network share is never touched on the UI thread: an offline server would
+// stall every page for its connect timeout. It keeps its vendor mark or the generic glyph.
+bool OnNetwork(const AppTarget& item) {
+    return item.kind == TargetKind::Shell && IsNetworkPath(Unquote(item.target));
+}
+
 // Only successes are cached: a target whose drive, package or file is not available
 // yet (logon, an app installed later) is looked up again on the next preparation.
 void PrepareShell(const AppTarget& item) {
     const auto key = TargetKey(item);
-    if (shellTargets.contains(key)) return;
+    if (shellTargets.contains(key) || OnNetwork(item)) return;
     const auto [parsing, identity] = ShellName(item);
     if (parsing.empty()) return;
     if (!sources.contains(identity)) {
@@ -639,7 +646,7 @@ void PrepareShell(const AppTarget& item) {
 // A shortcut's own name and folder identify it first; otherwise its destination does.
 void PrepareLink(const AppTarget& item) {
     const auto key = TargetKey(item);
-    if (item.kind != TargetKind::Shell || !key.ends_with(L".lnk") || linkBrands.contains(key)) return;
+    if (item.kind != TargetKind::Shell || !key.ends_with(L".lnk") || linkBrands.contains(key) || OnNetwork(item)) return;
     const auto path = ResolvePath(Unquote(item.target));
     com_ptr<IShellLinkW> link;
     std::array<wchar_t, 32768> destination{};
@@ -672,6 +679,12 @@ ArtworkClass ClassifyArtwork(const AppTarget& item) {
     const auto* source = key.empty() ? nullptr : FindSource(key);
     if (!source) return ArtworkClass::Generic;
     return source->treatment.plated ? ArtworkClass::Plated : ArtworkClass::Glyph;
+}
+
+std::wstring ArtworkIdentity(const AppTarget& item, bool dark) {
+    if (IsCommand(item)) return L"command|" + item.target;
+    const auto key = SourceKey(item, dark);
+    return key.empty() || !FindSource(key) ? std::wstring(L"generic") : L"source|" + key;
 }
 
 bool DrawArtwork(ID2D1DeviceContext* context, const AppTarget& item,

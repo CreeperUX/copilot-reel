@@ -17,8 +17,9 @@ struct WheelPlacement {
 
 // Use the complete drawing footprint, including shadow padding. All positions
 // are physical screen pixels; negative coordinates support secondary monitors.
+// A pointer farther than gatePixels from the final center waits for center entry.
 inline WheelPlacement PlaceWheel(int pointerX, int pointerY, WorkArea work,
-                                int size, double deadZonePixels) {
+                                int size, double gatePixels) {
     WheelPlacement result;
     if(size <= 0 || work.right-work.left < size || work.bottom-work.top < size) return result;
     result.left=std::clamp(pointerX-size/2,work.left,work.right-size);
@@ -28,14 +29,16 @@ inline WheelPlacement PlaceWheel(int pointerX, int pointerY, WorkArea work,
     result.centerY=result.top+size/2.0;
     result.fits=true;
     const double dx=pointerX-result.centerX,dy=pointerY-result.centerY;
-    result.awaitingCenter=dx*dx+dy*dy>deadZonePixels*deadZonePixels;
+    result.awaitingCenter=dx*dx+dy*dy>gatePixels*gatePixels;
     return result;
 }
 
 // The pointer is the origin unless the complete footprint crosses a work-area
 // boundary. In that case use only the minimum translation needed to contain it.
-inline WheelPlacement PlaceOrbit(int x, int y, WorkArea work, int size, double deadZone) {
-    return PlaceWheel(x,y,work,size,deadZone);
+// The reel passes its plate radius as the gate: a pointer the clamp leaves on the plate
+// selects by direction at once, and only one left outside the plate enters the center first.
+inline WheelPlacement PlaceOrbit(int x, int y, WorkArea work, int size, double gate) {
+    return PlaceWheel(x,y,work,size,gate);
 }
 
 // URI activations can arrive out of process-creation order. An Up tombstone
@@ -146,10 +149,22 @@ private:
 enum class Command : unsigned { Background, Settings, Preview, HoldStart, HoldStop, Cancel, Quit, Tap, Diagnostics, SmokeTest, KeyHold, Invalid };
 
 inline Command ParseUri(std::wstring_view uri) {
-    // This private activation protocol intentionally accepts no launch targets.
-    if (uri == L"copilot-reel://?state=Down") return Command::HoldStart;
-    if (uri == L"copilot-reel://?state=Up") return Command::HoldStop;
-    if (uri == L"copilot-reel://?state=Tap") return Command::Tap;
+    // This private activation protocol intentionally accepts no launch targets. Behind a Shell
+    // feature flag the Shell appends "&inputTimestamp=<ms>" to every state; nothing else is accepted.
+    constexpr std::wstring_view prefix = L"copilot-reel://?state=", stamp = L"&inputTimestamp=";
+    if (!uri.starts_with(prefix)) return Command::Invalid;
+    uri.remove_prefix(prefix.size());
+    if (const auto extra = uri.find(L'&'); extra != std::wstring_view::npos) {
+        if (!uri.substr(extra).starts_with(stamp)) return Command::Invalid;
+        const auto digits = uri.substr(extra + stamp.size());
+        if (digits.empty() || digits.size() > 20 ||
+            !std::all_of(digits.begin(), digits.end(), [](wchar_t c) { return c >= L'0' && c <= L'9'; }))
+            return Command::Invalid;
+        uri = uri.substr(0, extra);
+    }
+    if (uri == L"Down") return Command::HoldStart;
+    if (uri == L"Up") return Command::HoldStop;
+    if (uri == L"Tap") return Command::Tap;
     return Command::Invalid;
 }
 }

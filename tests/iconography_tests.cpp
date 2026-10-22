@@ -155,6 +155,29 @@ int main() {
         Check(canvas.Draw(Target(L"reel:appearance"),dpi,false).hash!=canvas.Draw(Target(L"reel:appearance"),dpi,true).hash,
             "appearance shows the sun in light and the moon in dark");
     }
+    // Catalog entries that still need a target all have an empty one; their catalog name picks the
+    // mark, so they must never share artwork (0.3.5 drew Antigravity's for JetBrains IDE and Junie).
+    const std::vector<AppTarget> pending{Target(L"",L"Antigravity"),Target(L"",L"JetBrains IDE"),Target(L"",L"Junie"),
+                                         Target(L"",L"Claude Science"),Target(L"",L"Unknown Agent")};
+    PrepareArtwork(pending,96);
+    Check(ArtworkIdentity(pending[0],false)==L"source|antigravity" && ArtworkIdentity(pending[1],false)==L"source|jetbrains" &&
+          ArtworkIdentity(pending[2],false)==L"source|junie" && ArtworkIdentity(pending[3],false)==L"source|claude" &&
+          ArtworkIdentity(pending[4],false)==L"generic","an entry without a target takes its catalog mark");
+    for(size_t i=0;i<pending.size();++i)for(size_t k=i+1;k<pending.size();++k) {
+        Check(ArtworkIdentity(pending[i],false)!=ArtworkIdentity(pending[k],false),"entries without a target keep distinct artwork identities");
+        Check(canvas.Draw(pending[i],96).hash!=canvas.Draw(pending[k],96).hash,"entries without a target draw distinct marks");
+    }
+    Check(ArtworkIdentity(Target(L"https://chatgpt.com",L"Work"),false)!=ArtworkIdentity(Target(L"https://chatgpt.com",L"Work"),true),
+        "the identity follows the plate's light or dark variant");
+    Check(ArtworkIdentity(Target(L"reel:add"),false)==L"command|reel:add","commands are identified by their command");
+    // A target on a share is never looked up: an offline server must not stall a page.
+    const auto networkTool=Target(L"\\\\copilot-reel-no-such-host\\share\\tool.exe");
+    const auto networkCode=Target(L"\\\\copilot-reel-no-such-host\\share\\Microsoft VS Code\\Code.exe");
+    const auto before=GetTickCount64();
+    PrepareArtwork({networkTool,networkCode,Target(L"\\\\copilot-reel-no-such-host\\share\\agent.lnk")},96);
+    Check(GetTickCount64()-before<1000,"preparing network targets does not wait on the share");
+    Check(ArtworkIdentity(networkTool,false)==L"generic" && ArtworkIdentity(networkCode,false)==L"source|vscode",
+        "a network target keeps its vendor mark or the generic glyph");
     Glyph glyph{};
     Check(!CommandGlyph(Target(L"reel:language"),true,glyph),"the language monogram is drawn by the renderer");
     ReleaseArtwork(nullptr);

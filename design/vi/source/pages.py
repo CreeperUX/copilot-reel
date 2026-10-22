@@ -868,7 +868,7 @@ def pointer(s, x, y, scale=1.0, dark=False):
 
 def p10():
     p = Page(10, 'Placement', 'Centered on the pointer; clamped only at edges.',
-             'The pointer is the plate center whenever the canvas fits. At an edge the reel moves inward just enough, and waits.')
+             'The pointer is the plate center whenever the canvas fits. At an edge the reel moves inward just enough.')
     s = p.s
     k = 0.6
     cw = (CW - 3 * 24) / 4
@@ -877,7 +877,7 @@ def p10():
     half = CANVAS * k / 2
     scenarios = [
         ('Interior', 'Pointer = plate center. Choose a direction at once.', 'interior'),
-        ('Screen edge', 'The 384 DIP footprint moves inward to the work area. Selection waits.', 'edge'),
+        ('Screen edge', 'The 384 DIP footprint moves inward to the work area. Off the plate, selection waits.', 'edge'),
         ('Corner', 'Both axes clamp minimally; the circle, order and angles stay.', 'corner'),
         ('Armed', f'Entering the center zone arms selection; the ring settles in {MOTION["events"]["gate"]["armMs"]} ms.', 'armed'),
     ]
@@ -901,7 +901,7 @@ def p10():
         cx = min(max(px, wx0 + half), wx1 - half)
         cy = min(max(py, wy0 + half), wy1 - half)
         dist = math.hypot(px - cx, py - cy) / k
-        gated = dist > CENTER_R and kind != 'armed'
+        gated = dist > PLATE_R and kind != 'armed'
         st = R.State(R.MAIN, preferred=0, gated=gated)
         with s.clip_rect(x, y0, cw, ph, 12):
             R.reel(s, cx, cy, LIGHT, st, k)
@@ -921,7 +921,7 @@ def p10():
     y = y0 + ph + 104
     rules = [('Zero offset', f'Interior: pointer offset {OSD and T["edgeLayout"]["pointerOffset"]}; no line from the pointer, no cursor warp.'),
              ('Minimal clamp', f'Clamp the whole canvas, shadow margin included ({f(ELEV["canvasMargin"])} DIP); keep order, angles, radius and icon size.'),
-             ('Gate', f'Only when clamping leaves the pointer outside r {f(CENTER_R)}: selection waits for center entry; early release cancels.'),
+             ('Gate', f'Only when clamping leaves the pointer outside the plate (r {f(PLATE_R)}): selection waits for center entry; early release cancels. On the plate it selects by direction once the pointer moves 4 DIP; the opening position never selects.'),
              ('Small screens', 'If the canvas cannot fit, scale it uniformly; text and targets shrink with it.')]
     cw2 = (CW - 3 * 24) / 4
     for i, (a, b) in enumerate(rules):

@@ -7,6 +7,7 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
 - Development artifacts are English: code, comments, script output, docs, design tokens, VI and commit messages. Replies to the user are in Chinese.
 - The product UI defaults to English, with Simplified Chinese (`ZH`) as the option. Both languages share one profile: switching language never changes apps, order, icons or the preferred agent.
 - Every new release on this machine: back up the configuration, uninstall the old package, install the new one, and restore the configuration (`tools/install-development.ps1 -PackagePath <signed msix>`).
+- Only the newest version is kept (the user's rule since 2026-10-22): after a release is published, delete the older GitHub releases together with their tags (`gh release delete <tag> --cleanup-tag`, then `git tag -d <tag>`), and remove the older packages and release notes from `artifacts/`. The commits stay in history; configuration backups in `artifacts/backups/` are kept.
 - Commits use the existing author, `baka_sayaka <60833924+bakasayaka@users.noreply.github.com>`, passed per command. Never change git config. Commit or push only when the user asks.
 - Interaction and visual checks run through the test seam: `tests/run-reel-seam.py` and `tools/capture-seam.py` drive a separate unpackaged test instance through its own channel. They never move the pointer, send input or take the foreground, and the installed reel keeps running.
 - `tests/run-radial.py`, `tests/run-language-invariance.py` and `tools/capture-v034.py` are 0.3.4 evidence. They drive the real pointer, need the installed instance to quit first and must not run while the user works. Restart the installed reel afterwards with `tools/open-installed.ps1 -View Background`.
@@ -16,7 +17,7 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
   - EN/ZH and sun/moon show state in the icon itself.
   - One merged `+` entry.
   - Official vendor artwork with one tile treatment.
-  - The reel opens centered on the pointer and moves only as far as needed at screen edges, with center gating.
+  - The reel opens centered on the pointer and moves only as far as needed at screen edges. Selection waits for center entry only when that move leaves the pointer outside the plate; a pointer still on the plate selects by direction as soon as it moves (changed 2026-10-22).
   - No line, perimeter-sweep or accent-stroke opening animation.
   - While the reel is closed, a short tap opens the preferred local agent, never a web page; a hold opens the reel.
   - Inside an open menu every input confirms, goes back or adjusts: a tap, or a new hold and its release, confirms the selected item (approved 2026-10-21).
@@ -75,6 +76,12 @@ Work, 2026-10-21 to 2026-10-22 (0.3.5, released as the prerelease `v0.3.5-beta` 
 - The test-input seam (`src/test_input.*`), `tests/run-reel-seam.py` and `tools/capture-seam.py`: interaction and pixel checks without touching the pointer, input, focus or the installed reel.
 - A five-lens review with adversarial verification; all confirmed findings fixed. Evidence and limits are in `docs/validation.md` under v0.3.5.
 
+Work, 2026-10-22 (0.3.5.1, released as `v0.3.5.1-beta` and installed here):
+- Fixed the Add page artwork the user reported (JetBrains IDE and Junie showed Antigravity's mark): the renderer now caches tile artwork by `ArtworkIdentity`, and `tools/capture-seam.py` checks every Add tile against its identity across pages. The 0.3.5 screenshot comparison had only compared alpha; it now compares every channel.
+- Edge gating at the plate radius, at the user's request; the opening position never selects.
+- Packaged agents and launcher stubs are brought forward; network targets are never touched on the UI thread; a reinstall restores a turned-off startup task; `ParseUri` accepts `&inputTimestamp=`; a cold start from Start or search opens the preview.
+- Reverse-engineered why the provider cannot be hidden behind a separate Start entry (`docs/validation.md`, v0.3.5.1).
+
 ### Cursor: build, release and distribution
 
 Role: toolchain, multi-architecture builds, signing, the GitHub remote and releases.
@@ -90,15 +97,15 @@ Work, 2026-10-20:
 
 ## Current state
 
-- 0.3.5.0 x64 is installed on this machine and runs in the background; its startup task is enabled. The Copilot key is bound to it. GitHub carries the prereleases `v0.3.4-beta`, `v0.3.4.1-beta` and `v0.3.5-beta`, each with signed x64 and ARM64 packages.
+- 0.3.5.1 x64 is installed on this machine and runs in the background; its startup task is enabled. The Copilot key is bound to it. GitHub carries only the prerelease `v0.3.5.1-beta`, with signed x64 and ARM64 packages; older releases and tags were removed under the keep-the-newest rule.
 - `main` tracks `origin/main` on GitHub. The ARM64 package has never run on ARM hardware.
-- Open validation items are listed in `docs/validation.md`. For 0.3.5 the physical Copilot key still has to confirm: tap and hold inside an open menu, a cold start, the start after sign-in, and a running Cursor or DeepSeek Harness coming forward.
-- VI v0.9 is not regenerated for 0.3.5: it has no App actions scene (`design/vi/source/reel.py` still names `languageControl`) and draws the Claude Science preset with the Claude mark. The tokens already describe the reorder chevrons.
+- Open validation items are listed in `docs/validation.md`. The physical Copilot key still has to confirm: tap and hold inside an open menu, a cold start, the start after sign-in, a cold start from Start (`foreground=` in `run.log`), and running agents coming forward.
+- VI v0.9 is not regenerated for 0.3.5/0.3.5.1: it has no App actions scene (`design/vi/source/reel.py` still names `languageControl`) and draws the Claude Science preset with the Claude mark. The tokens and the Placement page source already use the plate-radius gate.
 
 ## Open product questions
 
-- Start launch while the reel is not running: it cannot be told apart from the Shell's argument-less fallback, so it opens the preferred agent. A hidden provider entry (`AppListEntry="none"`) plus a visible Start entry with `--preview` would separate them; check first that the Settings Copilot-key picker still lists the provider.
-- Launcher stubs (Claude Science's window runs from `%USERPROFILE%\.claude-science\electron\<version>\`) are started again instead of brought forward; matching them needs a per-rule runtime image in `src/agent_catalog.h`.
+- Start launch while the reel is not running: the activation is identical to the Shell's argument-less fallback for a key press. A hidden provider entry with a separate Start entry is ruled out: the Settings Copilot-key picker skips providers whose application has `AppListEntry="none"` (reverse-engineered on 2026-10-22). 0.3.5.1 treats a cold start as a preview when Start or search had the foreground (not the taskbar: it stays in front after Win+T or a taskbar click, where a key tap must still open the preferred agent); whether Start is still in front when the process starts needs one physical check (`run.log` logs `foreground=`).
+- Why the Shell sometimes has no cached SingleTap URI and activates the provider without arguments is unknown; nothing in the manifest selects that branch.
 - Catalog rules confirmed only from vendor docs or third-party sources: Windsurf/Devin, Kiro, Trae, Trae CN, Antigravity, JetBrains Toolbox folder names. JetBrains Air and Junie are not discovered.
 
 ## This machine
