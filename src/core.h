@@ -54,6 +54,46 @@ private:
     uint64_t lastStart_=0,lastStop_=0;
 };
 
+// One meaning per Copilot event in every state. Closed: a tap opens the preferred agent
+// and a hold opens the reel. The opening hold selects by direction and its release
+// resolves once. A persistent menu (entered by drilling in, or a preview) confirms
+// with a tap or with the release of a new hold; it never launches the preferred agent
+// and never re-places the plate. Nothing reaches the reel behind an editor or picker.
+enum class CopilotRoute { Ignore, LaunchPreferred, Open, Resume, Release, Confirm };
+struct ReelContext { bool open=false, blocked=false; };
+class ReelInput {
+public:
+    void Opened(bool persistent,uint64_t stamp) {persistent_=persistent;held_=!persistent;pageAt_=stamp;}
+    // A page change always ends the hold, so its late release cannot also choose a child.
+    void PageShown(uint64_t stamp) {persistent_=true;held_=false;pageAt_=std::max(pageAt_,stamp);}
+    void Closed() {persistent_=held_=false;}
+    void EndHold() {held_=false;}
+    CopilotRoute Tap(uint64_t stamp,ReelContext reel) const {
+        if(reel.blocked)return CopilotRoute::Ignore;
+        if(!reel.open)return CopilotRoute::LaunchPreferred;
+        // No physical tap happens during a hold, and a tap older than the page on screen is stale.
+        if(held_ || !persistent_ || stamp<=pageAt_)return CopilotRoute::Ignore;
+        return CopilotRoute::Confirm;
+    }
+    CopilotRoute HoldStart(uint64_t stamp,ReelContext reel) {
+        if(reel.blocked || held_ || (reel.open && !persistent_) || !ordering_.Start(stamp))return CopilotRoute::Ignore;
+        if(!reel.open)return CopilotRoute::Open;
+        held_=true;return CopilotRoute::Resume;
+    }
+    CopilotRoute HoldStop(uint64_t stamp,ReelContext reel) {
+        const bool ordered=ordering_.Stop(stamp);  // the tombstone is recorded in every state
+        if(!held_ || !ordered || reel.blocked || !reel.open)return CopilotRoute::Ignore;
+        held_=false;
+        return persistent_?CopilotRoute::Confirm:CopilotRoute::Release;
+    }
+    bool Persistent() const {return persistent_;}
+    bool Held() const {return held_;}
+private:
+    HoldOrdering ordering_;
+    bool persistent_=false,held_=false;
+    uint64_t pageAt_=0;
+};
+
 inline int HitTest(double dx, double dy, unsigned count, double deadZone = 44.0) {
     if (count == 0 || count > 12 || !std::isfinite(dx) || !std::isfinite(dy) ||
         dx * dx + dy * dy <= deadZone * deadZone) return -1;
@@ -101,7 +141,9 @@ private:
     unsigned generation_ = 0;
 };
 
-enum class Command : unsigned { Background, Settings, Preview, HoldStart, HoldStop, Cancel, Quit, Tap, Diagnostics, SmokeTest, Invalid };
+// KeyHold is a hold whose release no message reports (the Shell's argument-less activation
+// while the key is down): the resident polls the key instead.
+enum class Command : unsigned { Background, Settings, Preview, HoldStart, HoldStop, Cancel, Quit, Tap, Diagnostics, SmokeTest, KeyHold, Invalid };
 
 inline Command ParseUri(std::wstring_view uri) {
     // This private activation protocol intentionally accepts no launch targets.

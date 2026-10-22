@@ -29,7 +29,8 @@ struct PageModel {
     std::vector<PageItem> items;
     std::wstring title;          // diagnostics only; never drawn
     bool isSubmenu = false;      // idle center shows the back chevron
-    bool languageControl = false;// slot 0 is the EN/ZH tile with chevrons
+    bool adjustControl = false; // slot 0 has flanking chevrons: the EN/ZH tile on the hub, or an app's place in the reel on its actions page
+    bool adjustEarlier = true, adjustLater = true; // a side that cannot move draws at the disabled opacity and never shows the active color
     int preferredIndex = -1;
     int selection = -1;
     bool awaitCenter = false;
@@ -51,8 +52,9 @@ public:
     // Replaces the page. originIndex is the slot in the previous page whose
     // tile triggered a DrillIn (its icon travels to the center), or -1.
     void SetPage(const PageModel& page, PageTransition transition = PageTransition::None, int originIndex = -1);
-    // Local canvas DIP hit rectangles beside the language tile at the top orbit.
-    std::pair<D2D1_RECT_F, D2D1_RECT_F> LanguageArrowBounds() const;
+    // Local canvas DIP hit rectangles beside the adjustable tile at the top orbit:
+    // first the left chevron (earlier), then the right one (later).
+    std::pair<D2D1_RECT_F, D2D1_RECT_F> AdjustArrowBounds() const;
     void SetAwaitCenter(bool awaitCenter);
     void SetSelection(int index);
     void Show();

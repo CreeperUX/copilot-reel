@@ -46,7 +46,7 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 | Glyph-class artwork | long ink side on the 28 DIP keyline x per-brand `opticalScale` |
 | Plated artwork | cropped to its plate, covers 40, clipped to r 10, tile hairline on top |
 | Preferred badge | accent disc r 6 at (+17, -17); plate-colored ring r 7.5 (1.5 cutout); path check 1.5 in `textOnAccent` |
-| Language chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40; `secondary`, `foreground` while Language is selected |
+| Adjust chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40, flanking slot 0: the EN/ZH tile on the + hub, and the app on its App actions page (left earlier, right later in the reel); `secondary`, `foreground` while slot 0 is selected; a side that cannot move (the app is first or last) draws at the disabled 0.36 and never turns `foreground` |
 | Back chevron | E76B at em 14, `secondary`, idle submenus only |
 | Center name | 14 DIP / 600, one line, 132 x 20 box on the plate center |
 | Shadow | blur 16 (std dev 8), offset y 8; knocked out under the plate |
@@ -96,13 +96,13 @@ Command glyphs: Add E710, Manage F0E2, Preferred E930, Sun E706, Moon E708, Edit
 
 ## States
 
-Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one name, ring hidden); disabled (0.36, named on hover, never seated); preferred (badge); edge-gated (secondary ring 1.5 and dot, no selection); keyboard focus (the same seat); commit (the choice holds 50 ms while the rest fades). High contrast uses live system colors and paints the seat COLOR_HIGHLIGHT.
+Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one name, ring hidden); disabled (0.36, named on hover, never seated); blocked chevron side (0.36, never `foreground`); preferred (badge); edge-gated (secondary ring 1.5 and dot, no selection); keyboard focus (the same seat); commit (the choice holds 50 ms while the rest fades). High contrast uses live system colors and paints the seat COLOR_HIGHLIGHT.
 
 ## Layouts and navigation
 
-- One to nine items: Preferred with one app (1), App actions (2-3), Main (2-9: up to 8 apps and +), the + hub (5), Presets (up to 8: five presets, Custom, Previous, Next).
+- One to nine items: Preferred with one app (1), App actions (3-4: the app itself in slot 0, Edit, Preferred, and Remove while more than one app remains), Main (2-9: up to 8 apps and +), the + hub (5), Presets (up to 8: five presets, Custom, Previous, Next).
 - At 8 apps the hub and Manage keep their Add slot, disabled, without reflow.
-- Main (depth 0) -> + hub (1) -> Manage apps / Preferred agent (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D) and Appearance act in place. The center or Esc returns one level.
+- Main (depth 0) -> + hub (1) -> Manage apps / Preferred agent (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D) and Appearance act in place. On App actions the same chevrons (or A/D) move the app one place earlier or later, in place; with one app they are not drawn. The center or Esc returns one level.
 
 ## Placement and edge gating
 
@@ -123,6 +123,7 @@ The pointer is the plate center whenever the 384 DIP canvas fits (offset 0). At 
 | Handoff | the tapped tile travels to the center in 200 ms, scaling to 0.5, and fades over the last 83 ms as the back chevron appears; the outgoing name clears in 33 ms |
 | Swap (presets) | out 83 ms; in 120 ms from 0.98, decelerate |
 | Language | only the monogram crossfades (83 ms) |
+| Move (App actions) | the page updates in place; a chevron side that reaches or leaves an end crossfades to or from 0.36 in 83 ms |
 | Reduced motion, high contrast | the same path with every duration 1 ms |
 
 Never: staggered entrances, hover magnification, overshoot or elastic curves, a rim notch, pointer-anchored origins, perimeter stroke animation, connector lines.
@@ -147,6 +148,7 @@ Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, s
 - 100, 150 and 200% through the DPI override.
 - Motion strips: open, cancel, seat appear and travel, drill-in with handoff, drill-out, commit (visual evidence, not frame-rate measurement).
 - EN/ZH: idle Main pixel-identical; the hub differs only inside the monogram.
+- Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections match the 0.3.4 captures with 0 differing pixels in five variants; App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam).
 - Placement: zero interior offset, minimal clamp at eight edge and corner positions, no cursor warp.
 
 Not verified:

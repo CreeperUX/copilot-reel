@@ -281,7 +281,7 @@ void Paint(State& state) {
         } else if (state.page == Page::About) {
             DrawText(state,target,L"Copilot Reel",D2D1::RectF(24,86,width-24,127),state.appearance.foreground,28,true);
             DrawText(state,target,Tr(L"Soft Orbit / native Windows launcher",L"柔光轨道 / Windows 原生启动器"),D2D1::RectF(24,136,width-24,164),state.appearance.secondary,14);
-            DrawText(state,target,Tr(L"Version 0.3.4.1",L"版本 0.3.4.1"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Version 0.3.5",L"版本 0.3.5"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
             DrawText(state,target,Tr(L"Hold the Copilot key, choose an app, then release.",L"按住 Copilot 键，选择应用，然后松开。"),D2D1::RectF(24,194,width-24,220),state.appearance.foreground,14);
             DrawText(state,target,Tr(L"Windows controls the theme, transparency and motion.",L"主题、透明效果和动画均遵循 Windows 设置。"),D2D1::RectF(24,233,width-24,259),state.appearance.secondary,13);
         }
@@ -870,6 +870,7 @@ void ShowPresetTargetEditor(HWND owner,const AppTarget& preset) { ShowOsdAt(owne
 void RefreshOsdAppearance() {
     if(gOsd&&IsWindow(gOsd))PostMessageW(gOsd,kAppearanceMessage,0,0);
 }
+bool OsdOpen() {return gOsd && IsWindow(gOsd);}
 bool CloseOsd() {
     const auto window=gOsd;
     if(!window||!IsWindow(window))return true;

@@ -1,6 +1,29 @@
 # Validation status
 
-Snapshot: 2026-10-20, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.4.1**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-22, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.5.0**. This records demonstrated behavior and its limits, not full release acceptance.
+
+## Verified in v0.3.5
+
+0.3.5 gives every input one meaning in every menu, classifies argument-less starts, adds a startup task, ignores the Shell's minimize of the provider window, brings a running desktop agent forward, discovers installed agents for one-tap adding, and moves an app from its actions page. Two field defects from 0.3.4.1 led to it: after a cold start the Shell's argument-less fallback opened a preview that stayed 33 s, and after a tap the Shell minimized the reel window, so the next hold opened at the old position on the other monitor.
+
+| Area | Evidence and scope |
+| --- | --- |
+| Root causes | `twinui.pcshell.dll` 10.0.26100.9278 activates the provider's AUMID with no arguments when no fast-path window exists, and after a fast-path tap sends `SC_MINIMIZE` to a provider window that has the foreground (static analysis; the scratch reproduction with the reel's window styles matched the logged rects exactly). |
+| Native build | MSVC `/W4` without warnings. Unit tests: core (now including `ReelInput`, `RouteKey`, `AdjustFor`, `MoveEntry`, `AddCatalog` and `CanConfirm`), settings 48, behavior 65, iconography 137, local launch 218 (`InstalledIdentity`, the catalog rules and candidate filter), display names 51, test-input seam (gate and packet decoding). |
+| Interaction | `tests/run-reel-seam.py` passed all 12 groups without moving the pointer, sending input or changing the foreground, while the installed reel stayed resident (`artifacts/qa/seam-20261022-114532-01aac4/`). Covered: opening holds and edges; confirmation by tap and by a resumed hold in persistent menus, including no selection; reorder by keys and chevrons; the Add page adding a discovered agent (8 found here) that then disappears from it; minimize robustness including an iconic window; the fast path; hub hover in both languages; draws at rest; cold, protocol and argument-less starts. |
+| Rendering | `tools/capture-seam.py`: Main, the hub with its selections and the edge-gated hold match the 0.3.4 captures with 0 differing pixels in all 30 comparable stills of five variants (dark/light solid, contrast path, 96/144 DPI). New App actions frames at a middle, the first and the last position (`artifacts/qa/capture-seam-20261022-114552-32fb7d/`). |
+| Discovery | `AgentPresets()` on this machine returns 11 rows: ChatGPT and Claude packages; Claude Science, ZCode, DeepSeek Harness, VS Code, Cursor (one row for two shortcuts) and Grok Bot by executable; empty Antigravity, JetBrains IDE and Junie rows. The Claude Code CLI and CC Switch are excluded. About 30-80 ms on a worker thread. |
+| Review | Five independent review lenses (controller, discovery, renderer, test seam, product and docs) with adversarial verification. Confirmed findings were fixed: argument-less starts while the resident is starting or ready, a key released before the reel could open, shortcuts with their own arguments, editor-open state when the editor fails to open, catalog refresh under a selection, hung target windows, icon extraction during a gesture, chevron hit boxes overlapping the slot-0 tile, discovery at exit, synchronous discovery at cold start, staging-folder false negatives and weak test assertions. |
+| Clean installation | 0.3.5.0 replaced 0.3.4.1 after a backup (`artifacts/backups/20261022-114645`); three configuration files were restored. Installed executable SHA-256 `2905D512…FA68` equals the tested build, all 42 packaged asset files match, the provider declaration is valid, the Copilot key selection is unchanged, and after the first start the startup task state is `2` (enabled). |
+| ARM64 package | Cross-compiled with `tools/build.ps1 -Architecture arm64` (machine `0xAA64`, not run). `CopilotReel_0.3.5.0_arm64.msix` declares the startup task, is signed with the development certificate and passed `signtool verify /pa`; its executable SHA-256 is `5F305222…5BF2`. |
+
+Not yet verified: a physical Copilot-key tap and hold in an open menu, at a cold start and after sign-in through the startup task; whether a running Cursor or DeepSeek Harness now comes forward; the real-input smoke in `docs/testing-plan.md`.
+
+Known limits in 0.3.5:
+- While the reel is not running, starting it from Start cannot be told apart from the Shell's fallback for a key press, so it opens the preferred agent. A separate visible Start entry with `--preview` and a hidden provider entry would remove this, but whether the Settings key picker still lists such a provider is unverified.
+- A launcher stub whose window belongs to another executable (Claude Science) is started again instead of brought forward; packaged agents are activated again through `IApplicationActivationManager`.
+- A saved absolute executable on a slow or disconnected network path is checked on the UI thread.
+- A development reinstall turns the startup task back on; `tools/install-development.ps1` warns when it was off.
 
 ## Verified in v0.3.4.1
 

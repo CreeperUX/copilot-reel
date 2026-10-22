@@ -103,6 +103,10 @@ int main() {
     Check(IdentifyBrand(Target(L"https://gemini.google.com.evil.example/"))==L"","look-alike host is not the vendor");
     Check(IdentifyBrand(Target(L"C:\\Program Files\\Microsoft VS Code\\Code.exe"))==L"vscode","VS Code by install folder");
     Check(IdentifyBrand(Target(L"C:\\Tools\\Code.exe"))==L"","generic Code.exe outside its install folder");
+    Check(IdentifyBrand(Target(L"C:\\Users\\x\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"))==L"vscode","per-user VS Code");
+    for(const auto* path:{L"C:\\Users\\x\\AppData\\Local\\Programs\\Microsoft VS Code Insiders\\Code - Insiders.exe",
+                          L"C:\\Program Files\\Microsoft VS Code Insiders\\Code.exe"})
+        Check(IdentifyBrand(Target(path))==L"","VS Code Insiders keeps its own Shell icon");
     Check(IdentifyBrand(Target(L"C:\\Program Files\\JetBrains\\PyCharm\\bin\\pycharm64.exe"))==L"pycharm","JetBrains product executable");
     Check(IdentifyBrand(Target(L"C:\\Users\\Claude\\tool.exe"))==L"","a profile named Claude never selects a vendor");
     Check(IdentifyBrand(Target(L"C:\\Users\\Claude\\AppData\\Local\\Tool\\tool.exe"))==L"","vendor words in profile paths are ignored");

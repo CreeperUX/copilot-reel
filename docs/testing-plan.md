@@ -119,11 +119,11 @@ For CPU attribution, add an optimized Profile/RelWithDebInfo build using `/O2`, 
 
 Decode graphics/scheduling tables through WPAExporter and feed only CPU-location evidence to the bridge. Its `coverage.selected_samples` counts samples; sampled IP plus stack observations are not function calls. Exporter exit code 2 means reported loss/truncation, not an ordinary successful run. Do not use WPAExporter switches that suppress loss or time-ordering errors. No sample, no matching function, or an empty graphics table must remain a coverage limitation.
 
-## Proposed unified interaction regression
+## Unified interaction regression
 
-The recommended interaction contract is still planned. Current 0.3.4 enters click/preview mode after `Navigate`, ignores hold-start while a gesture is active, and treats Tap as preferred-app activation. The proposed change routes all confirmation inputs through one action while preserving the idle short-tap shortcut.
+0.3.5 implements this contract (the user approved the change on 2026-10-21): every confirmation input goes through one action, and the short-tap shortcut applies only while the reel is closed. 0.3.4 entered click/preview mode after `Navigate`, ignored hold-start while a gesture was active and treated every Tap as preferred-app activation. The table below remains the regression contract.
 
-| State | Proposed behavior |
+| State | Behavior |
 | --- | --- |
 | Menu closed | Tap launches the preferred local app; HoldStart opens Main |
 | Any menu open | Tap, HoldStop from a new valid hold, click and Return confirm the current selection; HoldStart continues on the current page |
@@ -131,9 +131,82 @@ The recommended interaction contract is still planned. Current 0.3.4 enters clic
 | Back | Center Back, Esc or Backspace returns one level; root cancellation closes |
 | Native editor or file picker open | Copilot events cannot launch the preferred app or confirm behind the dialog |
 
-Test input parity at every depth; no-selection/disabled confirmations; duplicate and stale releases; no extra preferred launch while a menu is open; page-generation invalidation; old pointer/queued-click positions after transitions; local adjustment keys only when their value item has focus; cancellation and focus restoration; appearance changes during navigation. One release must never both enter a container and execute a child item. Keep this state testing independent of animation completion.
+Test input parity at every depth; no-selection/disabled confirmations; duplicate and stale releases; no extra preferred launch while a menu is open; page-generation invalidation; old pointer/queued-click positions after transitions; A/D adjust slot 0 of the hub or an actions page, while Left/Right adjust only when slot 0 is selected and otherwise move around the ring; cancellation and focus restoration; appearance changes during navigation. One release must never both enter a container and execute a child item. Keep this state testing independent of animation completion.
 
-ASUS's OSD provides a consistent select/confirm/back model across levels; macOS menus support different input methods, while Control Center distinguishes toggling from expanding details. These motivate the proposed contract, not a claim that either platform specifies this radial implementation. Dwell-to-open submenus remain an optional experiment, not an accepted default.
+ASUS's OSD provides a consistent select/confirm/back model across levels; macOS menus support different input methods, while Control Center distinguishes toggling from expanding details. These motivate the contract, not a claim that either platform specifies this radial implementation. Dwell-to-open submenus remain an optional experiment, not an accepted default.
+
+## Interaction test seam
+
+Interaction acceptance for later x64 work runs through a test seam in the one Release binary. It does not move the pointer, send input, take focus, or quit or restart the installed reel. A separate test binary would break the rule that the installed executable is the tested one (`tools/install-development.ps1` compares their hashes). `src/test_input.h` and `src/test_input.cpp` define the seam, `tests/reel_seam.py` drives it, and `tests/run-reel-seam.py` is the suite. `tests/run-radial.py` stays unchanged as the 0.3.4 pointer-injection evidence.
+
+### Gate
+
+`CurrentTestInput()` reads the environment and the package identity once per process. `ParseTestInputGate()` is pure and unit-tested in `tests/test_input_tests.cpp`.
+
+| Process state | Result |
+| --- | --- |
+| `COPILOT_REEL_TEST_INPUT` unset or empty | Off. The production path reads nothing else. |
+| Set, and the process has package identity (the installed app) | Off with reason `packaged`. The value is ignored, so a normal user cannot enable the seam. |
+| Set and unpackaged, but the run id is not `[A-Za-z0-9-]{8,40}`, `COPILOT_REEL_DATA_DIR` is not an absolute drive or UNC path, or `COPILOT_REEL_TEST_POINTER` is not `x,y` | The process logs the reason and exits with 9 before the instance mutex. A misconfigured runner can never fall into the user's namespace. |
+| Set, unpackaged and valid | Active. |
+
+`COPILOT_REEL_TEST_POINTER` is the initial synthetic cursor in physical screen pixels, and negative coordinates are valid. The default is the center of the primary work area. Never persist these variables.
+
+### What an active instance changes
+
+- Namespace: the mutex and ready event get the suffix `.Test.<run id>` (`TestInstanceSuffix()`), and the window title is `Copilot Reel Test <run id>`. There is no tray icon, no Ctrl+Alt+R hotkey and no fast-path registration, so the installed instance stays resident and the Shell never routes to the test process.
+- Pointer: `CursorPosition()` returns the synthetic cursor instead of `GetCursorPos`, for command capture, selection and release alike. Placement, center gating, hit-test math and rendering are unchanged.
+- Real input is disconnected. Raw Input is never registered, `WM_NCHITTEST` returns `HTTRANSPARENT`, and real mouse, key and Raw Input messages are dropped and counted. A preview records `activationRequested` instead of calling `SetForegroundWindow` or `SetFocus`.
+- Diagnostics add `testInput=on`, `testRun`, `realInputIgnored` and `activationRequested` only in a test instance. Every 0.3.5 instance also writes `held`, `menuNames` (the display names of the page on screen, so a runner finds items by name), `adjust`, `addCatalog` and `addInstalled` when `--diagnostics` is requested; the file stays in the local data directory.
+
+### Channels
+
+| Channel | Message | Payload | Purpose |
+| --- | --- | --- | --- |
+| Commands | `WM_COPYDATA`, dwData `0x5245454C` ('REEL') | Existing 24-byte `CommandPacket`: version 1, command (Background 0 to Diagnostics 8, `src/core.h`), FILETIME stamp, pointer | Opening, release, Tap, Quit and Diagnostics through the production decode and hold ordering, exactly as a second `CopilotReel.exe` sends them |
+| Fast path | `PostMessage` `0x8001` | wParam 0 Tap, 1 HoldStart, 2 HoldStop | The Shell's registered path; stamped on receipt; uses the synthetic cursor |
+| Test input | `WM_COPYDATA`, dwData `0x52545354` ('RTST') | 32-byte `TestPacket`: version 1, action, 64-bit sequence, screen point, virtual key, reserved 0 | Pointer, Click, RightClick and Key along the real input paths |
+
+Test packets are decoded only while the seam is active. Inactive, truncated, future-version, unknown-action, out-of-range-key and nonzero-reserved packets return FALSE, like any unknown dwData. Test packets share the command FIFO, so a click can never overtake a queued release. Every test packet logs `Test input <seq> done; page=<n>; selected=<n>; active=<0|1>` to `run.log`, and the driver waits on that line as its ordering barrier. A Key packet with virtual key 0 routes nowhere and is a pure barrier.
+
+### Runner
+
+```text
+uv run --python 3.14 python tests\run-reel-seam.py [--exe build\Release\CopilotReel.exe] [--groups a,b,...] [--list]
+```
+
+Before any driver code runs, a static self-check refuses to start if the driver or the runner names `SendInput`, `SetCursorPos`, `mouse_event` or `keybd_event`. The driver also binds user32 through an allowlist that contains no input, cursor or foreground API. The runner also refuses a binary without the seam strings, because such a binary would start in the user's own namespace. Every group starts its own test instance with a fresh run id, its own data directory under `artifacts/qa/seam-<stamp>-<id>/`, three `launch_probe.exe` apps, and finds menu entries by display name through `menuNames` in the diagnostics, never by a fixed index. A preflight runs first, and the suite stops if it fails. It checks:
+
+- a malformed run id and a relative data directory exit with 9;
+- malformed packets are refused;
+- the test instance reports `testInput=on` and registers neither Raw Input nor the fast path;
+- a preview records its activation request without taking the foreground.
+
+| Group | Checks |
+| --- | --- |
+| `a` | Opening hold: 0 px displacement at an interior point; sector release launches once; duplicate start and stop ignored; Escape cancels; eight edges and corners clamp minimally and arm only after center entry; release during the 167 ms opening cancels without launching; a re-hold during a cancel or commit exit logs `interrupted=exit` (wall-clock timings are recorded, not asserted) |
+| `b` | Unified confirmation: a closed-reel Tap launches the preferred probe once; release on `Apps and settings` opens a persistent hub in place; Tap with no selection does nothing; a new hold does not move the plate and its release confirms; duplicate release ignored; fast-path and protocol Tap confirm and never launch the preferred agent; Escape and right click go back one level, and Back at Main closes |
+| `c` | Reorder: the actions page starts with the app itself; a click on the tile 22 DIP from its centre confirms instead of moving it; D, Right and the earlier chevron move it and rewrite `apps.ini`; D at the last position changes nothing; the preferred agent is kept; choosing the app tile returns to `Your apps` |
+| `d` | Add page, after the discovery that opening the hub starts: installed entries come first (`addInstalled`); choosing the first one saves it into `apps.ini` without launching, after which it appears on no Add page and `addCatalog` and `addInstalled` drop by one; `Custom app` plus Previous/Next within 8 entries on every page; the center returns to whichever page opened Add. On a host without discovered agents the add step is recorded as skipped |
+| `e` | `SC_MINIMIZE` on an open or hidden reel never makes it iconic; a window made iconic without activation (`SW_SHOWMINNOACTIVE`) is restored before the next placement, which is exact |
+| `fast-path`, `interior`, `hub`, `preferred`, `draws`, `cold` | Ported quiet-tier groups of `tests/run-radial.py`: the 0x8001 contract, an exact off-center interior placement, EN/ZH hub hover names with Tab and the language adjust, preferred-agent selection, stable surface draws, and cold tap, cold hold, protocol Tap through a second process in the test namespace, orphan release, and a bare start without arguments, which an unpackaged build classifies as a preview |
+
+`results.json` records per-group checks and errors, placements, interruption and hover samples, draw samples, foreground samples, `inputInjection: none`, whether the installed instance was resident and unchanged, the seam run ids, `realInputIgnored` and the binary hash.
+
+### What stays outside the quiet tier
+
+- Focus tier, not yet ported: the editor groups (Edit app, Custom app, a missing preset) and the native picker groups. The native editor and `GetOpenFileNameW` activate themselves. They stay out of the quiet suite until the editor can open without activation in seam mode.
+- Real-input smoke, run only with the user's explicit consent and with the installed instance stopped (AGENTS.md):
+  - Raw Input wake-up and `RIDEV_INPUTSINK` delivery while another app has focus, including Escape during a hold;
+  - system `WM_NCHITTEST` and `WM_MOUSEACTIVATE` routing;
+  - real foreground activation, `WM_KEYDOWN` with the auto-repeat filter, and focus restore on hide;
+  - A/D under a Chinese IME;
+  - cold-start capture of the real cursor;
+  - `WM_DPICHANGED` across monitors;
+  - the tray and the hotkey.
+- Manual: the physical Copilot key, Shell fast-path discovery and the `AllowSetForegroundWindow` outcome.
+
+Status on 2026-10-22: the seam unit tests pass in `tools/build.ps1`, and `tests/run-reel-seam.py` passed all 12 groups against the 0.3.5 build (`artifacts/qa/seam-20261022-114532-01aac4/`) while the installed reel stayed resident and the foreground never changed. `tools/capture-seam.py` exits 1 on any pixel difference or missing 0.3.4 reference; it found 0 differing pixels in all 30 comparable stills of five variants and added the App actions frames (both sides, first and last position) to `output/runtime/v0.3.5/` (`artifacts/qa/capture-seam-20261022-114552-32fb7d/`).
 
 ## Implementation sequence
 
@@ -141,7 +214,7 @@ ASUS's OSD provides a consistent select/confirm/back model across levels; macOS 
 | --- | --- | --- | --- |
 | 1 | Pure appearance/material policy with complete injected snapshots | Deterministic precedence, palette and fallback tests; no Windows mutation | Planned |
 | 2 | Injectable acrylic source and native visual fixtures | Solid, synthetic-acrylic, contrast and reduced-motion matrix with explicit source provenance | Planned |
-| 3 | Shared Confirm/Back/Adjust routing | Input parity across menu levels, no event penetration, no shortcut behind an editor | Proposed interaction, not implemented |
+| 3 | Shared Confirm/Back/Adjust routing | Input parity across menu levels, no event penetration, no shortcut behind an editor | Implemented in 0.3.5 (`ReelInput`, `RouteKey`); unit-tested and covered by the seam runner |
 | 4 | Optimized symbol-bearing build and TraceLogging phases | Matched artifacts, phase IDs and documented timing semantics | Planned |
 | 5 | Copilot-specific WPR controller/profile/export views | Bounded owned session, decoded markers/loss checks, correct app and DWM filters | Planned; external tooling readiness verified |
 | 6 | Controlled performance comparisons and real-system checks | Repeated baselines, separate visual evidence, recorded unknowns and hardware scope | Not run |

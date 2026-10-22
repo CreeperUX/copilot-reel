@@ -8,7 +8,20 @@
 namespace reel {
 // Checks shortcut destinations without executing or rewriting them. Requires
 // COM on the calling thread; unresolved, cyclic, and non-application links fail.
+// An absolute .exe must exist as a file; a bare name such as notepad.exe is found
+// on the search path at launch.
 bool IsVerifiedLocalApplication(const AppTarget& app);
+
+// The application a verified target launches, all lowercase: "aumid:<family!app>" for
+// a package (TargetKind::Aumid and shell:AppsFolder\ alike), "file:<full path>" for an
+// absolute .exe or the final .exe of a shortcut, "file:<name>" for a bare name such as
+// notepad.exe, and "uri:<target>" for ms-settings:. Arguments and working directory are
+// ignored. Empty unless IsVerifiedLocalApplication(app). Requires COM.
+std::wstring InstalledIdentity(const AppTarget& app);
+
+// A shortcut's raw destination with environment strings expanded, read without
+// Resolve; empty when the link cannot be read. Requires COM.
+std::wstring ShortcutTarget(const std::wstring& link);
 
 inline std::wstring LaunchIdentity(std::wstring value) {
     std::transform(value.begin(),value.end(),value.begin(),[](wchar_t c){return static_cast<wchar_t>(std::towlower(c));});

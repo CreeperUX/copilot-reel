@@ -17,41 +17,79 @@ bool IsFile(const std::wstring& path) {
     return attributes!=INVALID_FILE_ATTRIBUTES && !(attributes&FILE_ATTRIBUTE_DIRECTORY);
 }
 
-bool VerifyShortcut(std::wstring path,unsigned remaining,std::set<std::wstring>& visited) {
-    if(!remaining)return false;
-    std::array<wchar_t,32768> absolute{};
+std::wstring FullPath(const std::wstring& path) {
+    std::wstring absolute(32768,L'\0');
     const DWORD size=GetFullPathNameW(path.c_str(),static_cast<DWORD>(absolute.size()),absolute.data(),nullptr);
-    if(!size || size>=absolute.size())return false;
-    path=absolute.data();
-    if(!IsFile(path) || !visited.insert(LaunchIdentity(path)).second)return false;
-
-    winrt::com_ptr<IShellLinkW> link;
-    if(FAILED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(link.put()))))return false;
-    auto persisted=link.as<IPersistFile>();
-    if(FAILED(persisted->Load(path.c_str(),STGM_READ)))return false;
-    std::array<wchar_t,32768> raw{},expanded{};
-    WIN32_FIND_DATAW metadata{};
-    // Do not call Resolve: verification must not show UI, search the network,
-    // update the shortcut, or execute the destination while choosing a target.
-    if(FAILED(link->GetPath(raw.data(),static_cast<int>(raw.size()),&metadata,SLGP_RAWPATH)) || !raw[0])return false;
-    const DWORD required=ExpandEnvironmentStringsW(raw.data(),expanded.data(),static_cast<DWORD>(expanded.size()));
-    if(!required || required>expanded.size())return false;
-    AppTarget destination{L"",TargetKind::Shell,expanded.data(),L"",L""};
-    if(!IsLocalApplication(destination))return false;
-    std::filesystem::path resolved(destination.target);
-    if(resolved.is_relative())resolved=std::filesystem::path(path).parent_path()/resolved;
-    destination.target=resolved.lexically_normal().wstring();
-    if(HasShortcutExtension(destination.target))return VerifyShortcut(destination.target,remaining-1,visited);
-    return LaunchIdentity(destination.target).ends_with(L".exe") && IsFile(destination.target);
+    if(!size || size>=absolute.size())return {};
+    absolute.resize(size);return absolute;
 }
+
+// `destination` receives the final executable of a verified chain.
+bool VerifyShortcut(std::wstring path,unsigned remaining,std::set<std::wstring>& visited,std::wstring& destination) {
+    if(!remaining)return false;
+    path=FullPath(path);
+    if(path.empty() || !IsFile(path) || !visited.insert(LaunchIdentity(path)).second)return false;
+    AppTarget next{L"",TargetKind::Shell,ShortcutTarget(path),L"",L""};
+    if(next.target.empty() || !IsLocalApplication(next))return false;
+    std::filesystem::path resolved(next.target);
+    if(resolved.is_relative())resolved=std::filesystem::path(path).parent_path()/resolved;
+    next.target=resolved.lexically_normal().wstring();
+    if(HasShortcutExtension(next.target))return VerifyShortcut(next.target,remaining-1,visited,destination);
+    if(!LaunchIdentity(next.target).ends_with(L".exe") || !IsFile(next.target))return false;
+    destination=FullPath(next.target);
+    return !destination.empty();
+}
+
+// One verifier for IsVerifiedLocalApplication and InstalledIdentity. For a shortcut,
+// `destination` receives its final executable.
+bool Verify(const AppTarget& app,std::wstring& destination) {
+    if(!IsLocalApplication(app))return false;
+    if(app.kind!=TargetKind::Shell)return true;
+    if(HasShortcutExtension(app.target)) {
+        try {
+            std::set<std::wstring> visited;
+            return VerifyShortcut(app.target,4,visited,destination);
+        } catch(...) {return false;}
+    }
+    if(LaunchIdentity(app.target).ends_with(L".exe") && std::filesystem::path(app.target).is_absolute())return IsFile(app.target);
+    return true;
+}
+}
+
+std::wstring ShortcutTarget(const std::wstring& link) {
+    winrt::com_ptr<IShellLinkW> shell;
+    if(FAILED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(shell.put()))))return {};
+    const auto persisted=shell.try_as<IPersistFile>();
+    if(!persisted || FAILED(persisted->Load(link.c_str(),STGM_READ)))return {};
+    // Discovery reads every Start-menu link; skip zero-filling 128 KB per call.
+    std::array<wchar_t,32768> raw,expanded;raw[0]=0;
+    WIN32_FIND_DATAW metadata{};
+    // Do not call Resolve: reading a link must not show UI, search the network,
+    // update the shortcut, or execute the destination.
+    if(FAILED(shell->GetPath(raw.data(),static_cast<int>(raw.size()),&metadata,SLGP_RAWPATH)) || !raw[0])return {};
+    const DWORD required=ExpandEnvironmentStringsW(raw.data(),expanded.data(),static_cast<DWORD>(expanded.size()));
+    if(!required || required>expanded.size())return {};
+    return expanded.data();
 }
 
 bool IsVerifiedLocalApplication(const AppTarget& app) {
-    if(!IsLocalApplication(app))return false;
-    if(app.kind!=TargetKind::Shell || !HasShortcutExtension(app.target))return true;
-    try {
-        std::set<std::wstring> visited;
-        return VerifyShortcut(app.target,4,visited);
-    } catch(...) {return false;}
+    std::wstring destination;
+    return Verify(app,destination);
+}
+
+std::wstring InstalledIdentity(const AppTarget& app) {
+    std::wstring destination;
+    if(!Verify(app,destination))return {};
+    const auto target=LaunchIdentity(app.target);
+    constexpr std::wstring_view appsFolder=L"shell:appsfolder\\";
+    if(app.kind==TargetKind::Aumid)return L"aumid:"+target;
+    if(target.starts_with(appsFolder))return L"aumid:"+target.substr(appsFolder.size());
+    if(target.starts_with(L"ms-settings:"))return L"uri:"+target;
+    if(!destination.empty())return L"file:"+LaunchIdentity(destination);
+    if(std::filesystem::path(app.target).is_absolute()) {
+        const auto full=FullPath(app.target);
+        return full.empty()?std::wstring():L"file:"+LaunchIdentity(full);
+    }
+    return L"file:"+target;
 }
 }

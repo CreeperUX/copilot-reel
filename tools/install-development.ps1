@@ -25,6 +25,15 @@ $identity=$manifest.Package.Identity
 if($identity.Name -ne 'CopilotReel.Desktop' -or $identity.Publisher -ne 'CN=CopilotReel Development' -or $identity.ProcessorArchitecture -ne 'x64') {
     throw "Refusing to install architecture '$($identity.ProcessorArchitecture)'. This host installs only the x64 package; an ARM64 package must not replace the installed x64 app."
 }
+# The packaged startup task keeps its per-user state (StartupTaskState: 0 Disabled, 1 DisabledByUser,
+# 2 Enabled) outside the package data; a reinstall resets it to the manifest default. The key
+# appears only when the app first runs, so a value read right after installation is empty.
+function Get-StartupTaskState {
+    $key='HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\CopilotReel.Desktop_nks6vs6sjb1qw\CopilotReelStartup'
+    $value=Get-ItemProperty -LiteralPath $key -Name State -ErrorAction SilentlyContinue
+    if($value) {[int]$value.State} else {$null}
+}
+$startupBefore=Get-StartupTaskState
 $installed=@(Get-AppxPackage -Name 'CopilotReel.Desktop')
 if($installed.Count -gt 1) {throw 'Unexpected multiple installed Copilot Reel packages.'}
 $backup=$null
@@ -61,11 +70,13 @@ foreach($asset in Get-ChildItem -LiteralPath (Join-Path $projectRoot 'assets\bra
     $assetCount++
 }
 $registration=& (Join-Path $PSScriptRoot 'verify-registration.ps1') | ConvertFrom-Json
+$startupAfter=Get-StartupTaskState
+if($startupBefore -eq 1) {Write-Warning 'The startup task was turned off before this reinstall. Turn Copilot Reel off again under Settings > Apps > Startup.'}
 $receipt=[pscustomobject]@{
     Version=$current.Version.ToString();Package=$current.PackageFullName;Backup=$backup
     ExecutableSha256=$installedHash;VerifiedAssetFiles=$assetCount
     ProviderDeclarationValid=$registration.ProviderDeclarationValid
-    SelectedByUser=$registration.SelectedByUser;CleanInstall=$true
+    SelectedByUser=$registration.SelectedByUser;StartupTaskStateBefore=$startupBefore;StartupTaskStateAfter=$startupAfter;CleanInstall=$true
 }
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $projectRoot 'artifacts\installation.json') -Encoding utf8
 $receipt

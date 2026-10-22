@@ -45,7 +45,7 @@ const wchar_t* BrandFromWords(const std::vector<std::wstring>& words,std::wstrin
     if(first==L"zcode")return L"zcode";
     if(first==L"dsh" || (first==L"deepseek" && at(1)==L"harness"))return L"dsh";
     if(first==L"vscode" || (first==L"visual" && at(1)==L"studio" && at(2)==L"code") ||
-       (first==L"code" && folder.starts_with(L"microsoft vs code")))return L"vscode";
+       (first==L"code" && folder==L"microsoft vs code"))return L"vscode";  // not VS Code Insiders
     if(first==L"junie")return L"junie";
     if(first==L"intellij" || (first==L"idea" && folder.starts_with(L"intellij idea")))return L"intellij-idea";
     for(const auto* product:{L"pycharm",L"webstorm",L"rider",L"clion",L"goland",L"phpstorm",L"rubymine",L"rustrover"})
