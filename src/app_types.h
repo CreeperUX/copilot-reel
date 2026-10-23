@@ -48,6 +48,9 @@ struct Appearance {
     Rgba textOnAccent{1,1,1,1};               // white (light) / black (dark)
     Rgba selection{.878f,.918f,.953f,1};      // seat fill: Mix(surface, accent, seat tint)
     Rgba selectionText{.106f,.106f,.106f,1};  // glyphs and text on the seat
+    Rgba critical{.769f,.169f,.11f,1};        // drag trash glyph and ring
+    Rgba criticalFill{.769f,.169f,.11f,1};    // armed trash disc
+    Rgba textOnCritical{1,1,1,1};             // glyph on the armed trash
     float shadowOpacity = .14f;               // 0 in high contrast
 };
 }

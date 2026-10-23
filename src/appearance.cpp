@@ -85,6 +85,8 @@ Appearance AppearanceSource::Read() {
     out.tile=Color(palette.tile); out.tileStroke=Color(palette.tileStroke);
     out.plateStroke=Color(palette.plateStroke); out.ringIdle=Color(palette.ringIdle);
     out.textOnAccent=Color(palette.textOnAccent);
+    out.critical=Color(palette.critical); out.criticalFill=Color(palette.criticalFill);
+    out.textOnCritical=Color(palette.textOnCritical);
     // Fluent fill and text accents come from the live ramp, never the raw Accent.
     out.accent=Color(palette.accentFallback); out.accentText=Color(palette.accentTextFallback);
     try {
@@ -108,6 +110,8 @@ Appearance AppearanceSource::Read() {
         out.tileStroke=out.plateStroke=out.ringIdle=text;
         out.accent=out.accentText=out.selection=highlight;
         out.textOnAccent=out.selectionText=highlightText;
+        // No contrast-theme role means destructive: the trash glyph carries it, armed like a selection.
+        out.critical=text; out.criticalFill=highlight; out.textOnCritical=highlightText;
         out.shadowOpacity=0;
     }
     return out;

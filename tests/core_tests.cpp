@@ -160,9 +160,9 @@ int main() {
         Check(main[count].action==MenuAction::Settings && main[count].visual.target==L"reel:add",
             "the single plus icon opens the combined hub without launching an app");
         const auto hub=BuildMenu(MenuPage::Settings,apps,presets);
-        Check(hub.size()==5u && hub[4].action==MenuAction::Presets,"hub keeps its Add slot at every app count, so it never reflows");
-        Check(hub[4].enabled==(count<kMaxApps),"hub Add is enabled only while another app can be saved");
-        for(size_t i=0;i<4;++i)Check(hub[i].enabled,"hub commands other than Add are always enabled");
+        Check(hub.size()==4u && hub[3].action==MenuAction::Presets,"hub keeps its Add slot at every app count, so it never reflows");
+        Check(hub[3].enabled==(count<kMaxApps),"hub Add is enabled only while another app can be saved");
+        for(size_t i=0;i<3;++i)Check(hub[i].enabled,"hub commands other than Add are always enabled");
         const auto manage=BuildMenu(MenuPage::Manage,apps,presets);
         Check(manage.size()==count+1,"manage wheel keeps its Add slot at the saved-app limit");
         for(size_t i=0;i<count;++i)
@@ -171,13 +171,9 @@ int main() {
         Check(manage.back().action==MenuAction::Presets && manage.back().enabled==(count<kMaxApps),
             "Add opens the preset wheel and is disabled at the limit");
         for(const auto& entry:main)Check(entry.enabled,"main wheel entries are always enabled");
-        const auto preferred=BuildMenu(MenuPage::Preferred,apps,presets);
-        Check(preferred.size()==count,"preferred wheel lists every saved app");
         for(size_t i=0;i<count;++i) {
-            Check(preferred[i].action==MenuAction::SetPreferred && preferred[i].index==static_cast<int>(i),
-                "preferred choice changes preference without launching");
             const auto entry=BuildMenu(MenuPage::Entry,apps,presets,0,static_cast<int>(i));
-            Check(entry.size()==(count>1?4u:3u) && entry[0].action==MenuAction::Reorder &&
+            Check(entry.size()==(count>1?4u:3u) && entry[0].action==MenuAction::Done &&
                 entry[1].action==MenuAction::Edit && entry[2].action==MenuAction::SetPreferred,
                 "entry wheel shows the app itself, then edit and preferred actions");
             Check(entry[0].visual.target==apps[i].target && entry[0].visual.name==apps[i].name &&
@@ -185,35 +181,46 @@ int main() {
             for(const auto& command:entry)Check(command.index==static_cast<int>(i) && command.action!=MenuAction::Launch,
                 "entry submenu preserves its app index and cannot launch");
             if(count>1)Check(entry[3].action==MenuAction::Remove,"remove is available only while another app remains");
-            const auto adjust=AdjustFor(MenuPage::Entry,count,static_cast<int>(i));
-            Check(adjust.control==(count>1) && adjust.earlier==(count>1 && i>0) && adjust.later==(i+1<count),
-                "an app moves earlier or later only where a neighbour exists");
+            Check(!AdjustFor(MenuPage::Entry).control,"an app's actions page has no reorder chevrons");
         }
-        for(int i=0;i<static_cast<int>(count);++i)for(int delta:{-1,1}) {
+        // Any app moves to any place; every other app keeps its relative order and all its fields.
+        for(int from=0;from<static_cast<int>(count);++from)for(int to=0;to<static_cast<int>(count);++to) {
             auto moved=apps;
-            const bool ok=MoveEntry(moved,i,delta);
-            const int other=i+delta;
-            Check(ok==(other>=0 && other<static_cast<int>(count)),"a move succeeds only inside the reel");
-            if(!ok) {
-                bool same=true;for(size_t k=0;k<count;++k)same=same && moved[k].target==apps[k].target;
-                Check(same,"a blocked move leaves the order unchanged");
-                continue;
-            }
-            Check(moved[other].target==apps[i].target && moved[i].target==apps[other].target,"a move swaps exactly two neighbours");
+            const bool ok=MoveEntry(moved,from,to);
+            Check(ok==(from!=to),"a move needs a different place inside the reel");
+            Check(moved.size()==count && moved[to].target==apps[from].target,"the moved app lands at its new place");
             for(int position=0;position<static_cast<int>(count);++position)
-                Check(moved[MovedIndex(position,i,delta)].target==apps[position].target,"MovedIndex follows every entry");
-            MoveEntry(moved,other,-delta);
+                Check(moved[MovedIndex(position,from,to)].target==apps[position].target &&
+                    moved[MovedIndex(position,from,to)].name==apps[position].name,"MovedIndex follows every entry");
+            MoveEntry(moved,to,from);
             for(size_t k=0;k<count;++k)Check(moved[k].target==apps[k].target,"moving back restores the order");
         }
-        Check(!MoveEntry(apps,0,0) && !MoveEntry(apps,0,2) && !MoveEntry(apps,-1,1) && !MoveEntry(apps,static_cast<int>(count),-1),
-            "only single steps of an existing entry are moves");
+        Check(!MoveEntry(apps,-1,0) && !MoveEntry(apps,0,static_cast<int>(count)) && !MoveEntry(apps,static_cast<int>(count),0),
+            "only existing entries move, and only inside the reel");
+        // A drag lands in the app slot nearest the pointer's angle; Add's slot is never a target.
+        const size_t slots=count+1;
+        for(size_t slot=0;slot<slots;++slot) {
+            const double angle=-kPi/2+slot*2*kPi/slots;
+            const int landed=DropSlot(112*std::cos(angle),112*std::sin(angle),slots,count);
+            if(slot<count)Check(landed==static_cast<int>(slot),"a drag over an app slot lands there");
+            else Check(landed==0 || landed==static_cast<int>(count)-1,"a drag over Add lands at the nearer end of the reel");
+            const double nearLast=angle-kPi/slots*.5,nearFirst=angle+kPi/slots*.5;
+            if(slot==count) {
+                Check(DropSlot(std::cos(nearLast),std::sin(nearLast),slots,count)==static_cast<int>(count)-1,
+                    "the earlier half of Add lands at the end");
+                Check(DropSlot(std::cos(nearFirst),std::sin(nearFirst),slots,count)==0,
+                    "the later half of Add lands at the start");
+            }
+        }
     }
+    Check(DropSlot(1,1,0,0)==-1 && DropSlot(1,1,2,3)==-1 && DropSlot(std::numeric_limits<double>::quiet_NaN(),1,4,3)==-1,
+        "a drop needs apps, room for them and a real pointer");
     const std::vector<AppTarget> noApps;
     const auto settings=BuildMenu(MenuPage::Settings,noApps,presets);
-    Check(settings.size()==5 && settings[0].action==MenuAction::Language &&
-        settings[1].action==MenuAction::Appearance && settings[2].action==MenuAction::Preferred &&
-        settings[3].action==MenuAction::Manage && settings[4].action==MenuAction::Presets,
-        "the combined hub contains language, appearance, preferred agent, management, and Add");
+    Check(settings.size()==4 && settings[0].action==MenuAction::Language &&
+        settings[1].action==MenuAction::Appearance && settings[2].action==MenuAction::Manage &&
+        settings[3].action==MenuAction::Presets,
+        "the combined hub contains language, appearance, management, and Add; the preferred agent is set from an app's actions");
     for(const auto& command:settings)Check(command.visual.target.starts_with(L"reel:") && command.action!=MenuAction::Launch,
         "settings metadata cannot be mistaken for an app-launch action");
     for(size_t offset : {0u,5u,10u}) {
@@ -231,14 +238,11 @@ int main() {
     }
     Check(BuildMenu(MenuPage::Presets,noApps,noApps).size()==1,"empty preset catalog still permits a custom app");
 
-    for(size_t count:{0u,1u,5u,8u}) {
-        const auto hubAdjust=AdjustFor(MenuPage::Settings,count,-1);
-        Check(hubAdjust.control && hubAdjust.earlier && hubAdjust.later,"the hub language tile always has both chevrons");
-        for(auto page:{MenuPage::Main,MenuPage::Manage,MenuPage::Presets,MenuPage::Preferred})
-            Check(!AdjustFor(page,count,0).control,"only the hub and an app's actions page have an adjustable slot");
-        Check(!AdjustFor(MenuPage::Entry,count,static_cast<int>(count)).control && !AdjustFor(MenuPage::Entry,count,-1).control,
-            "an out-of-range entry is not adjustable");
-    }
+    const auto hubAdjust=AdjustFor(MenuPage::Settings);
+    Check(hubAdjust.control && hubAdjust.earlier && hubAdjust.later,"the hub language tile always has both chevrons");
+    for(auto page:{MenuPage::Main,MenuPage::Manage,MenuPage::Presets,MenuPage::Entry})
+        Check(!AdjustFor(page).control,"only the hub has an adjustable slot");
+    Check(static_cast<int>(MenuPage::Entry)==5,"logged page numbers keep their meaning");
 
     // Identities: AUMIDs compare case-insensitively, shortcuts resolve to their executable.
     const auto identity=[](const AppTarget& app)->std::wstring {
@@ -258,14 +262,44 @@ int main() {
         {L"Cursor B",TargetKind::Shell,L"C:\\Links\\Cursor B.lnk",L"",L""},
         {L"JetBrains IDE",TargetKind::Shell,L"",L"",L""},
         {L"Broken",TargetKind::Shell,L"broken.lnk",L"",L""}};
-    size_t installed=0;
-    const auto add=AddCatalog(saved,catalog,identity,&installed);
+    size_t installed=0,restorable=0;
+    const auto add=AddCatalog(saved,{},catalog,identity,&restorable,&installed);
     std::vector<std::wstring> addNames;for(const auto& item:add)addNames.push_back(item.name);
-    Check(addNames==std::vector<std::wstring>{L"ZCode",L"Cursor A",L"Antigravity",L"JetBrains IDE",L"Broken"} && installed==2,
+    Check(addNames==std::vector<std::wstring>{L"ZCode",L"Cursor A",L"Antigravity",L"JetBrains IDE",L"Broken"} && installed==2 && restorable==0,
         "Add lists installed agents not in the reel first, once each, then entries that still need a target");
     Check(saved.size()==2 && saved[0].target==L"OpenAI.Codex_2p2nqsd0c76g0!APP","the saved reel is not changed by the Add catalog");
     const auto addPage=BuildMenu(MenuPage::Presets,saved,add);
     Check(addPage.size()==6 && addPage[0].index==0 && addPage[5].action==MenuAction::Custom,"the Add page indexes the ordered catalog");
+
+    // Apps taken out of the reel come first on Add with their own settings, most recent first.
+    const AppTarget myZCode{L"My ZCode",TargetKind::Shell,L"C:\\Apps\\ZCode.exe",L"--profile work",L"D:\\Work"};
+    const AppTarget site{L"Docs",TargetKind::Shell,L"https://example.com/docs",L"",L""};
+    const AppTarget science{L"Science",TargetKind::Shell,L"C:\\Apps\\Science.exe",L"",L""};
+    std::vector<AppTarget> parked;
+    Park(parked,site);Park(parked,myZCode);Park(parked,science);Park(parked,myZCode);
+    Check(parked.size()==3 && SameApp(parked[0],myZCode) && SameApp(parked[1],science) && SameApp(parked[2],site),
+        "parking an app again moves it to the front once");
+    const auto withParked=AddCatalog(saved,parked,catalog,identity,&restorable,&installed);
+    std::vector<std::wstring> withNames;for(const auto& item:withParked)withNames.push_back(item.name);
+    Check(withNames==std::vector<std::wstring>{L"My ZCode",L"Docs",L"Cursor A",L"Antigravity",L"JetBrains IDE",L"Broken"} &&
+        restorable==2 && installed==1,
+        "parked apps lead, the one still in the reel is hidden, and the catalog agent they offer is listed once");
+    Check(withParked[0].arguments==L"--profile work" && withParked[0].workingDirectory==L"D:\\Work",
+        "a parked app keeps every field");
+    const AppTarget scienceLab{L"Science lab",TargetKind::Shell,L"C:\\Apps\\Science.exe",L"--lab",L""};
+    size_t profileCount=0;
+    const auto profiles=AddCatalog(saved,{scienceLab},catalog,identity,&profileCount);
+    Check(!profiles.empty() && SameApp(profiles[0],scienceLab) && profileCount==1,
+        "a parked profile of an app still in the reel with other arguments is still offered");
+    const auto restorePage=BuildMenu(MenuPage::Presets,saved,withParked,0,-1,restorable);
+    Check(restorePage[0].action==MenuAction::Restore && restorePage[1].action==MenuAction::Restore &&
+        restorePage[2].action==MenuAction::Preset,"parked apps are put back as saved; catalog entries stay presets");
+    const auto laterPage=BuildMenu(MenuPage::Presets,saved,withParked,5,-1,restorable);
+    Check(laterPage[0].action==MenuAction::Preset && laterPage[0].index==5,"paging keeps the parked boundary absolute");
+    std::vector<AppTarget> many;
+    for(int i=0;i<20;++i)Park(many,{L"App",TargetKind::Shell,L"C:\\A"+std::to_wstring(i)+L".exe",L"",L""});
+    Check(many.size()==kMaxParked && many.front().target==L"C:\\A19.exe" && many.back().target==L"C:\\A4.exe",
+        "the parked list keeps the most recent apps");
 
     const auto keyHub=[](UINT key,int selected,bool shift=false){return RouteKey(key,shift,true,selected);};
     for(int selected:{-1,0,3})Check(keyHub('A',selected)==KeyRoute::Adjust && keyHub('D',selected)==KeyRoute::Adjust,
@@ -282,14 +316,20 @@ int main() {
     }
     Check(RouteKey('A',false,false,0)==KeyRoute::None && RouteKey(VK_LEFT,false,false,0)==KeyRoute::Previous,
         "pages without an adjustable slot never adjust");
+    Check(RouteKey('A',false,false,2,true)==KeyRoute::Adjust && RouteKey('D',false,false,-1,true)==KeyRoute::Adjust &&
+        RouteKey(VK_DELETE,false,false,2,true)==KeyRoute::Remove,"on Manage A and D move the selected app and Delete takes it out");
+    Check(RouteKey(VK_LEFT,false,false,0,true)==KeyRoute::Previous && RouteKey(VK_RIGHT,false,false,0,true)==KeyRoute::Next,
+        "on Manage the arrows still move around the ring");
+    Check(RouteKey(VK_DELETE,false,true,0)==KeyRoute::None && RouteKey(VK_DELETE,false,false,0)==KeyRoute::None,
+        "Delete does nothing outside Manage");
     Check(AdjustDirection('A')==-1 && AdjustDirection(VK_LEFT)==-1 && AdjustDirection('D')==1 && AdjustDirection(VK_RIGHT)==1,
         "A and Left move earlier, D and Right move later");
     std::vector<AppTarget> full;
     for(int i=0;i<8;++i)full.push_back({L"App",TargetKind::Shell,L"C:\\A"+std::to_wstring(i)+L".exe",L"",L""});
     const auto fullHub=BuildMenu(MenuPage::Settings,full,presets),fullManage=BuildMenu(MenuPage::Manage,full,presets);
-    Check(!CanConfirm(fullHub,4) && !CanConfirm(fullManage,8) && CanConfirm(fullHub,0) && CanConfirm(fullManage,7),
+    Check(!CanConfirm(fullHub,3) && !CanConfirm(fullManage,8) && CanConfirm(fullHub,0) && CanConfirm(fullManage,7),
         "a disabled Add cannot be confirmed; enabled items can");
-    Check(!CanConfirm(fullHub,-1) && !CanConfirm(fullHub,5),"nothing selected or a stale index confirms nothing");
+    Check(!CanConfirm(fullHub,-1) && !CanConfirm(fullHub,4),"nothing selected or a stale index confirms nothing");
 
     // Copilot events in every reel state.
     const ReelContext closed{},open{true,false},blocked{false,true},openBlocked{true,true};

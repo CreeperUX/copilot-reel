@@ -51,7 +51,8 @@ bool SameAppearance(const Appearance& a, const Appearance& b) {
         Same(a.outline, b.outline) && Same(a.tile, b.tile) && Same(a.tileStroke, b.tileStroke) &&
         Same(a.plateStroke, b.plateStroke) && Same(a.ringIdle, b.ringIdle) && Same(a.accent, b.accent) &&
         Same(a.accentText, b.accentText) && Same(a.textOnAccent, b.textOnAccent) &&
-        Same(a.selection, b.selection) && Same(a.selectionText, b.selectionText);
+        Same(a.selection, b.selection) && Same(a.selectionText, b.selectionText) && Same(a.critical, b.critical) &&
+        Same(a.criticalFill, b.criticalFill) && Same(a.textOnCritical, b.textOnCritical);
 }
 bool DeviceLost(HRESULT hr) {
     return hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET;
@@ -73,6 +74,10 @@ struct OrbitRenderer::Impl {
         ArtworkClass artClass = ArtworkClass::Generic;
         bool plated = false, preferred = false;
         float angle = 0, cx = 0, cy = 0;     // exact orbit center (DIP); hit testing uses the same
+        // Where a drag last sent the item and at what scale: a Reflow page starts its items here.
+        D2D1_POINT_2F at{};
+        float scale = 1;
+        bool falling = false;  // dropped into the trash: no Reflow tile starts from it
         std::wstring artKey;
         wc::ContainerVisual root{nullptr};
         wc::SpriteVisual tile{nullptr}, art{nullptr}, artSelected{nullptr};
@@ -91,9 +96,13 @@ struct OrbitRenderer::Impl {
         int seatIndex = -1;      // item under the seat; -1 when the seat is hidden
         float seatAngle = 0;     // last target angle (unbounded; travel takes the shortest arc)
         unsigned seatTravel = 0; // invalidates the completion of an interrupted travel
+        // The lifted item while a tile is dragged (-1 otherwise), the slot opened for it, and
+        // whether it is over the armed trash; `trash` is false when nothing may be removed.
+        int drag = -1, dragSlot = -1;
+        bool overTrash = false, trash = true;
     };
     struct Canvas { wc::CompositionDrawingSurface surface{nullptr}; wn::float2 size{}; };
-    struct CenterState { float ringIdle = -1, ringGated = -1, dot = -1, back = -1; };
+    struct CenterState { float ringIdle = -1, ringGated = -1, dot = -1, back = -1, trash = -1, armed = -1; };
 
     HWND window;
     UINT dpi = 96;
@@ -125,7 +134,8 @@ struct OrbitRenderer::Impl {
 
     wc::CompositionEasingFunction linear{nullptr}, decelerate{nullptr}, accelerate{nullptr}, drill{nullptr};
     wc::ContainerVisual pixelRoot{nullptr}, dpiRoot{nullptr}, root{nullptr}, pagesLayer{nullptr}, handoffLayer{nullptr};
-    wc::SpriteVisual backdropVisual{nullptr}, base{nullptr}, ringIdle{nullptr}, ringGated{nullptr}, gateDot{nullptr}, back{nullptr};
+    wc::SpriteVisual backdropVisual{nullptr}, base{nullptr}, ringIdle{nullptr}, ringGated{nullptr}, gateDot{nullptr}, back{nullptr},
+        trash{nullptr}, trashArmed{nullptr};
     wc::SpriteVisual labels[2]{wc::SpriteVisual{nullptr}, wc::SpriteVisual{nullptr}};
     wc::CompositionDrawingSurface labelSurfaces[2]{wc::CompositionDrawingSurface{nullptr}, wc::CompositionDrawingSurface{nullptr}};
     int activeLabel = 0;
@@ -246,11 +256,13 @@ struct OrbitRenderer::Impl {
         pagesLayer = compositor.CreateContainerVisual();
         handoffLayer = compositor.CreateContainerVisual();
         back = compositor.CreateSpriteVisual();
+        trash = compositor.CreateSpriteVisual();
+        trashArmed = compositor.CreateSpriteVisual();
         for (auto& label : labels) label = compositor.CreateSpriteVisual();
-        // Back to front: material, plate (shadow, fill, rim), center ring, orbit pages,
-        // the handoff clone, then the center's back chevron and name.
+        // Back to front: material, plate (shadow, fill, rim), center ring, orbit pages, the
+        // handoff clone, then the center's back chevron, drag trash (over the shrunken tile) and name.
         for (const wc::Visual& visual : std::initializer_list<wc::Visual>{backdropVisual, base, ringIdle, ringGated,
-                 gateDot, pagesLayer, handoffLayer, back, labels[0], labels[1]})
+                 gateDot, pagesLayer, handoffLayer, back, trash, trashArmed, labels[0], labels[1]})
             root.Children().InsertAtTop(visual);
 
         CreateDevices();
@@ -560,8 +572,9 @@ struct OrbitRenderer::Impl {
             SolidBrush(context, Color(appearance.plateStroke)).get(), rim);
     }
 
+    // Tile and seat edges sit on device pixels at every reel DPI (the canvas center is a pixel boundary).
     void DrawTile(ID2D1DeviceContext* context, wn::float2 size, bool fill) {
-        const float h = size.x / 2, t = vi::kTile / 2;
+        const float h = size.x / 2, t = SnapDip(vi::kTile / 2);
         const auto tile = D2D1::RectF(h - t, h - t, h + t, h + t);
         if (fill) context->FillRoundedRectangle(D2D1::RoundedRect(tile, vi::kTileRadius, vi::kTileRadius),
             SolidBrush(context, Color(appearance.tile)).get());
@@ -572,7 +585,7 @@ struct OrbitRenderer::Impl {
     }
 
     void DrawSeat(ID2D1DeviceContext* context, wn::float2 size) {
-        const float h = size.x / 2, s = vi::kSeat / 2;
+        const float h = size.x / 2, s = SnapDip(vi::kSeat / 2);
         const auto seat = D2D1::RectF(h - s, h - s, h + s, h + s);
         context->FillRoundedRectangle(D2D1::RoundedRect(seat, vi::kSeatRadius, vi::kSeatRadius),
             SolidBrush(context, Color(appearance.selection)).get());
@@ -589,7 +602,7 @@ struct OrbitRenderer::Impl {
         return appearance.highContrast ? plate.r * .2126f + plate.g * .7152f + plate.b * .0722f < .5f : appearance.dark;
     }
     void DrawItemArt(ID2D1DeviceContext* context, wn::float2 size, const AppTarget& visual, bool preferred, bool selected) {
-        const float h = size.x / 2, t = vi::kTile / 2;
+        const float h = size.x / 2, t = SnapDip(vi::kTile / 2);
         const auto tile = D2D1::RectF(h - t, h - t, h + t, h + t);
         const auto glyph = Color(selected && appearance.highContrast ? appearance.selectionText : appearance.foreground);
         const bool darkPlate = DarkPlate();
@@ -669,6 +682,25 @@ struct OrbitRenderer::Impl {
                 Color(appearance.secondary), static_cast<float>(dpi));
         });
         Place(back, canvas, c);
+        // The drag trash: a critical glyph inside a critical ring at the center-zone edge; armed,
+        // a filled disc with the glyph in textOnCritical covers the idle glyph and keeps the ring.
+        const float trashHalf = vi::kCenterZoneRadius + 2;
+        for (const bool armed : {false, true}) {
+            canvas = MakeCanvas(trashHalf, trashHalf);
+            Paint(canvas.surface, [&](ID2D1DeviceContext* context) {
+                const D2D1_POINT_2F tc{canvas.size.x / 2, canvas.size.y / 2};
+                if (armed) {
+                    context->FillEllipse(D2D1::Ellipse(tc, vi::kTrashArmedRadius, vi::kTrashArmedRadius),
+                        SolidBrush(context, Color(appearance.criticalFill)).get());
+                    DrawGlyph(context, Glyph::Remove, tc, vi::kTrashEm, Color(appearance.textOnCritical), static_cast<float>(dpi));
+                    return;
+                }
+                const float w = StrokeDip(vi::kTrashRingStroke), r = vi::kCenterZoneRadius - w / 2;
+                context->DrawEllipse(D2D1::Ellipse(tc, r, r), SolidBrush(context, Color(appearance.critical)).get(), w);
+                DrawGlyph(context, Glyph::Remove, tc, vi::kTrashEm, Color(appearance.critical), static_cast<float>(dpi));
+            });
+            Place(armed ? trashArmed : trash, canvas, c);
+        }
 
         const float itemHalf = vi::kBadgeOffset + vi::kBadgeRingRadius + 1.5f;
         canvas = MakeCanvas(itemHalf, itemHalf);
@@ -719,6 +751,7 @@ struct OrbitRenderer::Impl {
             item.angle = SlotAngle(i, count);
             item.cx = kCenter + vi::kOrbitRadius * std::cos(item.angle);
             item.cy = kCenter + vi::kOrbitRadius * std::sin(item.angle);
+            item.at = {item.cx, item.cy};
             item.preferred = static_cast<int>(i) == model.preferredIndex;
             item.artClass = ClassifyArtwork(item.entry.visual);
             item.plated = item.artClass == ArtworkClass::Plated;
@@ -844,6 +877,7 @@ struct OrbitRenderer::Impl {
         if (contentDirty) { art.clear(); BuildStatic(); contentDirty = false; }
         if (!visible || !page || rebuilt) transition = PageTransition::None;
         lastTransition = TransitionName(transition);
+        if (transition == PageTransition::Reflow) { Reflow(model); return; }
         if (transition == PageTransition::None && page && !rebuilt && SameStructure(*page, model)) {
             UpdateInPlace(model, visible);
             SetSelectionState(model.selection, visible);
@@ -909,7 +943,7 @@ struct OrbitRenderer::Impl {
         auto clone = compositor.CreateContainerVisual();
         clone.Size(itemSize);
         clone.CenterPoint({itemSize.x / 2, itemSize.y / 2, 0});
-        clone.Offset(item.root.Offset());
+        clone.Offset(ItemOffset(item.at));
         const D2D1_POINT_2F local{itemSize.x / 2, itemSize.y / 2};
         if (seated) clone.Children().InsertAtTop(MakeSprite(seatBrush, seatSize, local));
         else if (item.tile) clone.Children().InsertAtTop(MakeSprite(tileBrush, itemSize, local));
@@ -919,9 +953,11 @@ struct OrbitRenderer::Impl {
         Settle(item.root, 0);
         if (seated) Settle(from.seat, 0);
         auto batch = compositor.CreateScopedBatch(wc::CompositionBatchTypes::Animation);
+        // From where the tile is drawn: a Reflow may still be moving it.
         auto offset = compositor.CreateVector3KeyFrameAnimation();
-        offset.InsertExpressionKeyFrame(0, L"this.StartingValue");
+        offset.InsertExpressionKeyFrame(0, L"source.Offset");
         offset.InsertKeyFrame(1, {kCenter - itemSize.x / 2, kCenter - itemSize.y / 2, 0}, drill);
+        offset.SetReferenceParameter(L"source", item.root);
         offset.Duration(Ms(vi::kHandoffMs));
         clone.StartAnimation(L"Offset", offset);
         clone.StartAnimation(L"Scale", ScaleAnimation(1.f, vi::kHandoffScaleTo, vi::kHandoffMs, drill));
@@ -936,6 +972,187 @@ struct OrbitRenderer::Impl {
         OnCompleted(batch, [layer, clone] { Detach(layer, clone); });
     }
 
+    // ---- Dragging on Manage apps and the reflow that follows a drop.
+
+    wn::float3 ItemOffset(D2D1_POINT_2F at) const {
+        return {SnapDip(at.x - itemSize.x / 2), SnapDip(at.y - itemSize.y / 2), 0};
+    }
+    D2D1_POINT_2F SlotCenter(size_t index, size_t count) const {
+        const float angle = SlotAngle(index, count);
+        return {kCenter + vi::kOrbitRadius * std::cos(angle), kCenter + vi::kOrbitRadius * std::sin(angle)};
+    }
+    // Sends an item to `to` from wherever it is now.
+    void MoveItem(Item& item, D2D1_POINT_2F to, unsigned ms, const wc::CompositionEasingFunction& ease) {
+        item.at = to;
+        auto offset = compositor.CreateVector3KeyFrameAnimation();
+        offset.InsertExpressionKeyFrame(0, L"this.StartingValue");
+        offset.InsertKeyFrame(1, ItemOffset(to), ease);
+        offset.Duration(Ms(ms));
+        item.root.StartAnimation(L"Offset", offset);
+    }
+    void ScaleItem(Item& item, float scale, unsigned ms, const wc::CompositionEasingFunction& ease) {
+        item.scale = scale;
+        item.root.StartAnimation(L"Scale", ScaleAnimation(std::nullopt, scale, ms, ease));
+    }
+
+    void BeginDrag(int index, bool trashEnabled) {
+        if (!page || !visible || closing || index < 0 || static_cast<size_t>(index) >= page->items.size()) return;
+        auto& p = *page;
+        if (p.drag >= 0) return;
+        p.drag = p.dragSlot = index;
+        p.overTrash = false;
+        p.trash = trashEnabled;
+        // The seat and the name leave; the center shows the trash.
+        SetSelectionState(-1, true);
+        auto& item = p.items[index];
+        // Lifted above the other items.
+        p.root.Children().Remove(item.root);
+        p.root.Children().InsertAtTop(item.root);
+        ScaleItem(item, vi::kDragLiftScale, vi::kDragLiftMs, decelerate);
+    }
+
+    void DragTo(D2D1_POINT_2F point, int slot, bool overTrash) {
+        if (!page || page->drag < 0) return;
+        auto& p = *page;
+        const size_t count = p.items.size();
+        const int from = p.drag;
+        auto& lifted = p.items[from];
+        // The lifted item follows the pointer without easing.
+        lifted.at = point;
+        lifted.root.StopAnimation(L"Offset");
+        lifted.root.Offset(ItemOffset(point));
+        if (slot < 0 || static_cast<size_t>(slot) >= count) slot = from;
+        if (slot != p.dragSlot) {
+            // The items between the lifted one's home and its new slot step one place toward the home.
+            p.dragSlot = slot;
+            for (int i = 0; i != static_cast<int>(count); ++i) {
+                if (i == from) continue;
+                int at = i;
+                if (from < slot && i > from && i <= slot) at = i - 1;
+                else if (slot < from && i >= slot && i < from) at = i + 1;
+                MoveItem(p.items[i], SlotCenter(at, count), vi::kDragReflowMs, decelerate);
+            }
+        }
+        overTrash = overTrash && p.trash;
+        if (overTrash != p.overTrash) {
+            p.overTrash = overTrash;
+            ScaleItem(lifted, overTrash ? vi::kDragOverTrashScale : vi::kDragLiftScale, vi::kDragArmMs, decelerate);
+            Opacity(lifted.root, overTrash ? vi::kDragOverTrashOpacity : 1.f, vi::kDragArmMs, true);
+            UpdateCenter(true);
+        }
+    }
+
+    void EndDrag(DragEnd end) {
+        if (!page || page->drag < 0) return;
+        auto& p = *page;
+        const size_t count = p.items.size();
+        auto& lifted = p.items[p.drag];
+        p.drag = p.dragSlot = -1;
+        p.overTrash = false;
+        switch (end) {
+        case DragEnd::Cancel:
+            // Everything returns to its own slot.
+            for (size_t i = 0; i != count; ++i) {
+                auto& item = p.items[i];
+                MoveItem(item, SlotCenter(i, count), vi::kDragSettleMs, drill);
+                if (item.scale != 1) ScaleItem(item, 1, vi::kDragSettleMs, drill);
+            }
+            Opacity(lifted.root, lifted.entry.enabled ? 1.f : vi::kDisabledOpacity, vi::kDragArmMs, true);
+            break;
+        case DragEnd::Remove:
+            // The lifted item falls into the trash; the Reflow page that follows keeps it until it is gone.
+            lifted.falling = true;
+            MoveItem(lifted, {kCenter, kCenter}, vi::kDragRemoveMs, accelerate);
+            ScaleItem(lifted, vi::kDragRemoveScaleTo, vi::kDragRemoveMs, accelerate);
+            Opacity(lifted.root, 0, vi::kDragRemoveMs, true, accelerate);
+            break;
+        default:
+            break;
+        }
+        UpdateCenter(true);
+    }
+
+    static bool SameVisual(const AppTarget& a, const AppTarget& b) {
+        return a.name == b.name && a.kind == b.kind && a.target == b.target && a.arguments == b.arguments &&
+            a.workingDirectory == b.workingDirectory;
+    }
+
+    // The same page in a new order: every item travels from where it is (`at`) to its new slot, an
+    // item that is new fades in, and an item that is gone shrinks away with the outgoing page.
+    void Reflow(const PageModel& model) {
+        auto next = BuildPage(model);
+        FinishLeaving();
+        auto previous = page;
+        page = next;
+        pagesLayer.Children().InsertAtTop(next->root);
+        if (!previous) { SetSelectionState(model.selection, false); return; }
+        const size_t count = previous->items.size();
+        std::vector<bool> used(count);
+        auto batch = compositor.CreateScopedBatch(wc::CompositionBatchTypes::Animation);
+        for (size_t i = 0; i != next->items.size(); ++i) {
+            auto& item = next->items[i];
+            // The controller names each item's previous slot; otherwise the first unused tile of
+            // the same app that is not falling into the trash.
+            size_t match = count;
+            if (model.from.size() == next->items.size()) {
+                const int from = model.from[i];
+                if (from >= 0 && static_cast<size_t>(from) < count && !used[from] &&
+                    SameVisual(previous->items[from].entry.visual, item.entry.visual)) match = from;
+            } else {
+                for (size_t j = 0; j != count; ++j)
+                    if (!used[j] && !previous->items[j].falling &&
+                        SameVisual(previous->items[j].entry.visual, item.entry.visual)) { match = j; break; }
+            }
+            const float rest = item.entry.enabled ? 1.f : vi::kDisabledOpacity;
+            if (match == count) {
+                item.root.Opacity(0);
+                Opacity(item.root, rest, vi::kDragSettleMs, true, decelerate);
+                continue;
+            }
+            used[match] = true;
+            auto& old = previous->items[match];
+            // Starts where the old tile is drawn, even while its own travel is still running.
+            const D2D1_POINT_2F home = item.at;
+            item.at = home;
+            auto offset = compositor.CreateVector3KeyFrameAnimation();
+            offset.InsertExpressionKeyFrame(0, L"old.Offset");
+            offset.InsertKeyFrame(1, ItemOffset(home), drill);
+            offset.SetReferenceParameter(L"old", old.root);
+            offset.Duration(Ms(vi::kDragSettleMs));
+            item.root.StartAnimation(L"Offset", offset);
+            if (old.scale != 1) {
+                auto scale = compositor.CreateVector3KeyFrameAnimation();
+                scale.InsertExpressionKeyFrame(0, L"old.Scale");
+                scale.InsertKeyFrame(1, {1, 1, 1}, drill);
+                scale.SetReferenceParameter(L"old", old.root);
+                scale.Duration(Ms(vi::kDragSettleMs));
+                item.root.StartAnimation(L"Scale", scale);
+            }
+            // Hidden, but its travel keeps running for the expressions above.
+            old.root.StopAnimation(L"Opacity");
+            old.root.Opacity(0);
+        }
+        Settle(previous->seat, 0);
+        for (size_t j = 0; j != previous->items.size(); ++j) {
+            if (used[j]) continue;
+            auto& gone = previous->items[j];
+            gone.root.StartAnimation(L"Scale", ScaleAnimation(std::nullopt, vi::kDragRemoveScaleTo, vi::kDragRemoveMs, accelerate));
+            Opacity(gone.root, 0, vi::kDragRemoveMs, true, accelerate);
+        }
+        batch.End();
+        leaving.push_back(previous);
+        std::weak_ptr<Page> weak = previous;
+        OnCompleted(batch, [this, weak] {
+            auto done = weak.lock();
+            if (!done) return;
+            const auto found = std::find(leaving.begin(), leaving.end(), done);
+            if (found == leaving.end()) return;
+            Detach(pagesLayer, done->root);
+            leaving.erase(found);
+        });
+        SetSelectionState(model.selection, true);
+    }
+
     // ---- Selection and center.
 
     // Which chevron sides the page draws as movable: none, both, earlier, later or blocked.
@@ -945,8 +1162,14 @@ struct OrbitRenderer::Impl {
         return m.adjustEarlier ? (m.adjustLater ? L"both" : L"earlier") : (m.adjustLater ? L"later" : L"blocked");
     }
 
+    // The center trash: hidden, idle, armed, or disabled while one app remains.
+    const wchar_t* TrashState() const {
+        if (!page || page->drag < 0) return L"hidden";
+        return !page->trash ? L"disabled" : page->overTrash ? L"armed" : L"idle";
+    }
+
     std::wstring CenterText() const {
-        if (!page || awaitCenter) return {};
+        if (!page || awaitCenter || page->drag >= 0) return {};
         const int selected = page->model.selection;
         if (selected < 0 || static_cast<size_t>(selected) >= page->items.size()) return {};
         return AppDisplayName(page->items[selected].entry.visual);
@@ -1058,12 +1281,23 @@ struct OrbitRenderer::Impl {
         Opacity(current, 0, ms, animate);
     }
 
-    // The name owns the center: the ring and back chevron give way while it shows.
+    // The name owns the center: the ring and back chevron give way while it shows. While a tile
+    // is dragged the trash owns it alone.
     void UpdateCenter(bool animate, unsigned backDelay = 0) {
         const bool named = !labelText.empty();
         const bool gated = awaitCenter && page;
-        const CenterState next{!named && !gated ? 1.f : 0.f, gated ? 1.f : 0.f, gated ? 1.f : 0.f,
-            page && page->model.isSubmenu && !named && !gated ? 1.f : 0.f};
+        const bool dragging = page && page->drag >= 0;
+        const bool quiet = !named && !gated && !dragging;
+        const CenterState next{quiet ? 1.f : 0.f, gated ? 1.f : 0.f, gated ? 1.f : 0.f,
+            page && page->model.isSubmenu && quiet ? 1.f : 0.f,
+            dragging ? (page->trash ? 1.f : vi::kDisabledOpacity) : 0.f,
+            dragging && page->overTrash ? 1.f : 0.f};
+        if (next.trash != center.trash) Opacity(trash, next.trash, vi::kDragArmMs, animate);
+        if (next.armed != center.armed) {
+            Opacity(trashArmed, next.armed, vi::kDragArmMs, animate);
+            if (next.armed > 0 && animate && Animated())
+                trashArmed.StartAnimation(L"Scale", ScaleAnimation(vi::kDragArmScaleFrom, 1, vi::kDragArmMs, decelerate));
+        }
         const bool arming = center.ringGated > 0 && !gated;
         if (next.ringIdle != center.ringIdle)
             Opacity(ringIdle, next.ringIdle, arming ? vi::kGateArmMs : vi::kRingHideMs, animate, arming ? decelerate : linear);
@@ -1083,9 +1317,15 @@ struct OrbitRenderer::Impl {
         if (page) {
             auto& p = *page;
             Settle(p.root, 1);
+            p.drag = p.dragSlot = -1;
+            p.overTrash = false;
             for (size_t i = 0; i != p.items.size(); ++i) {
                 auto& item = p.items[i];
                 Settle(item.root, item.entry.enabled ? 1 : vi::kDisabledOpacity);
+                item.root.StopAnimation(L"Offset");
+                item.at = {item.cx, item.cy};
+                item.scale = 1;
+                item.root.Offset(ItemOffset(item.at));
                 ItemSelected(item, static_cast<int>(i) == p.seatIndex, false);
             }
             Settle(p.seat, p.seatIndex >= 0 ? 1.f : 0.f);
@@ -1100,6 +1340,8 @@ struct OrbitRenderer::Impl {
         Settle(labels[1 - activeLabel], 0);
         for (const wc::Visual& visual : std::initializer_list<wc::Visual>{ringIdle, ringGated, gateDot, back})
             visual.StopAnimation(L"Scale");
+        Settle(trash, 0);
+        Settle(trashArmed, 0);
         center = {};
         UpdateCenter(false);
     }
@@ -1143,7 +1385,7 @@ struct OrbitRenderer::Impl {
             auto& p = *page;
             auto& chosen = p.items[p.seatIndex];
             for (const wc::Visual& visual : std::initializer_list<wc::Visual>{base, backdropVisual, ringIdle, ringGated,
-                     gateDot, back, labels[0], labels[1], p.chevrons[0], p.chevrons[1], p.chevronsActive[0], p.chevronsActive[1]})
+                     gateDot, back, trash, trashArmed, labels[0], labels[1], p.chevrons[0], p.chevrons[1], p.chevronsActive[0], p.chevronsActive[1]})
                 Opacity(visual, 0, vi::kCommitFadeMs, true);
             for (auto& item : p.items) if (&item != &chosen) Opacity(item.root, 0, vi::kCommitFadeMs, true);
             for (const wc::Visual& visual : std::initializer_list<wc::Visual>{chosen.root, p.seat}) {
@@ -1257,6 +1499,18 @@ void OrbitRenderer::SetSelection(int index) {
     if (impl_->page->model.selection == index) return;
     impl_->Run([&] { impl_->SetSelectionState(index, impl_->visible); });
 }
+void OrbitRenderer::BeginDrag(int index, bool trash) {
+    if (impl_->ready && !impl_->closing) impl_->Run([&] { impl_->BeginDrag(index, trash); });
+}
+void OrbitRenderer::DragTo(D2D1_POINT_2F point, int slot, bool overTrash) {
+    if (impl_->ready && !impl_->closing) impl_->Run([&] { impl_->DragTo(point, slot, overTrash); });
+}
+void OrbitRenderer::EndDrag(DragEnd end) {
+    if (impl_->ready && !impl_->closing) impl_->Run([&] { impl_->EndDrag(end); });
+}
+bool OrbitRenderer::Dragging() const {
+    return impl_->ready && impl_->visible && !impl_->closing && impl_->page && impl_->page->drag >= 0;
+}
 void OrbitRenderer::Show() {
     if (impl_->ready) impl_->Run([&] { impl_->Show(); });
 }
@@ -1277,6 +1531,7 @@ std::wstring OrbitRenderer::Diagnostics() const {
         self.backdropStatus + L"; center gate=" + (self.awaitCenter ? L"waiting" : L"armed") +
         L"; menu=" + (page ? page->model.title : L"") + L"; submenu=" + (page && page->model.isSubmenu ? L"yes" : L"no") +
         L"; adjust=" + self.AdjustState() + L"; transition=" + self.lastTransition +
+        L"; drag=" + std::to_wstring(page ? page->drag : -1) + L"; trash=" + self.TrashState() +
         L"; animation=open-fade83-scale167/close83/commit133/seat-spring/drill250/handoff200; center=quiet; perimeter=neutral" +
         L"; text=" + self.textFamily + L"; DPI=" + std::to_wstring(self.dpi) +
         L"; surface draws=" + std::to_wstring(self.surfaceDraws) +

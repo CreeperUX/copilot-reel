@@ -72,7 +72,9 @@ inline TestInputGate ParseTestInputGate(std::wstring_view runId,std::wstring_vie
 
 // Pointer sets the synthetic cursor and runs the pointer path; Click and RightClick hit-test
 // like WM_NCHITTEST and then click or go back; Key runs the key path with a virtual-key code.
-enum class TestAction : unsigned { Pointer, Click, RightClick, Key, Count };
+// Press and Release are the two halves of a click, so Pointer moves between them drag: Press
+// hit-tests like Click, and a Release during a drag reaches the reel anywhere, as captured.
+enum class TestAction : unsigned { Pointer, Click, RightClick, Key, Press, Release, Count };
 // Sent as WM_COPYDATA with dwData kTestIpcMagic ('RTST'); CommandPacket keeps its own 'REEL'.
 struct TestPacket { unsigned version=1; TestAction action=TestAction::Pointer; uint64_t sequence=0; POINT screen{}; unsigned vk=0; unsigned reserved=0; };
 static_assert(sizeof(TestPacket)==32 && offsetof(TestPacket,sequence)==8 && offsetof(TestPacket,screen)==16 && offsetof(TestPacket,vk)==24,

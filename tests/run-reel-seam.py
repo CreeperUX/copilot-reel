@@ -15,6 +15,7 @@ import importlib.util
 import json
 import math
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -45,9 +46,9 @@ assert seam.forbidden_tokens() == FORBIDDEN
 
 APPS = ['Probe 0', 'Probe 1', 'Probe 2']
 PLUS = 'Apps and settings'
-LANGUAGE, APPEARANCE, PREFERRED, MANAGE, ADD = 'Language', 'Appearance', 'Preferred agent', 'Manage apps', 'Add app'
-HUB = [LANGUAGE, APPEARANCE, PREFERRED, MANAGE, ADD]
-HUB_ZH = ['语言', '外观', '首选应用', '管理应用', '添加应用']
+LANGUAGE, APPEARANCE, MANAGE, ADD = 'Language', 'Appearance', 'Manage apps', 'Add app'
+HUB = [LANGUAGE, APPEARANCE, MANAGE, ADD]
+HUB_ZH = ['语言', '外观', '管理应用', '添加应用']
 CUSTOM, PREVIOUS, NEXT = 'Custom app', 'Previous', 'Next'
 EDIT, SET_PREFERRED, REMOVE = 'Edit app', 'Set as preferred', 'Remove from reel'
 
@@ -613,8 +614,20 @@ def group_b(g):
     reel.stop()
 
 
+def drag_state(g):
+    """(main dragTarget, renderer drag index, renderer trash state) from fresh diagnostics."""
+    state = g.reel.diagnostics()
+    renderer = dict(re.findall(r'; (drag|trash)=([^;\r\n]*)', state.text))
+    return state['dragTarget'], int(renderer['drag']), renderer['trash'], state
+
+
+def drag_path(reel, start_index, end_index, count, steps=3):
+    """Points along the orbit from one slot toward another, past the drag threshold from the first."""
+    return [reel.sector(start_index + (end_index - start_index) * (i + 1) / steps, count) for i in range(steps)]
+
+
 def group_c(g):
-    """Reorder an app from its actions page with keys and chevrons."""
+    """Manage apps: drag to reorder, drop on the center trash to park an app, put it back from Add, A/D and Delete."""
     reel = g.reel
     reel.start()
     open_preview(g, ANCHOR)
@@ -624,46 +637,134 @@ def group_c(g):
     assert_page(g, seam.PAGE_MANAGE, 'Your apps', APPS + [ADD])
     reel.choose('Probe 0')
     state = assert_page(g, seam.PAGE_ENTRY, 'Probe 0')
-    assert state.names[0] == 'Probe 0' and state['adjust'] == 'later', state.text
+    assert state.names[0] == 'Probe 0' and state['adjust'] == 'none', state.text
     assert all(name in state.names for name in (EDIT, SET_PREFERRED, REMOVE)), state.names
     assert APPS[int(state['preferredIndex'])] == 'Probe 0'
-    g.passed("the actions page's first entry is the app itself with adjust chevrons")
-
-    offset = len(reel.read_log())
-    reel.key(seam.VK_D)
-    assert reel.apps() == ['Probe 1', 'Probe 0', 'Probe 2'], reel.apps()
-    assert 'App moved: Probe 0 to position 2' in reel.read_log()[offset:]
-    state = assert_page(g, seam.PAGE_ENTRY, 'Probe 0')
-    assert state.names[0] == 'Probe 0' and state['adjust'] == 'both' and state.selected == 0, state.text
-    reel.key(seam.VK_RIGHT)
-    assert reel.apps() == ['Probe 1', 'Probe 2', 'Probe 0'], reel.apps()
-    assert reel.diagnostics()['adjust'] == 'earlier'
     saved = (g.data / 'apps.ini').read_bytes()
-    reel.key(seam.VK_D)
-    assert (g.data / 'apps.ini').read_bytes() == saved, 'D at the last position must change nothing.'
-    assert reel.diagnostics()['adjust'] == 'earlier'
-    g.passed('D and Right move the app one step later and save at once; D at the last position changes nothing')
-
+    for vk in (seam.VK_D, seam.VK_RIGHT, seam.VK_A, seam.VK_DELETE):
+        reel.key(vk)
+    assert_page(g, seam.PAGE_ENTRY, 'Probe 0')
+    # Where the earlier chevron was, a click is on the app tile itself: done, back to 'Your apps'.
     reel.click(reel.canvas(*seam.EARLIER_CHEVRON_DIP))
-    assert reel.apps() == ['Probe 1', 'Probe 0', 'Probe 2'], reel.apps()
-    state = assert_page(g, seam.PAGE_ENTRY, 'Probe 0')
-    assert state['adjust'] == 'both'
-    assert reel.apps()[int(state['preferredIndex'])] == 'Probe 0', 'Moving an app must not change the preferred agent.'
-    g.passed('a click on the earlier chevron moves the app one step earlier; the preferred agent is unchanged')
+    assert_page(g, seam.PAGE_MANAGE, 'Your apps', APPS + [ADD])
+    assert (g.data / 'apps.ini').read_bytes() == saved, 'An app actions page never reorders.'
+    g.passed("the actions page shows the app itself without chevrons; A, D, Right, Delete and the old chevron spot "
+             'move nothing, and the tile returns to Your apps')
 
-    # Inside the earlier chevron's 40 DIP box but within the 25 DIP seat guard: the tile, not a move.
-    seat = (seam.SLOT0_DIP[0] - (seam.SEAT_GUARD_DIP - 3), seam.SLOT0_DIP[1])
-    assert abs(seat[0] - seam.EARLIER_CHEVRON_DIP[0]) < 20
-    reel.click(reel.canvas(*seat))
-    assert_page(g, seam.PAGE_MANAGE, 'Your apps', ['Probe 1', 'Probe 0', 'Probe 2', ADD])
-    assert reel.apps() == ['Probe 1', 'Probe 0', 'Probe 2'], 'A click on the seat must not move the app.'
+    # A press and release without movement is still a click: it opens the app's actions.
+    start = reel.sector_of('Probe 1')
+    reel.press(start)
+    step = reel.release_button(start)
+    assert step['drag'] == -1 and step['page'] == seam.PAGE_ENTRY, step
+    assert_page(g, seam.PAGE_ENTRY, 'Probe 1')
+    reel.key(seam.VK_ESCAPE)
+    assert_page(g, seam.PAGE_MANAGE, 'Your apps', APPS + [ADD])
+    g.passed("a press and release in place on 'Your apps' is a click and opens the app's actions")
+
+    # Drag Probe 0 to Probe 2's slot.
+    count = len(APPS) + 1
+    offset = len(reel.read_log())
+    reel.press(reel.sector(0, count))
+    for point in drag_path(reel, 0, 2, count):
+        step = reel.pointer(point)
+    assert step['drag'] == 0 and step['target'] == 'slot:2', step
+    target, lifted, trash, state = drag_state(g)
+    assert target == 'slot:2' and lifted == 0 and trash == 'idle', state.text
+    assert state['centerLabel'] == '' and state.selected == -1, 'While a tile is dragged the trash owns the center alone.'
+    assert (g.data / 'apps.ini').read_bytes() == saved, 'Nothing is saved before the drop.'
+    step = reel.release_button(reel.sector(2, count))
+    assert step['drag'] == -1 and step['page'] == seam.PAGE_MANAGE, step
+    assert reel.apps() == ['Probe 1', 'Probe 2', 'Probe 0'], reel.apps()
+    log = reel.read_log()[offset:]
+    assert 'Drag started: Probe 0' in log and 'App moved: Probe 0 to position 3' in log, log
+    state = assert_page(g, seam.PAGE_MANAGE, 'Your apps', ['Probe 1', 'Probe 2', 'Probe 0', ADD])
+    assert 'transition=reflow' in state.text and state.selected == 2, state.text
+    assert reel.apps()[int(state['preferredIndex'])] == 'Probe 0', 'Moving an app must not change the preferred agent.'
     assert_no_launch(g, 0)
-    g.passed("a click on the app's seat, even beside the earlier chevron, chooses the tile and returns to 'Your apps' "
-             'without moving or launching')
+    g.passed("dragging an app shows the trash, opens the slot under the pointer and saves the order on release; "
+             'the page reflows, the moved app stays selected and the preferred agent is unchanged')
+
+    # A drag back to its own slot and a drag canceled with Escape keep the order.
+    saved = (g.data / 'apps.ini').read_bytes()
+    offset = len(reel.read_log())
+    reel.drag(reel.sector(1, count), drag_path(reel, 1, 2, count, 2) + [reel.sector(1, count)], reel.sector(1, count))
+    assert 'Drag returned' in reel.read_log()[offset:]
+    reel.press(reel.sector(0, count))
+    reel.path(drag_path(reel, 0, 1, count))
+    reel.key(seam.VK_ESCAPE)
+    target, lifted, trash, state = drag_state(g)
+    assert target == 'none' and lifted == -1 and trash == 'hidden' and state.page == seam.PAGE_MANAGE, state.text
+    step = reel.release_button(reel.sector(1, count))
+    assert step['page'] == seam.PAGE_MANAGE, 'The release of a canceled drag is not a click.'
+    assert 'Drag canceled' in reel.read_log()[offset:]
+    assert (g.data / 'apps.ini').read_bytes() == saved
+    g.passed('a drag released on its own slot or canceled with Escape changes nothing, and its release is not a click')
+
+    # Drop Probe 1 on the trash: it leaves the reel with its settings and waits first on Add.
+    offset = len(reel.read_log())
+    reel.press(reel.sector(0, count))
+    reel.path(drag_path(reel, 0, .5, count, 2) + [reel.center_point()])
+    target, lifted, trash, state = drag_state(g)
+    assert target == 'trash' and trash == 'armed', state.text
+    reel.release_button(reel.center_point())
+    assert reel.apps() == ['Probe 2', 'Probe 0'], reel.apps()
+    assert reel.parked() == ['Probe 1'], reel.parked()
+    assert 'App taken out of the reel: Probe 1; parked=1' in reel.read_log()[offset:]
+    state = assert_page(g, seam.PAGE_MANAGE, 'Your apps', ['Probe 2', 'Probe 0', ADD])
+    assert reel.apps()[int(state['preferredIndex'])] == 'Probe 0'
+    assert_no_launch(g, 0)
+    g.passed("dropping an app on the armed center trash takes it out of the reel into parked.ini; "
+             "'Your apps' stays open and the preferred agent is unchanged")
+
+    reel.choose(ADD)
+    state = assert_page(g, seam.PAGE_PRESETS, 'Add an agent')
+    assert state.names[0] == 'Probe 1' and state['addParked'] == '1', state.text
+    reel.choose('Probe 1')
+    assert_page(g, seam.PAGE_MANAGE, 'Your apps', ['Probe 2', 'Probe 0', 'Probe 1', ADD])
+    assert reel.parked() == [], reel.parked()
+    ini = (g.data / 'apps.ini').read_text(encoding='utf-16')
+    assert 'Name=Probe 1\nKind=shell\nTarget=' in ini and 'Arguments=--radial-probe=1' in ini, ini
+    assert not reel.owned_windows(seam.EDITOR_CLASS) and not reel.owned_windows(seam.DIALOG_CLASS)
+    assert_no_launch(g, 0)
+    g.passed('Add offers the parked app first; one tap puts it back with its own target and arguments, '
+             'without the editor or a launch')
+
+    # On 'Your apps' A and D move the selected app and Delete takes it out of the reel.
+    reel.select('Probe 1')
+    reel.key(seam.VK_A)
+    assert reel.apps() == ['Probe 2', 'Probe 1', 'Probe 0'], reel.apps()
+    assert reel.diagnostics().selected == 1, 'The selection follows the moved app.'
+    reel.key(seam.VK_D)
+    reel.key(seam.VK_D)
+    assert reel.apps() == ['Probe 2', 'Probe 0', 'Probe 1'], 'D at the last place changes nothing.'
+    reel.key(seam.VK_DELETE)
+    assert reel.apps() == ['Probe 2', 'Probe 0'] and reel.parked() == ['Probe 1'], (reel.apps(), reel.parked())
+    g.passed("on 'Your apps' A and D move the selected app one place and Delete takes it out of the reel")
+
+    # 'Remove from reel' on an app's actions page parks it the same way.
+    reel.choose('Probe 2')
+    reel.choose(REMOVE)
+    assert_page(g, seam.PAGE_MANAGE, 'Your apps', ['Probe 0', ADD])
+    assert reel.apps() == ['Probe 0'] and reel.parked() == ['Probe 2', 'Probe 1'], (reel.apps(), reel.parked())
+    g.passed("'Remove from reel' keeps the app's settings on Add too, most recent first")
+
+    # The last app cannot be dropped on the trash.
+    saved = (g.data / 'apps.ini').read_bytes()
+    offset = len(reel.read_log())
+    reel.press(reel.sector(0, 2))
+    reel.path([reel.sector(.25, 2), reel.center_point()])
+    target, lifted, trash, state = drag_state(g)
+    assert target == 'slot:0' and trash == 'disabled', state.text
+    reel.release_button(reel.center_point())
+    assert (g.data / 'apps.ini').read_bytes() == saved and reel.parked() == ['Probe 2', 'Probe 1']
+    assert 'Drop on the trash ignored: the last app stays' in reel.read_log()[offset:]
+    assert_page(g, seam.PAGE_MANAGE, 'Your apps', ['Probe 0', ADD])
+    g.passed('with one app left the trash is drawn disabled and a drop on it changes nothing')
+
     close_menu(g, 3)
     reel.copilot(seam.FAST_TAP)
     assert_launch(g, 1, 'Probe 0')
-    g.passed('after reordering, a tap launches the same preferred probe')
+    g.passed('after reordering and parking, a tap launches the same preferred probe')
     assert_quiet(g)
     reel.stop()
 
@@ -944,28 +1045,34 @@ def group_hub(g):
 
 
 def set_preferred(g, name):
+    """The preferred agent is set from the app's own actions page; the hub has no Preferred entry."""
     reel = g.reel
     open_preview(g, ANCHOR)
     reel.choose(PLUS)
-    reel.choose(PREFERRED)
-    assert_page(g, seam.PAGE_PREFERRED, 'Preferred agent', reel.apps())
+    assert_page(g, seam.PAGE_SETTINGS, 'Settings', HUB)
+    reel.choose(MANAGE)
     reel.choose(name)
-    state = assert_page(g, seam.PAGE_SETTINGS, 'Settings')
+    assert_page(g, seam.PAGE_ENTRY, name)
+    reel.choose(SET_PREFERRED)
+    state = assert_page(g, seam.PAGE_MANAGE, 'Your apps')
     assert reel.apps()[int(state['preferredIndex'])] == name
+    reel.click(reel.center_point())
+    assert_page(g, seam.PAGE_SETTINGS, 'Settings')
     reel.click(reel.center_point())
     assert_page(g, seam.PAGE_MAIN, 'Copilot Reel')
     close_menu(g, 1)
 
 
 def group_preferred(g):
-    """Choosing the preferred agent in the reel changes what a tap opens."""
+    """Setting the preferred agent from an app's actions changes what a tap opens."""
     reel = g.reel
     reel.start()
     set_preferred(g, 'Probe 1')
     assert_no_launch(g, 0)
     reel.copilot(seam.FAST_TAP)
     assert_launch(g, 1, 'Probe 1')
-    g.passed('radial preferred-agent selection changes short-tap behavior; the center and Escape navigate back')
+    g.passed("'Set as preferred' on an app's actions page changes short-tap behavior and returns to 'Your apps'; "
+             'the center and Escape navigate back')
     assert_quiet(g)
     reel.stop()
 

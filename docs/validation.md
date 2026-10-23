@@ -1,6 +1,22 @@
 # Validation status
 
-Snapshot: 2026-10-22, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.5.1**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-23, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.6.0**. This records demonstrated behavior and its limits, not full release acceptance.
+
+## Verified in v0.3.6
+
+0.3.6 follows four requests from the user on 2026-10-23: the reel was too large on this 1440 x 900 DIP (200%) display; apps should be reordered by dragging their tiles on Manage apps, with a red trash in the center that takes an app out of the reel while keeping its settings for Add; the reorder chevrons on an app's actions page go; and the hub's Preferred agent entry goes, leaving Set as preferred on an app's actions page.
+
+| Area | Evidence and scope |
+| --- | --- |
+| Native build | MSVC `/W4` without warnings. Unit tests: core (`MoveEntry`/`MovedIndex` for every from/to pair at 1-8 apps, `DropSlot` on every slot and both halves of Add, `Park` order and the 16-app cap, `AddCatalog` with parked apps first and a parked profile of an app still in the reel, `RouteKey` A/D/Delete on Manage, the four-item hub, `MenuPage::Entry` still 5), settings 64 (parked.ini 0-16 entries, padded and signed counts, format separation, an atomic round trip in a private temporary directory), behavior 65, iconography 182, local launch 233, display names 51, test-input seam (Press 4, Release 5). |
+| Interaction | `tests/run-reel-seam.py` passed all 12 groups (`artifacts/qa/seam-20261023-213557-d43c52/`). Group `c` was rewritten for 0.3.6: no reorder on an app's actions page; a press and release in place is a click; a drag through the seam's new Press and Release actions shows the idle trash, saves the order on release with a reflow and keeps the preferred agent; a drag back to its own slot or canceled with Escape saves nothing and its release is not a click; a drop on the armed trash parks the app in `parked.ini`; Add lists it first and one tap restores its target and arguments without the editor; A/D and Delete on Manage; Remove from reel parks too; with one app the trash is disabled. `preferred` and `cold` set the preferred agent from an app's actions page. |
+| Rendering | `tools/capture-seam.py` published `output/runtime/v0.3.6/` (seven variants, eleven stills each, including `manage-drag` and `manage-trash`) with `--no-reference`, then a second run compared every still with it: 0 pixels beyond tolerance in every variant (`artifacts/qa/capture-seam-20261023-213824-f33ca8/`). The 0.8 scale makes the window 616 px at 192 DPI (768 px in 0.3.5) and 308 px at 96 DPI. Tile and seat edges are snapped to device pixels at the new effective DPIs. |
+| Review | Five lenses (input state machine, renderer, persistence, scale, tests) with adversarial verification. Fixed: keys during a pending press reached a stale drag index; a Copilot hold during a pending press could leave the hold stuck; an appearance or device rebuild during a drag could park an app with no trash drawn; the seam's Release missed the capture of a pending press; Reflow jumped tiles to their targets instead of starting where they were drawn, and could restart a trashed duplicate; the drill-in handoff started from a stale offset; an unreadable `parked.ini` would have been overwritten (it is now backed up first); a trailing `/` in `COPILOT_REEL_DATA_DIR` misplaced `parked.ini`; parked.ini's byte limit could block the trash; artwork warm-up used the monitor DPI instead of the reel's; the tiny-work-area fallback could round past the work area; the documented seam barrier. |
+| Clean installation | 0.3.6.0 replaced 0.3.5.1.0 after a backup (`artifacts/backups/20261023-214113`); three configuration files were restored. Installed executable SHA-256 `6F327875…D061` equals the tested build; the Copilot key still selects `CopilotReel.Desktop_nks6vs6sjb1qw!App`. |
+
+| ARM64 package | Cross-compiled (machine `0xAA64`, not run), signed with the development certificate, `signtool verify /pa` passed; executable SHA-256 `A4840044…F063C`. |
+
+Not yet verified: a real mouse drag on this machine (capture, `WM_CAPTURECHANGED`, the system drag threshold); the drag with a pen or touch; whether 0.8 is the size the user wants.
 
 ## Verified in v0.3.5.1
 

@@ -6,7 +6,8 @@ namespace reel::vi {
 struct Color { float r, g, b, a; };
 struct Bezier { float x1, y1, x2, y2; };
 inline constexpr wchar_t kSchemaVersion[] = L"0.9";
-// Geometry (DIP)
+// Geometry (DIP). The reel draws at kReelScale: its effective DPI is round(monitor DPI * kReelScale).
+inline constexpr float kReelScale = 0.8f;
 inline constexpr float kCanvas = 384.f, kPlateRadius = 168.f, kOrbitRadius = 112.f, kCenterZoneRadius = 44.f;
 inline constexpr float kTile = 40.f, kTileRadius = 10.f, kTileStroke = 1.f;
 inline constexpr float kSeat = 48.f, kSeatRadius = 14.f, kSeatStroke = 1.5f, kSeatStrokeHighContrast = 2.5f;
@@ -19,9 +20,11 @@ inline constexpr float kChevronOffset = 40.f, kChevronEm = 14.f, kChevronHit = 4
 inline constexpr float kRingStroke = 1.f, kRingGatedStroke = 1.5f, kGateDotRadius = 2.f;
 inline constexpr float kPlateStroke = 1.f, kPlateStrokeHighContrast = 2.f;
 inline constexpr float kShadowBlur = 16.f, kShadowOffsetY = 8.f;   // Fluent flyout elevation
+inline constexpr float kTrashEm = 20.f, kTrashRingStroke = 1.5f, kTrashArmedRadius = 30.f;
 inline constexpr float kDisabledOpacity = 0.36f;
 // Palettes. Alpha < 1 composites over the plate; selection = Mix(plate, accent, seatTint).
-struct Palette { Color plate, foreground, secondary, outline, tile, tileStroke, plateStroke, ringIdle, textOnAccent;
+struct Palette { Color plate, foreground, secondary, outline, tile, tileStroke, plateStroke, ringIdle, textOnAccent,
+                 critical, criticalFill, textOnCritical;
                  float seatTint, shadowOpacity, frostedTileAlpha; Color accentFallback, accentTextFallback; };
 inline constexpr Palette kLight{
     .plate = {0.976f, 0.976f, 0.976f, 1.f},
@@ -33,6 +36,9 @@ inline constexpr Palette kLight{
     .plateStroke = {0.f, 0.f, 0.f, 0.08f},
     .ringIdle = {0.f, 0.f, 0.f, 0.1f},
     .textOnAccent = {1.f, 1.f, 1.f, 1.f},
+    .critical = {0.769f, 0.169f, 0.11f, 1.f},
+    .criticalFill = {0.769f, 0.169f, 0.11f, 1.f},
+    .textOnCritical = {1.f, 1.f, 1.f, 1.f},
     .seatTint = 0.1f, .shadowOpacity = 0.14f, .frostedTileAlpha = 0.7f,
     .accentFallback = {0.f, 0.373f, 0.722f, 1.f}, .accentTextFallback = {0.f, 0.243f, 0.573f, 1.f},
 };
@@ -46,6 +52,9 @@ inline constexpr Palette kDark{
     .plateStroke = {1.f, 1.f, 1.f, 0.1f},
     .ringIdle = {1.f, 1.f, 1.f, 0.1f},
     .textOnAccent = {0.f, 0.f, 0.f, 1.f},
+    .critical = {1.f, 0.6f, 0.643f, 1.f},
+    .criticalFill = {1.f, 0.6f, 0.643f, 1.f},
+    .textOnCritical = {0.f, 0.f, 0.f, 1.f},
     .seatTint = 0.18f, .shadowOpacity = 0.26f, .frostedTileAlpha = 0.1f,
     .accentFallback = {0.376f, 0.804f, 1.f, 1.f}, .accentTextFallback = {0.6f, 0.922f, 1.f, 1.f},
 };
@@ -77,6 +86,8 @@ inline constexpr float kDrillInExitScale = 1.04f, kDrillInEnterScale = 0.94f, kD
 inline constexpr unsigned kHandoffMs = 200, kHandoffFadeMs = 83, kHandoffLabelFadeMs = 33;  inline constexpr float kHandoffScaleTo = 0.5f;
 inline constexpr unsigned kSwapMs = 120, kSwapExitMs = 83;  inline constexpr float kSwapScaleFrom = 0.98f;
 inline constexpr unsigned kMonogramFadeMs = 83;
+inline constexpr unsigned kDragLiftMs = 120, kDragReflowMs = 167, kDragArmMs = 83, kDragSettleMs = 200, kDragRemoveMs = 167;
+inline constexpr float kDragLiftScale = 1.08f, kDragArmScaleFrom = 0.88f, kDragOverTrashScale = 0.7f, kDragOverTrashOpacity = 0.4f, kDragRemoveScaleTo = 0.3f;
 inline constexpr unsigned kReducedMotionMs = 1;
 inline constexpr Bezier kLinear{0.f, 0.f, 1.f, 1.f};
 inline constexpr Bezier kDecelerate{0.f, 0.f, 0.f, 1.f};   // Fluent FastOutSlowIn

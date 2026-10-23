@@ -8,7 +8,7 @@ only through messages sent to that window:
 
 - CommandPackets (WM_COPYDATA 'REEL'), exactly as a second CopilotReel.exe would send them;
 - the Copilot fast path (PostMessage 0x8001 with wParam 0=Tap, 1=HoldStart, 2=HoldStop);
-- TestPackets (WM_COPYDATA 'RTST') for the synthetic pointer, clicks and keys.
+- TestPackets (WM_COPYDATA 'RTST') for the synthetic pointer, clicks, presses, releases and keys.
 
 It never moves the real pointer, never sends input to the system and never activates a
 window. user32 is bound through an explicit allowlist, and assert_no_input_injection()
@@ -38,9 +38,8 @@ DEAD_ZONE_DIP = 44
 PLATE_RADIUS_DIP = 168
 # A page selects nothing until the pointer leaves this square around where it opened (MovePointer).
 OPENING_SLOP_DIP = 4
-# Adjust chevrons of slot 0 (hub language, an app's place in the reel): 40x40 DIP boxes. On an
-# app's actions page they exclude the square within 25 DIP of slot 0's centre, so a click on the
-# seat or the preferred badge confirms the tile; click the chevron centres to adjust.
+# Adjust chevrons of slot 0 (the hub language): 40x40 DIP boxes that exclude the square within
+# 25 DIP of slot 0's centre, so a click on the seat confirms the tile; click the chevron centres to adjust.
 SLOT0_DIP = (CENTER_DIP, CENTER_DIP - SECTOR_RADIUS_DIP)
 EARLIER_CHEVRON_DIP = (CENTER_DIP - 40, 80)
 LATER_CHEVRON_DIP = (CENTER_DIP + 40, 80)
@@ -62,19 +61,19 @@ MONITOR_DEFAULTTOPRIMARY = 1
 # src/core.h Command
 BACKGROUND, SETTINGS, PREVIEW, HOLD_START, HOLD_STOP, CANCEL, QUIT, TAP, DIAGNOSTICS = range(9)
 # src/test_input.h TestAction
-POINTER, CLICK, RIGHT_CLICK, KEY, ACTION_COUNT = range(5)
+POINTER, CLICK, RIGHT_CLICK, KEY, PRESS, RELEASE, ACTION_COUNT = range(7)
 # Copilot fast-path wParam
 FAST_TAP, FAST_HOLD_START, FAST_HOLD_STOP = range(3)
-# src/radial_menu.h MenuPage
-PAGE_MAIN, PAGE_MANAGE, PAGE_PRESETS, PAGE_SETTINGS, PAGE_PREFERRED, PAGE_ENTRY = range(6)
+# src/radial_menu.h MenuPage (4 was the Preferred agent page)
+PAGE_MAIN, PAGE_MANAGE, PAGE_PRESETS, PAGE_SETTINGS, PAGE_ENTRY = 0, 1, 2, 3, 5
 
 VK_TAB, VK_RETURN, VK_ESCAPE, VK_SPACE = 0x09, 0x0D, 0x1B, 0x20
-VK_LEFT, VK_RIGHT = 0x25, 0x27
+VK_LEFT, VK_RIGHT, VK_DELETE = 0x25, 0x27, 0x2E
 VK_A, VK_D = ord('A'), ord('D')
 VK_NONE = 0  # routes nowhere: a Key packet with it is a pure ordering barrier
 
 RUN_ID = re.compile(r'[A-Za-z0-9-]{8,40}')
-DONE = re.compile(r'Test input (\d+) done; page=(-?\d+); selected=(-?\d+); active=([01])')
+DONE = re.compile(r'Test input (\d+) done; page=(-?\d+); selected=(-?\d+); active=([01]); drag=(-?\d+); target=([\w:]+)')
 OPENING = re.compile(r'(Hold started|Preview opened); pointer=(-?\d+),(-?\d+); '
                      r'window=(-?\d+),(-?\d+),(-?\d+),(-?\d+); awaitingCenter=(true|false)')
 # The whole 'Hold started' line; a hold that cut short a running exit ends with '; interrupted=exit'.
@@ -462,7 +461,7 @@ class Reel:
         offset = len(self.read_log())
         accepted, sequence = self.send_test_packet(action, point, vk)
         assert accepted, f'The test instance rejected test packet {sequence}.'
-        if point is not None and action in (POINTER, CLICK, RIGHT_CLICK):
+        if point is not None and action in (POINTER, CLICK, RIGHT_CLICK, PRESS, RELEASE):
             self.cursor = (round(point[0]), round(point[1]))
 
         def done():
@@ -474,7 +473,7 @@ class Reel:
 
         match, text = wait(done, f'test input {sequence}')
         return {'sequence': sequence, 'page': int(match.group(2)), 'selected': int(match.group(3)),
-                'active': match.group(4) == '1',
+                'active': match.group(4) == '1', 'drag': int(match.group(5)), 'target': match.group(6),
                 'passedThrough': f'Test input {sequence} passed through the reel' in text}
 
     def pointer(self, point):
@@ -485,6 +484,19 @@ class Reel:
 
     def click(self, point):
         return self.test_input(CLICK, point)
+
+    def press(self, point):
+        return self.test_input(PRESS, point)
+
+    def release_button(self, point):
+        return self.test_input(RELEASE, point)
+
+    def drag(self, start, points, end):
+        """Press at start, move through points, release at end; returns every step's barrier."""
+        steps = [self.press(start)]
+        steps += [self.pointer(point) for point in points]
+        steps.append(self.release_button(end))
+        return steps
 
     def right_click(self, point=None):
         return self.test_input(RIGHT_CLICK, point or self.center())
@@ -522,6 +534,11 @@ class Reel:
 
     def apps(self):
         return read_app_names(self.data / 'apps.ini')
+
+    def parked(self):
+        """Apps taken out of the reel (parked.ini), most recent first; empty when there is none."""
+        path = self.data / 'parked.ini'
+        return read_app_names(path) if path.exists() else []
 
     def visible(self):
         return bool(self.hwnd and user32.IsWindowVisible(self.hwnd))

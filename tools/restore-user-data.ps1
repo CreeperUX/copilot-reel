@@ -17,7 +17,7 @@ $seen=@{}
 # data, never permission to restore arbitrary locations or execute commands.
 foreach($record in $metadata.Files) {
     $leaf=Split-Path -Leaf $record.Backup
-    if($leaf -notmatch '^(0|1)-(apps\.ini|preferences\.ini|behavior\.ini)$') {
+    if($leaf -notmatch '^(0|1)-(apps\.ini|parked\.ini|preferences\.ini|behavior\.ini)$') {
         throw "Unsupported backup file: $leaf"
     }
     $rootIndex=[int]$Matches[1]
