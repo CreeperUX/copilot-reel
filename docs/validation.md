@@ -1,6 +1,19 @@
 # Validation status
 
-Snapshot: 2026-10-23, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.6.0**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-23, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.6.1**. This records demonstrated behavior and its limits, not full release acceptance.
+
+## Verified in v0.3.6.1
+
+The user reported that after installing 0.3.6 a Copilot hold showed nothing while a tap still opened ChatGPT. `run.log` recorded every hold (`Hold started`, then `Gesture canceled before selection`), and a capture of the reel's own window showed it fully drawn. It was not topmost: the reel calls `SetWindowPos(HWND_TOPMOST)` on every opening, and Windows ignores that call, while still returning success, for a process without foreground rights. A background start (the startup task, or `tools/open-installed.ps1 -View Background` after an install) has none, so the reel opened beneath the maximized Claude window. Calling `SetWindowPos` on it from outside also left it non-topmost, while the same call made a fresh test instance or Notepad topmost. Opening the preview once from Start granted the rights. This had been latent since 0.3.5 added the startup task; an earlier resident reel had presumably been raised once by a preview and kept `WS_EX_TOPMOST`.
+
+| Area | Evidence and scope |
+| --- | --- |
+| Fix | The window is created with `WS_EX_TOPMOST`. `Start` logs a warning if it ever opens without it, and diagnostics report `topmost=`. |
+| Interaction | `tests/run-reel-seam.py` passed all 12 groups (`artifacts/qa/seam-20261023-215448-1fdedd/`); preflight now asserts that the test window is topmost before it first opens. |
+| Installation | 0.3.6.1.0 replaced 0.3.6.0 after a backup (`artifacts/backups/20261023-215519`), and was started in the background exactly as before. A HoldStart command then opened it topmost, with no ordinary window above it; the installed executable equals the tested build. |
+| ARM64 package | Cross-compiled (machine `0xAA64`, not run), signed with the development certificate, `signtool verify /pa` passed; executable SHA-256 `11D6C382…D338`. |
+
+Not yet verified: a physical Copilot hold after a reboot, when the startup task starts the reel.
 
 ## Verified in v0.3.6
 

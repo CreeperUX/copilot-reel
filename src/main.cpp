@@ -545,6 +545,7 @@ public:
             placing_=true;SetWindowPos(window,HWND_TOPMOST,placement.left,placement.top,size,size,SWP_NOACTIVATE);placing_=false;
             GetWindowRect(window,&bounds);
         }
+        if(!(GetWindowLongPtrW(window,GWL_EXSTYLE)&WS_EX_TOPMOST))Log(L"Warning: the reel window is not topmost; another window can cover it");
         Log(std::wstring(preview?L"Preview opened":L"Hold started")+L"; pointer="+std::to_wstring(anchor_.x)+L","+std::to_wstring(anchor_.y)+L"; window="+std::to_wstring(bounds.left)+L","+std::to_wstring(bounds.top)+L","+std::to_wstring(bounds.right)+L","+std::to_wstring(bounds.bottom)+L"; awaitingCenter="+(gesture_.AwaitingCenter()?L"true":L"false")+(interrupted?L"; interrupted=exit":L""));
         // Add is reached from the hub and from Manage; discovery refreshes behind them.
         if(page==MenuPage::Settings || page==MenuPage::Manage)RefreshPresets();
@@ -1131,7 +1132,7 @@ public:
         const wchar_t* adjustName=!adjust.control?L"none":adjust.earlier && adjust.later?L"both":adjust.earlier?L"earlier":adjust.later?L"later":L"blocked";
         std::wstring parkedNames;
         for(const auto& app:parked_)parkedNames+=(parkedNames.empty()?L"":L"|")+AppDisplayName(app);
-        text<<L"Copilot Reel 0.3.6\r\n"<<L"DPI="<<dpi_<<L"\r\nreelScale="<<vi::kReelScale<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.6.1\r\n"<<L"DPI="<<dpi_<<L"\r\nreelScale="<<vi::kReelScale<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
@@ -1140,6 +1141,7 @@ public:
             <<L"\r\nmenuNames="<<names<<L"\r\nmenuArt="<<art<<L"\r\nadjust="<<adjustName<<L"\r\naddCatalog="<<addCatalog_.size()<<L"\r\naddInstalled="<<addInstalled_
             <<L"\r\naddParked="<<addParked_<<L"\r\nparked="<<parked_.size()<<L"\r\nparkedNames="<<parkedNames
             <<L"\r\ndrag="<<(drag_.active?drag_.from:-1)<<L"\r\ndragTarget="<<DragTarget()
+            <<L"\r\ntopmost="<<((GetWindowLongPtrW(window,GWL_EXSTYLE)&WS_EX_TOPMOST)?1:0)
             <<L"\r\ndataPath="<<ConfigPath()<<L"\r\nlanguage="<<LocaleName(CurrentLanguage())
             <<L"\r\nvisualOverride="<<(visual.raw.empty()?std::wstring(L"none"):visual.raw)
             // Captured pointer relative to the plate center in DIP; nonzero only when an edge clamped the plate.
@@ -1460,7 +1462,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
         WNDCLASSEXW cls{sizeof(cls)};cls.lpfnWndProc=WindowProcedure;cls.hInstance=instance;cls.lpszClassName=kWindowClass;cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
         cls.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));RegisterClassExW(&cls);
         Controller controller(smoke);
-        HWND hwnd=CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,kWindowClass,title.c_str(),WS_POPUP,0,0,384,384,nullptr,nullptr,instance,&controller);
+        // Topmost from creation: SetWindowPos(HWND_TOPMOST) is silently ignored for a process without
+        // foreground rights, which is how the startup task and an activation in the background start
+        // the reel, and a hidden reel would then open beneath a maximized window.
+        HWND hwnd=CreateWindowExW(WS_EX_TOPMOST|WS_EX_NOREDIRECTIONBITMAP|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,kWindowClass,title.c_str(),WS_POPUP,0,0,384,384,nullptr,nullptr,instance,&controller);
         if(!hwnd || !controller.Initialize()) {if(hwnd)DestroyWindow(hwnd);if(ready)CloseHandle(ready);CloseHandle(mutex);return 5;}
         if(ready)SetEvent(ready);
         controller.CommandReceived(initialEvent);
