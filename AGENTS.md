@@ -6,7 +6,7 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
 
 - Development artifacts are English: code, comments, script output, docs, design tokens, VI and commit messages. Replies to the user are in Chinese.
 - The product UI defaults to English, with Simplified Chinese (`ZH`) as the option. Both languages share one profile: switching language never changes apps, order, icons or the preferred agent.
-- Every new release on this machine: back up the configuration, uninstall the old package, install the new one, and restore the configuration (`tools/install-development.ps1 -PackagePath <signed msix>`).
+- After every push to GitHub, release or not, reinstall Copilot Reel on this machine from the pushed commit (the user's rule since 2026-10-23): build Release x64, package it, sign it with `signtool sign /fd SHA256 /f artifacts\signing\CopilotReel-Development.pfx <msix>`, then `tools/install-development.ps1 -PackagePath <signed msix>`, which backs up the configuration, uninstalls the old package, installs the new one and restores the configuration. Then start it with `tools/open-installed.ps1 -View Background` and check that the installed executable's SHA-256 equals `build\Release\CopilotReel.exe`. Skip the reinstall only when that hash already matches.
 - Only the newest version is kept (the user's rule since 2026-10-22): after a release is published, delete the older GitHub releases together with their tags (`gh release delete <tag> --cleanup-tag`, then `git tag -d <tag>`), and remove the older packages and release notes from `artifacts/`. The commits stay in history; configuration backups in `artifacts/backups/` are kept.
 - Commits use the existing author, `baka_sayaka <60833924+bakasayaka@users.noreply.github.com>`, passed per command. Never change git config. Commit or push only when the user asks.
 - Interaction and visual checks run through the test seam: `tests/run-reel-seam.py` and `tools/capture-seam.py` drive a separate unpackaged test instance through its own channel. They never move the pointer, send input or take the foreground, and the installed reel keeps running.
@@ -93,6 +93,9 @@ Work, 2026-10-23 (0.3.6, session `4cf620db`, released as the prerelease `v0.3.6-
 - Removed the App actions reorder chevrons and the hub's Preferred agent page (`MenuPage::Entry` keeps 5); Set as preferred returns to Manage apps.
 - Seam: `TestAction::Press`/`Release`, group `c` rewritten, `tools/capture-seam.py` captures the drag and trash and compares with the new `output/runtime/v0.3.6` references. A five-lens review with adversarial verification; all confirmed findings fixed (`docs/validation.md`, v0.3.6).
 
+Work, 2026-10-23 (0.3.6.1, same session, released as the prerelease `v0.3.6.1-beta` and installed here):
+- Fixed the reel opening beneath other windows after a background start: Windows silently ignores `SetWindowPos(HWND_TOPMOST)` for a process without foreground rights, so the window is now created with `WS_EX_TOPMOST` (`docs/validation.md`, v0.3.6.1).
+
 ### Cursor: build, release and distribution
 
 Role: toolchain, multi-architecture builds, signing, the GitHub remote and releases.
@@ -108,7 +111,7 @@ Work, 2026-10-20:
 
 ## Current state
 
-- 0.3.6.0 x64 is installed on this machine and runs in the background; the Copilot key is bound to it. GitHub carries only the prerelease `v0.3.6-beta`, with signed x64 and ARM64 packages; older releases and tags were removed under the keep-the-newest rule.
+- 0.3.6.1 x64 is installed on this machine and runs in the background; the Copilot key is bound to it. GitHub carries only the prerelease `v0.3.6.1-beta`, with signed x64 and ARM64 packages; older releases and tags were removed under the keep-the-newest rule.
 - `main` tracks `origin/main` on GitHub, now `bakasayaka/copilot-reel` (GitHub reports the repository as public). The ARM64 package has never run on ARM hardware. The development certificate's PFX in `artifacts/signing/` has no password: `signtool sign /fd SHA256 /f artifacts\signing\CopilotReel-Development.pfx <msix>`.
 - Open validation items are listed in `docs/validation.md`. The physical Copilot key still has to confirm: tap and hold inside an open menu, a cold start, the start after sign-in, a cold start from Start (`foreground=` in `run.log`), and running agents coming forward.
 - VI v0.9 is not regenerated for 0.3.5-0.3.6: it has no App actions or drag scene, still draws the hub with Preferred agent and a Preferred page (`design/vi/source/reel.py`), and draws the Claude Science preset with the Claude mark. The tokens and docs already describe the 0.8 scale, the trash and the four-item hub.

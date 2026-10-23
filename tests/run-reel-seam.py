@@ -321,8 +321,10 @@ def preflight(g):
     assert state['testInput'] == 'on' and state['testRun'] == reel.run_id, state.text
     assert state.get('realInputIgnored', '').isdigit(), 'realInputIgnored must be a count: ' + state.text
     assert state['activationRequested'] == '0', state.text
-    g.passed('the test instance owns its own title and namespace, registers no fast path, reports testInput=on '
-             'and counts ignored real input')
+    # Topmost from creation: a background start has no foreground rights to raise it later (0.3.6.1).
+    assert state['topmost'] == '1', 'The reel window must be topmost before it ever opens: ' + state.text
+    g.passed('the test instance owns its own title and namespace, registers no fast path, reports testInput=on, '
+             'counts ignored real input, and its window is topmost from creation')
 
     for description, kwargs in (('version 2', {'version': 2}), ('reserved field', {'reserved': 1}),
                                 ('virtual key 0xFF', {'vk': 0xFF})):
