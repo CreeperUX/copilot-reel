@@ -1,14 +1,15 @@
 """Capture the reel's still states through the interaction test seam and compare them with a reference set.
 
 The application runs as an isolated, unpackaged test instance (tests/reel_seam.py): it never moves the
-pointer, sends input, takes the foreground or touches the installed instance. Each variant reproduces
-the still set of tools/capture-v034.py (Main, a selected vendor tile, the hub, two hub selections and an
-edge-gated hold) and, from 0.3.5, the actions page of an app with its reorder chevrons: in the middle of
-the reel, and at the first and the last position, where one chevron is blocked. The reorder happens in
-the variant's own isolated data directory and is undone before the gated capture. Every image that also
-exists in the reference folder is compared pixel by pixel, in every channel; a channel may differ by
---tolerance levels (default 2, because at rest some anti-aliased edges render up to two levels away
-from 0.3.4), and every changed pixel is counted either way.
+pointer, sends input, takes the foreground or touches the installed instance. Each variant captures
+Main, a selected vendor tile, the hub, two hub selections and an edge-gated hold (the still set of
+tools/capture-v034.py), and from 0.3.6 'Your apps', an app tile dragged over another slot and over the
+armed center trash (the drag is canceled with Escape, so the order never changes), and an app's actions
+page without reorder chevrons. Every image that also exists in the reference folder is compared pixel by
+pixel, in every channel; a channel may differ by --tolerance levels (default 2, because at rest some
+anti-aliased edges render up to two levels away), and every changed pixel is counted either way.
+0.3.6 draws the reel at 0.8 of its DIP geometry and its hub has four entries, so 0.3.4 and 0.3.5 stills
+are no longer comparable: the reference set is output/runtime/v0.3.6, published with --no-reference.
 
 Last, each variant opens Add from the hub once agent discovery has completed and captures every Add page
 with the pointer on the plate center, so nothing is selected. Add lists what is installed on this machine,
@@ -19,12 +20,12 @@ identities must be identical, on one page and across all Add pages of the varian
 behind the window, so on frosted variants the result is recorded but not asserted.
 
 The run fails (exit status 1, "passed": false in results.json) when a compared image differs beyond the
-tolerance or has another size, when a state that existed in 0.3.4 has no reference image, when Add
-tiles contradict their identities, or when a variant cannot be captured. New 0.3.5 states without a
-reference are recorded as new.
+tolerance or has another size, when a reference state has no reference image, when Add tiles contradict
+their identities, or when a variant cannot be captured. --no-reference records every still without a
+comparison, to publish a new reference set after a deliberate visual change.
 
-    uv run --python 3.14 --with pillow python tools/capture-seam.py [--reference output/runtime/v0.3.4]
-        [--output output/runtime/vX.Y.Z] [--variants dark-solid,light-solid,...] [--tolerance 2]
+    uv run --python 3.14 --with pillow python tools/capture-seam.py [--reference output/runtime/v0.3.6]
+        [--output output/runtime/vX.Y.Z] [--variants dark-solid,light-solid,...] [--tolerance 2] [--no-reference]
 
 Without --output the stills go to the run's evidence directory under artifacts/qa.
 """
@@ -56,8 +57,9 @@ VARIANTS = [('dark-solid', 'theme=dark;material=solid'), ('light-solid', 'theme=
             ('dark-frosted', 'theme=dark;material=frosted'), ('light-frosted', 'theme=light;material=frosted'),
             ('contrast', 'contrast=on'), ('dark-100', 'theme=dark;material=solid;dpi=96'),
             ('dark-150', 'theme=dark;material=solid;dpi=144')]
-# States captured by 0.3.4: each must have a reference image.
-REFERENCE_STATES = ('main', 'main-claude', 'hub', 'hub-appearance', 'hub-language', 'gated')
+# Each must have a reference image.
+REFERENCE_STATES = ('main', 'main-claude', 'hub', 'hub-appearance', 'hub-language', 'manage', 'manage-drag',
+                    'manage-trash', 'entry', 'entry-app', 'gated')
 # Every animation has come to rest: captured after 0.35 s, a seat that had just travelled still differed
 # from its resting pixels by up to three levels, while 1 s and 3 s captures are identical.
 SETTLE_SECONDS = 1.0
@@ -99,15 +101,6 @@ def still(reel, output, variant, name, label):
 
 def wait_visible(reel, visible):
     seam.wait(lambda: bool(seam.user32.IsWindowVisible(reel.hwnd)) == visible, 'visible' if visible else 'hidden')
-
-
-def move_until(reel, vk, adjust):
-    """Press A or D on the actions page until diagnostics report this adjust state."""
-    for _ in range(len(PROFILES)):
-        if reel.diagnostics().get('adjust') == adjust:
-            return
-        reel.key(vk)
-    assert reel.diagnostics().get('adjust') == adjust, (adjust, reel.diagnostics().get('adjust'))
 
 
 def capture_add(reel, evidence, variant, opened):
@@ -158,41 +151,39 @@ def capture_variant(variant, override, output, data):
         reel.send_command(seam.SETTINGS, anchor)
         wait_visible(reel, True)
         shots.append(still(reel, output, variant, 'hub', ''))
-        reel.pointer(slot(reel, 1, 5))
+        hub = reel.diagnostics().names
+        reel.pointer(slot(reel, hub.index('Appearance'), len(hub)))
         shots.append(still(reel, output, variant, 'hub-appearance', 'Appearance'))
-        reel.pointer(slot(reel, 0, 5))
+        reel.pointer(slot(reel, hub.index('Language'), len(hub)))
         shots.append(still(reel, output, variant, 'hub-language', 'Language'))
-        # 0.3.5: an app's actions page, the app in slot 0 with both reorder chevrons.
-        reel.pointer(slot(reel, 3, 5))
-        reel.click(slot(reel, 3, 5))
+        # 0.3.6: Your apps, then Claude lifted over Perplexity's slot, then over the armed trash.
+        reel.pointer(slot(reel, hub.index('Manage apps'), len(hub)))
+        reel.click(slot(reel, hub.index('Manage apps'), len(hub)))
+        reel.pointer(anchor)
         names = reel.diagnostics().names
-        reel.pointer(slot(reel, names.index('Claude'), len(names)))
-        reel.click(slot(reel, names.index('Claude'), len(names)))
+        shots.append(still(reel, output, variant, 'manage', ''))
+        order = seam.read_app_names(directory / 'apps.ini')
+        claude, count = names.index('Claude'), len(names)
+        reel.press(slot(reel, claude, count))
+        reel.path([slot(reel, claude + .5, count), slot(reel, claude + 1.5, count), slot(reel, claude + 2, count)])
+        assert reel.diagnostics()['dragTarget'] == f'slot:{claude + 2}', reel.diagnostics().text
+        shots.append(still(reel, output, variant, 'manage-drag', ''))
+        reel.pointer(reel.center_point())
+        assert reel.diagnostics()['dragTarget'] == 'trash', reel.diagnostics().text
+        shots.append(still(reel, output, variant, 'manage-trash', ''))
+        # Escape puts the tile back, and the release that follows is not a click.
+        reel.key(seam.VK_ESCAPE)
+        reel.release_button(reel.center_point())
+        assert seam.read_app_names(directory / 'apps.ini') == order, seam.read_app_names(directory / 'apps.ini')
+        # An app's actions page: the app itself in slot 0, without reorder chevrons.
+        reel.pointer(slot(reel, claude, count))
+        reel.click(slot(reel, claude, count))
         reel.pointer(anchor)
         values = reel.diagnostics()
-        assert values.get('adjust') == 'both', values.get('adjust')
+        assert values.page == seam.PAGE_ENTRY and values.get('adjust') == 'none', values.text
         shots.append(still(reel, output, variant, 'entry', ''))
         reel.pointer(slot(reel, 0, len(values.names)))
         shots.append(still(reel, output, variant, 'entry-app', 'Claude'))
-        # The first and the last position: one chevron is blocked and dimmed. A/D select slot 0,
-        # so the pointer leaves it again for the idle frames.
-        order = seam.read_app_names(directory / 'apps.ini')
-        move_until(reel, seam.VK_A, 'later')
-        assert seam.read_app_names(directory / 'apps.ini')[0] == 'Claude'
-        reel.pointer(anchor)
-        shots.append(still(reel, output, variant, 'entry-first', ''))
-        reel.pointer(slot(reel, 0, len(values.names)))
-        shots.append(still(reel, output, variant, 'entry-first-app', 'Claude'))
-        move_until(reel, seam.VK_D, 'earlier')
-        assert seam.read_app_names(directory / 'apps.ini')[-1] == 'Claude'
-        reel.pointer(anchor)
-        shots.append(still(reel, output, variant, 'entry-last', ''))
-        # Restore the original order so the gated Main matches its reference.
-        for _ in range(len(PROFILES)):
-            if seam.read_app_names(directory / 'apps.ini') == order:
-                break
-            reel.key(seam.VK_A)
-        assert seam.read_app_names(directory / 'apps.ini') == order, seam.read_app_names(directory / 'apps.ini')
         reel.send_command(seam.CANCEL)
         wait_visible(reel, False)
         corner = (work[0] + 24, work[1] + 24)
@@ -307,7 +298,9 @@ def describe(comparison):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--reference', default='output/runtime/v0.3.4')
+    parser.add_argument('--reference', default='output/runtime/v0.3.6')
+    parser.add_argument('--no-reference', action='store_true',
+                        help='Record every still without comparing it, to publish a new reference set.')
     # Routine runs write to the evidence directory; publishing a version's stills to
     # output/runtime/vX.Y.Z is an explicit choice, so tracked evidence is never rewritten by accident.
     parser.add_argument('--output', default='')
@@ -353,11 +346,13 @@ def main():
             print(variant, 'capture failed:', entry['error'])
             continue
         for state, path in shots:
-            comparison = compare(path, reference / path.name, args.tolerance)
+            comparison = None if args.no_reference else compare(path, reference / path.name, args.tolerance)
             entry['shots'].append({'state': state, 'file': str(path.relative_to(ROOT)), 'comparison': comparison})
+            if args.no_reference:
+                continue
             if comparison is None:
                 if state in REFERENCE_STATES:
-                    failures.append(f'{path.name}: no reference image for a 0.3.4 state')
+                    failures.append(f'{path.name}: no reference image for a reference state')
             elif 'sizeMismatch' in comparison:
                 failures.append(f'{path.name}: size {comparison["sizeMismatch"][0]} != reference {comparison["sizeMismatch"][1]}')
             elif comparison['differingPixels']:

@@ -92,6 +92,10 @@ int main() {
                 decoded->screen.x==-5 && decoded->screen.y==9,"an active seam accepts every action unchanged");
         }
     }
+    // The drag halves extend the wire format; the earlier actions keep their numbers.
+    Check(static_cast<unsigned>(TestAction::Key)==3 && static_cast<unsigned>(TestAction::Press)==4 &&
+        static_cast<unsigned>(TestAction::Release)==5 && static_cast<unsigned>(TestAction::Count)==6,
+        "tests/reel_seam.py mirrors the action numbers");
 
     // This process: the gate is read once from the environment and the package identity.
     UINT32 length=0;

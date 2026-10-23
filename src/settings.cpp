@@ -16,7 +16,7 @@
 namespace reel {
 namespace {
 constexpr wchar_t kSettingsClass[] = L"CopilotReel.Settings";
-constexpr std::size_t kMaxApps = 8;
+constexpr std::size_t kMaxApps = 8, kMaxParked = 16;  // as in radial_menu.h
 constexpr DWORD kMaxConfigBytes = 512 * 1024;
 HWND gSettings = nullptr;
 
@@ -77,9 +77,20 @@ bool ValidText(const std::wstring& value, std::size_t limit) {
     return value.size() <= limit && value.find_first_of(std::wstring(L"\0\r\n", 3)) == std::wstring::npos;
 }
 
-bool Validate(const std::vector<AppTarget>& targets, std::wstring& error) {
-    if (targets.empty() || targets.size() > kMaxApps) {
-        error = Tr(L"The reel requires between 1 and 8 applications.", L"轮盘需要 1 至 8 个应用。");
+// One file format for the reel (apps.ini, 1-8 entries) and for the apps taken out of it
+// (parked.ini, up to kMaxParked entries, most recent first).
+// The byte limit lets every entry use its full field limits.
+struct FileFormat { const wchar_t* header; const wchar_t* comment; std::size_t minimum, maximum; DWORD maxBytes; };
+constexpr FileFormat kReelFormat{L"CopilotReel", L"Copilot Reel configuration", 1, kMaxApps, kMaxConfigBytes};
+constexpr FileFormat kParkedFormat{L"CopilotReelParked", L"Copilot Reel apps taken out of the reel; Add offers them first",
+    0, kMaxParked, 4 * kMaxConfigBytes};
+// Validates, then replaces the file atomically through a flushed temporary file.
+bool WriteList(const std::wstring& path, const FileFormat& format, const std::vector<AppTarget>& targets, std::wstring& error);
+
+bool Validate(const std::vector<AppTarget>& targets, std::wstring& error, const FileFormat& format = kReelFormat) {
+    if (targets.size() < format.minimum || targets.size() > format.maximum) {
+        error = &format == &kReelFormat ? Tr(L"The reel requires between 1 and 8 applications.", L"轮盘需要 1 至 8 个应用。") :
+            Tr(L"At most 16 apps can wait outside the reel.", L"轮盘外最多保留 16 个应用。");
         return false;
     }
     for (std::size_t i = 0; i < targets.size(); ++i) {
@@ -127,7 +138,7 @@ bool Decode(std::wstring_view text, std::wstring& value) {
     return true;
 }
 
-bool Parse(std::wstring_view text, std::vector<AppTarget>& targets) {
+bool Parse(std::wstring_view text, std::vector<AppTarget>& targets, const FileFormat& format = kReelFormat) {
     using Fields = std::map<std::wstring, std::wstring>;
     std::map<std::wstring, Fields> sections;
     std::wstring section;
@@ -148,14 +159,16 @@ bool Parse(std::wstring_view text, std::vector<AppTarget>& targets) {
         if (!Decode(line.substr(equal + 1), value) ||
             !sections.at(section).emplace(std::wstring(line.substr(0, equal)), std::move(value)).second) return false;
     }
-    const auto header = sections.find(L"CopilotReel");
+    const auto header = sections.find(format.header);
     if (header == sections.end() || header->second.size() != 2) return false;
     const auto version = header->second.find(L"Version");
     const auto countValue = header->second.find(L"Count");
-    if (version == header->second.end() || version->second != L"1" || countValue == header->second.end() ||
-        countValue->second.size() != 1 || countValue->second[0] < L'1' || countValue->second[0] > L'8') return false;
-    const auto count = static_cast<std::size_t>(countValue->second[0] - L'0');
-    if (sections.size() != count + 1) return false;
+    if (version == header->second.end() || version->second != L"1" || countValue == header->second.end()) return false;
+    const auto& digits = countValue->second;
+    if (digits.empty() || digits.size() > 2 || (digits.size() > 1 && digits[0] == L'0') ||
+        !std::all_of(digits.begin(), digits.end(), [](wchar_t c) { return c >= L'0' && c <= L'9'; })) return false;
+    const auto count = static_cast<std::size_t>(std::stoul(digits));
+    if (count < format.minimum || count > format.maximum || sections.size() != count + 1) return false;
     targets.clear();
     for (std::size_t i = 0; i < count; ++i) {
         const auto found = sections.find(L"App" + std::to_wstring(i));
@@ -175,7 +188,7 @@ bool Parse(std::wstring_view text, std::vector<AppTarget>& targets) {
         targets.push_back(std::move(app));
     }
     std::wstring error;
-    return Validate(targets, error);
+    return Validate(targets, error, format);
 }
 
 enum ControlId : int {
@@ -627,20 +640,68 @@ std::vector<AppTarget> LoadTargets(std::wstring& error) {
     }
 }
 
+std::wstring ParkedPath() {
+    const auto path = ConfigPath();
+    return path.empty() ? path : path.substr(0, path.find_last_of(L"\\/") + 1) + L"parked.ini";
+}
+
+std::vector<AppTarget> LoadParked(std::wstring& error) {
+    error.clear();
+    std::vector<AppTarget> parked;
+    try {
+        const auto path = ParkedPath();
+        if (path.empty()) { error = L"Cannot locate the user configuration directory."; return {}; }
+        FileHandle file;
+        file.handle = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file.handle == INVALID_HANDLE_VALUE) {
+            const DWORD code = GetLastError();
+            if (code != ERROR_FILE_NOT_FOUND && code != ERROR_PATH_NOT_FOUND) error = L"Cannot read parked.ini: " + WinError(code);
+            return {};
+        }
+        LARGE_INTEGER size{};
+        std::wstring content;
+        DWORD read = 0;
+        if (GetFileSizeEx(file.handle, &size) && size.QuadPart >= 2 && size.QuadPart <= kParkedFormat.maxBytes && size.QuadPart % 2 == 0) {
+            content.assign(static_cast<std::size_t>(size.QuadPart / 2), L'\0');
+            if (!ReadFile(file.handle, content.data(), static_cast<DWORD>(size.QuadPart), &read, nullptr) || read != size.QuadPart) content.clear();
+        }
+        // A damaged list never blocks the reel: it is left in place and Add offers no parked apps.
+        if (content.empty() || content.front() != L'\xfeff' || !Parse(std::wstring_view(content).substr(1), parked, kParkedFormat)) {
+            error = L"parked.ini is not a valid parked app list; it is left unchanged and ignored.";
+            return {};
+        }
+        return parked;
+    } catch (...) {
+        error = L"An error occurred while reading parked.ini.";
+        return {};
+    }
+}
+
+bool SaveParked(const std::vector<AppTarget>& parked, std::wstring& error) {
+    return WriteList(ParkedPath(), kParkedFormat, parked, error);
+}
+
 bool SaveTargets(const std::vector<AppTarget>& targets, std::wstring& error) {
+    return WriteList(ConfigPath(), kReelFormat, targets, error);
+}
+
+namespace {
+bool WriteList(const std::wstring& path, const FileFormat& format, const std::vector<AppTarget>& targets, std::wstring& error) {
     error.clear();
     std::wstring temporary;
     bool temporaryOwned = false;
     try {
-        if (!Validate(targets, error)) return false;
-        const auto path = ConfigPath();
+        if (!Validate(targets, error, format)) return false;
         if (path.empty()) { error = Tr(L"Cannot locate the user configuration directory.", L"无法定位用户配置目录。"); return false; }
-        const auto directory = path.substr(0, path.find_last_of(L'\\'));
+        // COPILOT_REEL_DATA_DIR may end in '/', which ConfigPath keeps.
+        const auto directory = path.substr(0, path.find_last_of(L"\\/"));
         if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
             error = std::wstring(Tr(L"Cannot create the configuration directory: ", L"无法创建配置目录：")) + WinError(GetLastError());
             return false;
         }
-        std::wstring content = L"\xfeff; Copilot Reel configuration. UTF-16 LE; backslashes are escaped.\r\n[CopilotReel]\r\nVersion=1\r\nCount=" + std::to_wstring(targets.size()) + L"\r\n";
+        std::wstring content = std::wstring(L"\xfeff; ") + format.comment + L". UTF-16 LE; backslashes are escaped.\r\n[" +
+            format.header + L"]\r\nVersion=1\r\nCount=" + std::to_wstring(targets.size()) + L"\r\n";
         for (std::size_t i = 0; i < targets.size(); ++i) {
             const auto& app = targets[i];
             content += L"\r\n[App" + std::to_wstring(i) + L"]\r\nName=" + Encode(app.name) +
@@ -648,8 +709,11 @@ bool SaveTargets(const std::vector<AppTarget>& targets, std::wstring& error) {
                 L"\r\nTarget=" + Encode(app.target) + L"\r\nArguments=" + Encode(app.arguments) +
                 L"\r\nWorkingDirectory=" + Encode(app.workingDirectory) + L"\r\n";
         }
-        if (content.size() * sizeof(wchar_t) > kMaxConfigBytes) {
-            error = Tr(L"The configuration exceeds 512 KiB. Shorten paths or arguments.", L"配置总大小超过 512 KiB，请缩短参数或路径。");
+        if (content.size() * sizeof(wchar_t) > format.maxBytes) {
+            error = &format == &kReelFormat ?
+                Tr(L"The configuration exceeds 512 KiB. Shorten paths or arguments.", L"配置总大小超过 512 KiB，请缩短参数或路径。") :
+                Tr(L"The apps kept outside the reel exceed 2 MiB. Put some back or shorten their paths or arguments.",
+                   L"轮盘外保留的应用超过 2 MiB。请放回部分应用，或缩短其路径或参数。");
             return false;
         }
         FileHandle file;
@@ -689,6 +753,7 @@ bool SaveTargets(const std::vector<AppTarget>& targets, std::wstring& error) {
         return false;
     }
 }
+} // namespace
 
 void ShowSettings(HWND owner) {
     try {

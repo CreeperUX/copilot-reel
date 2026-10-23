@@ -59,6 +59,9 @@ uint64_t EventStamp(bool processCreation=false) {
         GetSystemTimePreciseAsFileTime(&time);
     return (static_cast<uint64_t>(time.dwHighDateTime)<<32)|time.dwLowDateTime;
 }
+// The reel draws its DIP geometry at vi::kReelScale on every display: one whole effective DPI
+// keeps placement, hit testing, surfaces and artwork on the same device-pixel grid.
+UINT ReelDpi(UINT monitorDpi) {return (std::max)(1u,static_cast<UINT>(std::lround(monitorDpi*vi::kReelScale)));}
 CommandPacket CaptureCommand(Command command,bool cold=false) {
     CommandPacket result;result.command=command;result.stamp=EventStamp(cold);result.pointer=CursorPosition();return result;
 }
@@ -332,6 +335,8 @@ bool ActivateRunning(const AppTarget& target) {
 
 class Controller {
 public:
+    // A press on a Manage tile (from, screen pixels) becomes a drag (active) past the drag threshold.
+    struct Drag { int from=-1; POINT press{}; bool active=false; int slot=-1; bool overTrash=false; };
     HWND window=nullptr;
     bool smoke=false;
     explicit Controller(bool isSmoke):smoke(isSmoke) {}
@@ -391,10 +396,17 @@ public:
             if(HitTestAt(screen)==HTCLIENT)return true;
             Log(L"Test input "+std::to_wstring(input.sequence)+L" passed through the reel");return false;
         };
+        POINT client=input.screen;ScreenToClient(window,&client);
         switch(input.action) {
         case TestAction::Pointer:SetSyntheticCursor(input.screen);MovePointer();break;
         case TestAction::Click:
-            if(through(input.screen)) {MovePointer();Press();POINT client=input.screen;ScreenToClient(window,&client);Click(client);}
+            if(through(input.screen)) {MovePointer();Press(client);Click(client);}
+            break;
+        case TestAction::Press:if(through(input.screen)) {MovePointer();Press(client);}break;
+        case TestAction::Release:
+            // A press on a Manage tile holds the capture, so its release arrives wherever the pointer is.
+            if(drag_.from>=0) {SetSyntheticCursor(input.screen);MovePointer();Click(client);}
+            else if(through(input.screen)) {MovePointer();Click(client);}
             break;
         case TestAction::RightClick:if(through(input.screen))Back();break;
         case TestAction::Key:
@@ -403,10 +415,12 @@ public:
         default:break;
         }
         Log(L"Test input "+std::to_wstring(input.sequence)+L" done; page="+std::to_wstring(static_cast<int>(page_))+
-            L"; selected="+std::to_wstring(gesture_.Selected())+L"; active="+(gesture_.Active()?L"1":L"0"));
+            L"; selected="+std::to_wstring(gesture_.Selected())+L"; active="+(gesture_.Active()?L"1":L"0")+
+            L"; drag="+std::to_wstring(drag_.active?drag_.from:-1)+L"; target="+DragTarget());
     }
     void RealInputIgnored() {++realInputIgnored_;}
-    ReelContext Context() const {return {gesture_.Active(),editorOpen_};}
+    // Nothing reaches the reel behind an editor or picker, and the Copilot key waits while a tile is dragged.
+    ReelContext Context() const {return {gesture_.Active(),editorOpen_ || drag_.active};}
     void CommandReceived(const CommandPacket& event) {
         switch(event.command) {
         case Command::Background: break;
@@ -489,12 +503,14 @@ public:
         MONITORINFO info{sizeof(info)};
         if(!GetMonitorInfoW(monitor,&info)) {Log(L"Opening skipped: monitor information unavailable");return false;}
         const auto& work=info.rcWork;
+        dpi=ReelDpi(dpi);
         int size=MulDiv(static_cast<int>(kCanvasDip),dpi,96);
         // A tiny work area reduces the complete canvas uniformly, never opens a
         // different settings dashboard and never places buttons off screen.
         if(size>work.right-work.left || size>work.bottom-work.top) {
             size=std::min(work.right-work.left,work.bottom-work.top);
-            dpi=std::max(1,MulDiv(size,96,static_cast<int>(kCanvasDip)));
+            // Rounded down, so the reduced canvas never exceeds the work area.
+            dpi=std::max(1,size*96/static_cast<int>(kCanvasDip));
             size=MulDiv(static_cast<int>(kCanvasDip),dpi,96);
         }
         const auto placement=PlaceOrbit(pointer.x,pointer.y,{work.left,work.top,work.right,work.bottom},size,kRadiusDip*dpi/96.0);
@@ -545,7 +561,6 @@ public:
         case MenuPage::Manage:return Tr(L"Your apps",L"管理应用");
         case MenuPage::Presets:return Tr(L"Add an agent",L"添加应用");
         case MenuPage::Settings:return Tr(L"Settings",L"设置");
-        case MenuPage::Preferred:return Tr(L"Preferred agent",L"首选应用");
         case MenuPage::Entry:return editing_>=0 && static_cast<size_t>(editing_)<items_.size()?AppDisplayName(items_[editing_]):L"";
         default:return L"Copilot Reel";
         }
@@ -553,7 +568,7 @@ public:
     static int Depth(MenuPage page) {
         switch(page) {
         case MenuPage::Settings:return 1;
-        case MenuPage::Manage:case MenuPage::Preferred:return 2;
+        case MenuPage::Manage:return 2;
         case MenuPage::Presets:case MenuPage::Entry:return 3;
         default:return 0;
         }
@@ -561,19 +576,24 @@ public:
     // One page model and one SetPage per change. Only a page already on screen
     // animates: deeper pages drill in from the chosen slot, shallower pages drill
     // out, and preset paging swaps. Language and reload re-render in place.
-    void RenderMenu(int origin=-1) {
+    // A drop or a trash on Manage reflows the saved order from where the tiles are (`reflow`).
+    void RenderMenu(int origin=-1,bool reflow=false) {
         if(page_==MenuPage::Entry && (editing_<0 || static_cast<size_t>(editing_)>=items_.size()))page_=MenuPage::Manage;
-        menu_=BuildMenu(page_,items_,addCatalog_,presetOffset_,editing_);
+        menu_=BuildMenu(page_,items_,addCatalog_,presetOffset_,editing_,addParked_);
         PageModel model;
         for(const auto& entry:menu_)model.items.push_back({entry.visual,entry.enabled});
         model.title=MenuTitle();model.isSubmenu=page_!=MenuPage::Main;
-        const auto adjust=AdjustFor(page_,items_.size(),editing_);
+        const auto adjust=AdjustFor(page_);
         model.adjustControl=adjust.control;model.adjustEarlier=adjust.earlier;model.adjustLater=adjust.later;
-        model.preferredIndex=page_==MenuPage::Main || page_==MenuPage::Preferred || page_==MenuPage::Manage?PreferredTargetIndex(items_):
+        model.preferredIndex=page_==MenuPage::Main || page_==MenuPage::Manage?PreferredTargetIndex(items_):
             page_==MenuPage::Entry && PreferredTargetIndex(items_)==editing_?0:-1;
         model.selection=gesture_.Selected();model.awaitCenter=gesture_.AwaitingCenter();
         auto transition=PageTransition::None;
-        if(pageShown_ && gesture_.Active()) {
+        if(reflow && pageShown_ && gesture_.Active() && shownPage_==page_) {
+            transition=PageTransition::Reflow;
+            if(reflowFrom_.size()==model.items.size())model.from=reflowFrom_;
+        }
+        else if(pageShown_ && gesture_.Active()) {
             const int from=Depth(shownPage_),to=Depth(page_);
             if(to>from)transition=PageTransition::DrillIn;
             else if(to<from)transition=PageTransition::DrillOut;
@@ -581,11 +601,13 @@ public:
         }
         if(transition!=PageTransition::DrillIn || origin<0 || static_cast<size_t>(origin)>=shownCount_)origin=-1;
         renderer_->SetPage(model,transition,origin);
+        reflowFrom_.clear();
         pageShown_=gesture_.Active();shownPage_=page_;shownOffset_=presetOffset_;shownCount_=menu_.size();
         Log(L"Radial menu: "+MenuTitle()+L"; entries="+std::to_wstring(menu_.size())+L"; transition="+TransitionName(transition));
     }
     // origin is the chosen slot on the current page, so its tile can hand off to the new center.
     void Navigate(MenuPage page,int origin=-1) {
+        EndDrag(DragEnd::Cancel);
         page_=page;input_.PageShown(EventStamp());
         gesture_.Cancel();gesture_.Start();
         pageCursor_=CursorPosition();observed_=false;moved_=false;
@@ -596,10 +618,12 @@ public:
     }
     void Back() {
         if(!gesture_.Active())return;
+        // Back during a drag puts the tile back and stays on the page.
+        if(drag_.active) {EndDrag(DragEnd::Cancel);Log(L"Drag canceled");return;}
         switch(page_) {
         case MenuPage::Presets:Navigate(presetsParent_);break;
         case MenuPage::Entry:Navigate(MenuPage::Manage);break;
-        case MenuPage::Manage:case MenuPage::Preferred:Navigate(MenuPage::Settings);break;
+        case MenuPage::Manage:Navigate(MenuPage::Settings);break;
         case MenuPage::Main:Cancel();break;
         default:Navigate(MenuPage::Main);break;
         }
@@ -609,10 +633,9 @@ public:
         point.x=MulDiv(point.x,96,dpi_);point.y=MulDiv(point.y,96,dpi_);return point;
     }
     // -1 on the earlier (left) chevron, +1 on the later (right) one, 0 elsewhere. The slot-0 seat
-    // and its preferred badge reach into both hit boxes; a click there is on the tile, which on an
-    // app's actions page means done, not move.
+    // and its preferred badge reach into both hit boxes; a click there is on the tile.
     int AdjustArrow(POINT point) const {
-        if(!AdjustFor(page_,items_.size(),editing_).control)return 0;
+        if(!AdjustFor(page_).control)return 0;
         const auto bounds=renderer_->AdjustArrowBounds();
         const float tile=vi::kBadgeOffset+vi::kBadgeRingRadius+.5f;
         if(std::abs(point.x-kCenterDip)<=tile && std::abs(point.y-(bounds.first.top+bounds.first.bottom)/2)<=tile)return 0;
@@ -625,6 +648,7 @@ public:
         // An unmoved cursor keeps a keyboard selection.
         if(observed_ && screen.x==lastPointer_.x && screen.y==lastPointer_.y)return;
         observed_=true;lastPointer_=screen;
+        if(DragPointer(screen))return;
         if(!moved_) {
             // A page that just appeared ignores the cursor until it moves, so the release or
             // click that opened it cannot also select whatever lies beneath.
@@ -655,34 +679,203 @@ public:
     }
     void KeyDown(WPARAM key) {
         if(!input_.Persistent() || !gesture_.Active())return;
-        const int count=static_cast<int>(menu_.size());
-        const auto route=RouteKey(static_cast<UINT>(key),GetKeyState(VK_SHIFT)<0,
-            AdjustFor(page_,items_.size(),editing_).control,gesture_.Selected());
+        const int count=static_cast<int>(menu_.size()),selected=gesture_.Selected();
+        const bool manage=page_==MenuPage::Manage;
+        const auto route=RouteKey(static_cast<UINT>(key),GetKeyState(VK_SHIFT)<0,AdjustFor(page_).control,selected,manage);
+        // While a tile is pressed or lifted only Back (Esc) does anything: it puts the tile back.
+        if(drag_.from>=0 && route!=KeyRoute::Back)return;
+        const bool app=manage && selected>=0 && static_cast<size_t>(selected)<items_.size();
         switch(route) {
         case KeyRoute::Back:Back();break;
-        case KeyRoute::Confirm:Confirm(gesture_.Selected());break;
+        case KeyRoute::Confirm:Confirm(selected);break;
         case KeyRoute::Adjust:
+            input_.EndHold();KeepAlive();
+            // On Manage, A and D move the selected app one place.
+            if(manage) {if(app)MoveApp(selected,selected+AdjustDirection(static_cast<UINT>(key)),false);break;}
             if(gesture_.Select(0,static_cast<unsigned>(count)))renderer_->SetSelection(0);
             Adjust(AdjustDirection(static_cast<UINT>(key)));break;
+        case KeyRoute::Remove:
+            input_.EndHold();KeepAlive();
+            if(app && TakeOut(selected)) {gesture_.Select(-1,static_cast<unsigned>(count));RenderMenu(-1,true);}
+            break;
         case KeyRoute::Next:case KeyRoute::Previous: {
             if(!count)break;
-            const int delta=route==KeyRoute::Previous?-1:1,selected=gesture_.Selected();
+            const int delta=route==KeyRoute::Previous?-1:1;
             gesture_.Select(selected<0?(delta<0?count-1:0):(selected+delta+count)%count,static_cast<unsigned>(count));
             renderer_->SetSelection(gesture_.Selected());KeepAlive();break;
         }
         default:break;
         }
     }
-    // A click only counts when its press began on the page now shown.
-    void Press() {pressGeneration_=gesture_.Generation();}
+    // A click only counts when its press began on the page now shown. On Manage, a press on an
+    // app tile may become a drag once the pointer passes the system drag threshold.
+    void Press(POINT client) {
+        pressGeneration_=gesture_.Generation();
+        EndDrag(DragEnd::Cancel);
+        if(page_!=MenuPage::Manage || !input_.Persistent() || input_.Held() || !gesture_.Active())return;
+        const int index=HitTest(client.x*96.0/dpi_-kCenterDip,client.y*96.0/dpi_-kCenterDip,static_cast<unsigned>(menu_.size()));
+        if(index<0 || static_cast<size_t>(index)>=items_.size() || menu_[index].action!=MenuAction::Entry)return;
+        POINT screen=client;ClientToScreen(window,&screen);
+        drag_.from=index;drag_.press=screen;
+        // The release must come back here even when the pointer leaves the reel. A test
+        // instance never takes the user's mouse.
+        if(!CurrentTestInput().active)SetCapture(window);
+    }
+    // Lifts the pressed tile past the drag threshold, then moves it: the pointer opens the slot
+    // nearest its angle, or arms the trash inside the center zone. True while a tile is lifted.
+    bool DragPointer(POINT screen) {
+        if(drag_.from<0)return false;
+        // The page changed, or the renderer lost the lifted tile (a device or appearance rebuild):
+        // a drop must never act on a tile the user can no longer see.
+        if(pressGeneration_!=gesture_.Generation() || page_!=MenuPage::Manage || static_cast<size_t>(drag_.from)>=items_.size() ||
+           (drag_.active && !renderer_->Dragging())) {EndDrag(DragEnd::Cancel);return false;}
+        if(!drag_.active) {
+            // The drag threshold follows the display's own DPI, not the reel's smaller drawing DPI.
+            const UINT monitorDpi=static_cast<UINT>(std::lround(dpi_/vi::kReelScale));
+            const int cx=GetSystemMetricsForDpi(SM_CXDRAG,monitorDpi),cy=GetSystemMetricsForDpi(SM_CYDRAG,monitorDpi);
+            if(std::abs(screen.x-drag_.press.x)<=cx && std::abs(screen.y-drag_.press.y)<=cy)return false;
+            // A Copilot hold resumed during the press keeps the menu; the press stays a click.
+            if(input_.Held()) {EndDrag(DragEnd::Cancel);return false;}
+            drag_.active=true;moved_=true;
+            gesture_.Select(-1,static_cast<unsigned>(menu_.size()));
+            renderer_->BeginDrag(drag_.from,items_.size()>1);
+            if(!renderer_->Dragging()) {EndDrag(DragEnd::Cancel);return false;}
+            Log(L"Drag started: "+AppDisplayName(items_[drag_.from]));
+        }
+        const double x=(screen.x-centerX_)*96.0/dpi_,y=(screen.y-centerY_)*96.0/dpi_;
+        const bool center=x*x+y*y<=kDeadZoneDip*kDeadZoneDip;
+        drag_.overTrash=center && items_.size()>1;
+        drag_.slot=center?drag_.from:DropSlot(x,y,menu_.size(),items_.size());
+        renderer_->DragTo({static_cast<float>(kCenterDip+x),static_cast<float>(kCenterDip+y)},drag_.slot,drag_.overTrash);
+        KeepAlive();
+        return true;
+    }
+    // Forgets a press and puts a lifted tile back with the rest of the page. The release of a
+    // canceled drag is not a click.
+    void EndDrag(DragEnd end) {
+        const bool active=drag_.active;
+        drag_={};
+        if(GetCapture()==window)ReleaseCapture();
+        if(active) {renderer_->EndDrag(end);pressGeneration_=~0u;}
+    }
+    // Another window took the mouse (or the system canceled the mode): the drag cannot finish.
+    void CaptureLost() {
+        if(drag_.from<0)return;
+        const bool active=drag_.active;
+        EndDrag(DragEnd::Cancel);
+        if(active)Log(L"Drag canceled: the mouse capture was lost");
+    }
+    std::wstring DragTarget() const {
+        if(!drag_.active)return L"none";
+        return drag_.overTrash?L"trash":L"slot:"+std::to_wstring(drag_.slot);
+    }
     // The release position travels with the message, so a click queued behind slow
     // work still lands where the user released, not where the pointer is now.
     void Click(POINT client) {
+        const auto drag=drag_;
+        drag_={};
+        if(GetCapture()==window)ReleaseCapture();
+        if(drag.active) {
+            if(renderer_->Dragging())Drop(drag,client);
+            else pressGeneration_=~0u;
+            return;
+        }
         if(!input_.Persistent() || !gesture_.Active() || pressGeneration_!=gesture_.Generation())return;
         const POINT point{MulDiv(client.x,96,dpi_),MulDiv(client.y,96,dpi_)};
         if(const int arrow=AdjustArrow(point)) {Adjust(arrow);return;}
         const int selected=HitTest(point.x-kCenterDip,point.y-kCenterDip,static_cast<unsigned>(menu_.size()));
         if(selected<0)Back();else Confirm(selected);
+    }
+    // Where the lifted tile is released decides: the armed trash takes the app out of the reel,
+    // another slot moves it there, and its own slot puts it back.
+    void Drop(const Drag& drag,POINT client) {
+        KeepAlive();
+        const unsigned count=static_cast<unsigned>(menu_.size());
+        if(!gesture_.Active() || page_!=MenuPage::Manage || pressGeneration_!=gesture_.Generation() ||
+           drag.from<0 || static_cast<size_t>(drag.from)>=items_.size()) {renderer_->EndDrag(DragEnd::Cancel);return;}
+        const double x=client.x*96.0/dpi_-kCenterDip,y=client.y*96.0/dpi_-kCenterDip;
+        if(x*x+y*y<=kDeadZoneDip*kDeadZoneDip) {
+            if(items_.size()>1 && TakeOut(drag.from,true)) {
+                renderer_->EndDrag(DragEnd::Remove);gesture_.Select(-1,count);RenderMenu(-1,true);
+            } else {renderer_->EndDrag(DragEnd::Cancel);Log(L"Drop on the trash ignored: the last app stays");}
+            return;
+        }
+        const int slot=DropSlot(x,y,count,items_.size());
+        if(slot<0 || slot==drag.from) {renderer_->EndDrag(DragEnd::Cancel);Log(L"Drag returned");return;}
+        MoveApp(drag.from,slot,true);
+    }
+    // Saves the reel with one app moved; the preferred agent stays the same app. The page reflows
+    // from where its tiles are, and the selection follows the app.
+    bool MoveApp(int from,int to,bool dropped) {
+        auto candidate=items_;
+        const auto fail=[&](const std::wstring& message) {
+            if(dropped)renderer_->EndDrag(DragEnd::Cancel);
+            if(!message.empty())MessageBoxW(window,message.c_str(),kAppName,MB_OK|MB_ICONERROR);
+            return false;
+        };
+        if(!MoveEntry(candidate,from,to))return fail({});
+        const int preferred=PreferredTargetIndex(items_);
+        const int kept=preferred<0?-1:MovedIndex(preferred,from,to);
+        std::wstring error;
+        if(!SaveTargets(candidate,error))return fail(error);
+        // Without a saved preference the first app is preferred; moving must not change what a tap opens.
+        if(kept>=0 && PreferredTargetIndex(candidate)!=kept && !SavePreferredTarget(candidate[kept])) {
+            std::wstring rollback;
+            if(SaveTargets(items_,rollback)) {Log(L"Move rolled back: the preferred agent could not be kept");return fail({});}
+            Log(L"Move kept: neither the preferred agent nor the previous order could be saved");
+        }
+        // Each tile reflows from its own previous slot; Add keeps the last one.
+        reflowFrom_.assign(items_.size()+1,static_cast<int>(items_.size()));
+        for(int position=0;position<static_cast<int>(items_.size());++position)reflowFrom_[MovedIndex(position,from,to)]=position;
+        items_=std::move(candidate);
+        Log(L"App moved: "+AppDisplayName(items_[to])+L" to position "+std::to_wstring(to+1));
+        if(dropped)renderer_->EndDrag(DragEnd::Drop);
+        gesture_.Select(to,static_cast<unsigned>(menu_.size()));
+        RenderMenu(-1,true);
+        return true;
+    }
+    // Takes an app out of the reel without losing it: its settings wait first on Add. The parked
+    // list is written first, so a failure in between can only leave a copy that Add hides while
+    // the app is still in the reel. The caller renders the page that follows.
+    bool TakeOut(int index,bool dropped=false) {
+        if(index<0 || static_cast<size_t>(index)>=items_.size() || items_.size()<2)return false;
+        const auto fail=[&](const std::wstring& error) {
+            Log(L"Taking an app out failed: "+error);
+            if(dropped)renderer_->EndDrag(DragEnd::Cancel);
+            MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);
+            return false;
+        };
+        // A parked list that could not be read is kept beside the new one, never overwritten.
+        const auto parkedPath=ParkedPath();
+        if(parkedUnread_ && GetFileAttributesW(parkedPath.c_str())!=INVALID_FILE_ATTRIBUTES) {
+            const auto backup=parkedPath+L".unreadable."+std::to_wstring(EventStamp())+L".bak";
+            if(!CopyFileW(parkedPath.c_str(),backup.c_str(),TRUE))
+                return fail(Tr(L"parked.ini could not be read or backed up, so no app can be taken out of the reel now.",
+                    L"无法读取或备份 parked.ini，暂时不能将应用移出轮盘。"));
+            Log(L"Unreadable parked list kept as "+backup);
+        }
+        auto parked=parked_;Park(parked,items_[index]);
+        auto candidate=items_;candidate.erase(candidate.begin()+index);
+        std::wstring error;
+        if(!SaveParked(parked,error))return fail(error);
+        parkedUnread_=false;
+        if(!SaveTargets(candidate,error)) {
+            std::wstring ignored;
+            if(!SaveParked(parked_,ignored))Log(L"Parked list not rolled back; the app stays in the reel and Add hides its copy");
+            return fail(error);
+        }
+        // When the preferred agent leaves, the first remaining app becomes preferred, so putting
+        // the old one back later does not silently take the tap over again.
+        if(PreferredTargetIndex(items_)==index && !SavePreferredTarget(candidate.front()))
+            Log(L"Preferred agent not saved after taking it out; a tap uses the first app");
+        const auto name=AppDisplayName(items_[index]);
+        // On Manage the others reflow from their own slots and the app taken out shrinks away.
+        reflowFrom_.assign(candidate.size()+1,static_cast<int>(items_.size()));
+        for(int position=0;position<static_cast<int>(candidate.size());++position)reflowFrom_[position]=position<index?position:position+1;
+        parked_=std::move(parked);items_=std::move(candidate);
+        if(editing_>=static_cast<int>(items_.size()))editing_=-1;
+        Log(L"App taken out of the reel: "+name+L"; parked="+std::to_wstring(parked_.size()));
+        return true;
     }
     // Tap, the release of a resumed hold, a click and Return all confirm through here.
     void Confirm(int index) {
@@ -690,30 +883,10 @@ public:
         if(!CanConfirm(menu_,index)) {Log(index<0?L"Confirm ignored: no selection":L"Confirm ignored: unavailable item");return;}
         Choose(index);
     }
-    void Adjust(int direction) {
+    // Slot 0 of the hub is the language; both chevrons switch it.
+    void Adjust(int) {
         input_.EndHold();KeepAlive();
         if(page_==MenuPage::Settings)SwitchLanguage();
-        else if(page_==MenuPage::Entry)MoveEditing(direction);
-    }
-    // Moves the app on its actions page one step and saves at once; the page updates in place.
-    void MoveEditing(int delta) {
-        const auto adjust=AdjustFor(page_,items_.size(),editing_);
-        if(!adjust.control || !(delta<0?adjust.earlier:adjust.later))return;
-        auto candidate=items_;
-        if(!MoveEntry(candidate,editing_,delta))return;
-        const int preferred=PreferredTargetIndex(items_);
-        const int kept=preferred<0?-1:MovedIndex(preferred,editing_,delta);
-        std::wstring error;
-        if(!SaveTargets(candidate,error)) {MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);return;}
-        // Without a saved preference the first app is preferred; moving must not change what a tap opens.
-        if(kept>=0 && PreferredTargetIndex(candidate)!=kept && !SavePreferredTarget(candidate[kept])) {
-            std::wstring rollback;
-            if(SaveTargets(items_,rollback)) {Log(L"Move rolled back: the preferred agent could not be kept");return;}
-            Log(L"Move kept: neither the preferred agent nor the previous order could be saved");
-        }
-        items_=std::move(candidate);editing_+=delta;
-        Log(L"App moved: "+AppDisplayName(items_[editing_])+L" to position "+std::to_wstring(editing_+1));
-        RenderMenu();
     }
     void Release() {
         if(!gesture_.Active())return;
@@ -764,10 +937,10 @@ public:
             auto candidate=items_;
             candidate[index]={items_[index].name,TargetKind::Shell,path.data(),L"",L""};
             if(IsVerifiedLocalApplication(candidate[index]) && PersistLocalTargets(candidate,index)) {
-                if(launchAfterSelection)LaunchTarget(items_[index]);else Start(true,anchor_,MenuPage::Settings);
+                if(launchAfterSelection)LaunchTarget(items_[index]);else Start(true,anchor_,MenuPage::Manage);
             } else MessageBoxW(nullptr,Tr(L"Could not save this local application. Choose an executable or a shortcut to an installed application.",
                 L"无法保存此本机应用。请选择可执行程序或指向已安装应用的快捷方式。"),kAppName,MB_OK|MB_ICONWARNING);
-        } else if(!launchAfterSelection)Start(true,anchor_,MenuPage::Preferred);
+        } else if(!launchAfterSelection)Start(true,anchor_,MenuPage::Manage);
     }
     void Choose(int selected) {
         if(selected<0 || static_cast<size_t>(selected)>=menu_.size())return;
@@ -778,7 +951,6 @@ public:
         case MenuAction::Manage:Navigate(MenuPage::Manage,selected);break;
         case MenuAction::Settings:Navigate(MenuPage::Settings,selected);break;
         case MenuAction::Language:SwitchLanguage();break;
-        case MenuAction::Preferred:Navigate(MenuPage::Preferred,selected);break;
         case MenuAction::Appearance:
             gesture_.Cancel();Hide(false,HideStyle::Commit);LaunchTarget({L"Windows appearance",TargetKind::Shell,L"ms-settings:colors",L"",L""});break;
         case MenuAction::Entry:editing_=entry.index;Navigate(MenuPage::Entry,selected);break;
@@ -787,20 +959,29 @@ public:
             if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size()) {
                 if(!IsVerifiedLocalApplication(items_[entry.index]))ChooseLocalApplication(entry.index,false);
                 else if(SavePreferredTarget(items_[entry.index])) {
-                    Log(L"Preferred agent saved: "+items_[entry.index].name);Navigate(MenuPage::Settings);
+                    Log(L"Preferred agent saved: "+items_[entry.index].name);Navigate(MenuPage::Manage);
                 }
             }break;
-        case MenuAction::Remove:
-            if(entry.index>=0 && static_cast<size_t>(entry.index)<items_.size() && items_.size()>1) {
-                auto candidate=items_;candidate.erase(candidate.begin()+entry.index);std::wstring error;
-                if(SaveTargets(candidate,error)){items_=std::move(candidate);Navigate(MenuPage::Manage);}
-                else MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);
-            }break;
+        // The app leaves the reel and waits on Add with its settings, as from the Manage trash.
+        case MenuAction::Remove:if(TakeOut(entry.index))Navigate(MenuPage::Manage);break;
         case MenuAction::Presets:presetsParent_=page_;presetOffset_=0;Navigate(MenuPage::Presets,selected);break;
         case MenuAction::Previous:presetOffset_=presetOffset_>=5?presetOffset_-5:0;Navigate(MenuPage::Presets);break;
         case MenuAction::Next:presetOffset_+=5;Navigate(MenuPage::Presets);break;
         case MenuAction::Custom:OpenEditor(-1);break;
-        case MenuAction::Reorder:Navigate(MenuPage::Manage);break;
+        case MenuAction::Done:Navigate(MenuPage::Manage);break;
+        // A parked app goes back as it was saved, without the local-target check a preset needs.
+        case MenuAction::Restore:
+            if(items_.size()<kMaxApps) {
+                const auto app=entry.visual;
+                auto candidate=items_;candidate.push_back(app);std::wstring error;
+                if(!SaveTargets(candidate,error)) {MessageBoxW(window,error.c_str(),kAppName,MB_OK|MB_ICONERROR);break;}
+                items_=std::move(candidate);
+                // Add hides a parked app that is back in the reel, so a failed write here only leaves a hidden copy.
+                std::erase_if(parked_,[&](const AppTarget& other){return SameApp(other,app);});
+                if(!SaveParked(parked_,error))Log(L"Parked list not updated: "+error);
+                Log(L"App put back in the reel: "+AppDisplayName(app));
+                Navigate(MenuPage::Manage);
+            }break;
         case MenuAction::Preset:
             if(items_.size()<kMaxApps) {
                 // The entry carries the catalog item it showed, so a catalog refresh cannot shift it.
@@ -831,6 +1012,7 @@ public:
     }
     // Commit holds the chosen item for one beat (launch, appearance); everything else cancels.
     void Hide(bool restoreFocus=true,HideStyle style=HideStyle::Cancel) {
+        EndDrag(DragEnd::Cancel);
         KillTimer(window,kIdleTimer);KillTimer(window,kKeyPollTimer);RegisterRawInput(false);input_.Closed();pageShown_=false;
         if(restoreFocus && GetForegroundWindow()==window && IsWindow(previousForeground_))SetForegroundWindow(previousForeground_);
         SetWindowLongPtrW(window,GWL_EXSTYLE,GetWindowLongPtrW(window,GWL_EXSTYLE)|WS_EX_NOACTIVATE);
@@ -846,6 +1028,8 @@ public:
         if(!appearance_ || !renderer_)return;
         MSG ignored{};
         while(PeekMessageW(&ignored,window,kAppearanceMessage,kAppearanceMessage,PM_REMOVE)) {}
+        // A new appearance redraws every surface; a lifted tile goes back first.
+        EndDrag(DragEnd::Cancel);
         currentAppearance_=appearance_->Read();
         renderer_->SetAppearance(currentAppearance_);
         RefreshOsdAppearance();
@@ -854,6 +1038,9 @@ public:
     void Reload() {
         const bool firstRun=GetFileAttributesW(ConfigPath().c_str())==INVALID_FILE_ATTRIBUTES;
         std::wstring error;items_=LoadTargets(error);
+        std::wstring parkedError;parked_=LoadParked(parkedError);
+        parkedUnread_=!parkedError.empty();
+        if(parkedUnread_)Log(parkedError);
         // Seeding a first profile and migrating a website default need the catalog now.
         if(error.empty() && presets_.empty() && (firstRun ||
             std::any_of(items_.begin(),items_.end(),[](const AppTarget& item){return !IsLocalApplication(item);})))
@@ -876,7 +1063,7 @@ public:
         // Shell icon extraction can take hundreds of milliseconds. Doing it here keeps
         // the first hold from blocking input while the reel opens.
         auto artwork=items_;artwork.insert(artwork.end(),presets_.begin(),presets_.end());
-        PrepareArtwork(artwork,static_cast<float>(GetDpiForSystem()));
+        PrepareArtwork(artwork,static_cast<float>(ReelDpi(GetDpiForSystem())));
         if(gesture_.Active())Navigate(page_);else RenderMenu();
         if(!error.empty()) {
             Log(L"Configuration validation failed; original file preserved, fallback targets loaded.");
@@ -940,15 +1127,19 @@ public:
         // What each tile should show, independently of the renderer's cache: tiles with different
         // identities must render differently (tools/capture-seam.py compares their pixels).
         for(const auto& entry:menu_)art+=(art.empty()?L"":L"\t")+ArtworkIdentity(entry.visual,currentAppearance_.dark);
-        const auto adjust=AdjustFor(page_,items_.size(),editing_);
+        const auto adjust=AdjustFor(page_);
         const wchar_t* adjustName=!adjust.control?L"none":adjust.earlier && adjust.later?L"both":adjust.earlier?L"earlier":adjust.later?L"later":L"blocked";
-        text<<L"Copilot Reel 0.3.5.1\r\n"<<L"DPI="<<dpi_<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        std::wstring parkedNames;
+        for(const auto& app:parked_)parkedNames+=(parkedNames.empty()?L"":L"|")+AppDisplayName(app);
+        text<<L"Copilot Reel 0.3.6\r\n"<<L"DPI="<<dpi_<<L"\r\nreelScale="<<vi::kReelScale<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
             <<L"\r\ngestureSelected="<<gesture_.Selected()<<L"\r\ngestureAwaitingCenter="<<gesture_.AwaitingCenter()
             <<L"\r\npreview="<<input_.Persistent()<<L"\r\nheld="<<input_.Held()<<L"\r\neditorOpen="<<editorOpen_
             <<L"\r\nmenuNames="<<names<<L"\r\nmenuArt="<<art<<L"\r\nadjust="<<adjustName<<L"\r\naddCatalog="<<addCatalog_.size()<<L"\r\naddInstalled="<<addInstalled_
+            <<L"\r\naddParked="<<addParked_<<L"\r\nparked="<<parked_.size()<<L"\r\nparkedNames="<<parkedNames
+            <<L"\r\ndrag="<<(drag_.active?drag_.from:-1)<<L"\r\ndragTarget="<<DragTarget()
             <<L"\r\ndataPath="<<ConfigPath()<<L"\r\nlanguage="<<LocaleName(CurrentLanguage())
             <<L"\r\nvisualOverride="<<(visual.raw.empty()?std::wstring(L"none"):visual.raw)
             // Captured pointer relative to the plate center in DIP; nonzero only when an edge clamped the plate.
@@ -1003,7 +1194,7 @@ public:
         // Shell icon extraction can take hundreds of milliseconds; it waits until the reel is idle
         // unless the Add page needs the new entries now.
         if(gesture_.Active() && page_!=MenuPage::Presets)artworkPending_=true;
-        else PrepareArtwork(presets_,static_cast<float>(GetDpiForSystem()));
+        else PrepareArtwork(presets_,static_cast<float>(ReelDpi(GetDpiForSystem())));
         if(gesture_.Active() && page_==MenuPage::Presets) {
             // Entries moved under the selection: clear it until the cursor moves again.
             UpdateAddCatalog();gesture_.Select(-1,static_cast<unsigned>(menu_.size()));
@@ -1013,9 +1204,9 @@ public:
     }
     void FlushArtwork() {
         if(!artworkPending_)return;
-        artworkPending_=false;PrepareArtwork(presets_,static_cast<float>(GetDpiForSystem()));
+        artworkPending_=false;PrepareArtwork(presets_,static_cast<float>(ReelDpi(GetDpiForSystem())));
     }
-    void UpdateAddCatalog() {addCatalog_=AddCatalog(items_,presets_,InstalledIdentity,&addInstalled_);}
+    void UpdateAddCatalog() {addCatalog_=AddCatalog(items_,parked_,presets_,InstalledIdentity,&addParked_,&addInstalled_);}
     bool Ready() const {return ready_;}
     bool Active() const {return gesture_.Active();}
     // A closing or idle reel never handles clicks. HTTRANSPARENT passes them only to
@@ -1039,14 +1230,20 @@ public:
         // A capture DPI override keeps its fixed render scale on every monitor.
         if(placing_ || CurrentVisualOverride().dpi)return;
         if(renderer_ && gesture_.Active()) {Cancel();FinishHide();}
-        dpi_=dpi;if(renderer_)renderer_->Resize(dpi_);
+        dpi_=ReelDpi(dpi);if(renderer_)renderer_->Resize(dpi_);
     }
 private:
     std::unique_ptr<AppearanceSource> appearance_;
     std::unique_ptr<OrbitRenderer> renderer_;
     Appearance currentAppearance_;
-    std::vector<AppTarget> items_,presets_,addCatalog_;
-    size_t addInstalled_=0;
+    // parked_: apps taken out of the reel, with their settings (parked.ini).
+    std::vector<AppTarget> items_,parked_,presets_,addCatalog_;
+    size_t addParked_=0,addInstalled_=0;
+    // parked.ini exists but could not be read: it is backed up before it is first rewritten.
+    bool parkedUnread_=false;
+    Drag drag_;
+    // The previous slot of each item for the next Reflow page, or empty to match tiles by app.
+    std::vector<int> reflowFrom_;
     bool artworkPending_=false;
     std::vector<MenuEntry> menu_;
     MenuPage page_=MenuPage::Main;
@@ -1120,8 +1317,10 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
         case kPresetsReadyMessage:self->PresetsReady(std::unique_ptr<std::vector<AppTarget>>(reinterpret_cast<std::vector<AppTarget>*>(lParam)));return 0;
         case WM_INPUT:self->RawInput(reinterpret_cast<HRAWINPUT>(lParam));break;
         case WM_MOUSEMOVE:self->MovePointer();return 0;
-        case WM_LBUTTONDOWN:self->Press();return 0;
+        case WM_LBUTTONDOWN:self->Press({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)});return 0;
         case WM_LBUTTONUP:self->Click({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)});return 0;
+        case WM_CAPTURECHANGED:if(reinterpret_cast<HWND>(lParam)!=hwnd)self->CaptureLost();return 0;
+        case WM_CANCELMODE:self->CaptureLost();break;
         case WM_SYSCOMMAND: {
             // After a fast-path tap the Shell minimizes a provider window that has the foreground.
             // The reel has no minimized or maximized state; a minimized window reopens in place.

@@ -1,8 +1,9 @@
 // Compile this test as a separate executable, without separately compiling
 // settings.cpp. The include keeps parser details private to production while
 // making the anonymous-namespace helpers available in this translation unit.
-// No test calls ConfigPath, LoadTargets, SaveTargets, or any window API: the
-// real user's configuration is never read or written.
+// No test calls ConfigPath, LoadTargets, SaveTargets, LoadParked, SaveParked, or any
+// window API: the real user's configuration is never read or written. The writer is
+// tested only in a private temporary directory.
 #include "../src/settings.cpp"
 
 #include <iostream>
@@ -119,6 +120,59 @@ void TestLimits() {
     Require(defaults.size() == 2 && reel::Validate(defaults, error), "fallback defaults must be valid and bounded");
     Require(defaults[0].target == L"notepad.exe" && defaults[1].target == L"ms-settings:", "fallback defaults remain local; the controller adds discovered installed agents");
 }
+std::wstring ParkedFixture(std::size_t count) {
+    std::wstring text = L"[CopilotReelParked]\nVersion=1\nCount=" + std::to_wstring(count) + L"\n";
+    for (std::size_t i = 0; i < count; ++i)
+        text += L"[App" + std::to_wstring(i) + L"]\nName=Agent " + std::to_wstring(i) +
+            L"\nKind=shell\nTarget=C:\\\\Apps\\\\agent" + std::to_wstring(i) + L".exe\nArguments=--profile work\nWorkingDirectory=D:\\\\Work\n";
+    return text;
+}
+
+// parked.ini shares the reel's format under its own header: 0-16 entries, never mistaken for apps.ini.
+void TestParked() {
+    std::vector<reel::AppTarget> apps;
+    Require(reel::Parse(ParkedFixture(0), apps, reel::kParkedFormat) && apps.empty(), "an empty parked list is valid");
+    Require(reel::Parse(ParkedFixture(16), apps, reel::kParkedFormat) && apps.size() == 16 &&
+        apps[15].target == L"C:\\Apps\\agent15.exe" && apps[3].arguments == L"--profile work" && apps[3].workingDirectory == L"D:\\Work",
+        "sixteen parked apps keep order and every field");
+    Require(!reel::Parse(ParkedFixture(17), apps, reel::kParkedFormat), "more than sixteen parked apps should fail");
+    Require(!reel::Parse(Replace(ParkedFixture(1), L"Count=1", L"Count=01"), apps, reel::kParkedFormat), "a padded count should fail");
+    Require(!reel::Parse(Replace(ParkedFixture(1), L"Count=1", L"Count=+1"), apps, reel::kParkedFormat), "a signed count should fail");
+    Require(!reel::Parse(kFixture, apps, reel::kParkedFormat), "apps.ini is not a parked list");
+    Require(!reel::Parse(ParkedFixture(2), apps), "a parked list is not apps.ini");
+    Require(!reel::Parse(Replace(kFixture, L"Count=3", L"Count=10"), apps), "a two-digit reel count above eight should fail");
+
+    std::wstring error;
+    const reel::AppTarget valid{L"Agent", reel::TargetKind::Shell, L"C:\\Apps\\agent.exe", L"", L""};
+    Require(reel::Validate({}, error, reel::kParkedFormat), "no parked apps is valid");
+    Require(!reel::Validate(std::vector<reel::AppTarget>(17, valid), error, reel::kParkedFormat) && !error.empty(),
+        "seventeen parked apps must be rejected");
+
+    // A round trip through the atomic writer in a private temporary directory.
+    wchar_t temp[MAX_PATH + 1]{};
+    Require(GetTempPathW(MAX_PATH, temp) > 0, "temporary directory");
+    const std::wstring directory = std::wstring(temp) + L"copilot-reel-settings-test-" + std::to_wstring(GetCurrentProcessId());
+    const std::wstring path = directory + L"\\parked.ini";
+    std::vector<reel::AppTarget> parked{{L"\u4e2d\u6587 Agent", reel::TargetKind::Shell, L"C:\\Apps\\a\tb.exe", L"--x=1", L"C:\\W"},
+        {L"Store", reel::TargetKind::Aumid, L"Example.Agent_123!App", L"", L""}};
+    CreateDirectoryW(directory.c_str(), nullptr);
+    Require(reel::WriteList(path, reel::kParkedFormat, parked, error), "parked apps should save");
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    Require(file != INVALID_HANDLE_VALUE, "the saved parked list exists");
+    std::wstring content(4096, L'\0');
+    DWORD read = 0;
+    ReadFile(file, content.data(), static_cast<DWORD>(content.size() * sizeof(wchar_t)), &read, nullptr);
+    CloseHandle(file);
+    content.resize(read / sizeof(wchar_t));
+    Require(!content.empty() && content.front() == L'\xfeff' &&
+        reel::Parse(std::wstring_view(content).substr(1), apps, reel::kParkedFormat) && apps.size() == 2 &&
+        apps[0].name == parked[0].name && apps[0].target == parked[0].target && apps[1].kind == reel::TargetKind::Aumid,
+        "a saved parked list reads back unchanged");
+    Require(reel::WriteList(path, reel::kParkedFormat, {}, error), "an empty parked list saves");
+    Require(!reel::WriteList(path, reel::kReelFormat, {}, error), "the reel never saves empty");
+    DeleteFileW(path.c_str());
+    RemoveDirectoryW(directory.c_str());
+}
 } // namespace
 
 int main() {
@@ -127,6 +181,7 @@ int main() {
         TestEscaping();
         TestCorruptConfigurations();
         TestLimits();
+        TestParked();
         std::cout << "Settings tests passed: " << checks << " checks; no user files accessed.\n";
         return 0;
     } catch (const std::exception& error) {

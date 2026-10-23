@@ -12,7 +12,7 @@ $dataRoots=@(
 )
 $records=@()
 for($index=0;$index -lt $dataRoots.Count;$index++) {
-    foreach($name in @('apps.ini','preferences.ini','behavior.ini')) {
+    foreach($name in @('apps.ini','parked.ini','preferences.ini','behavior.ini')) {
         $source=Join-Path $dataRoots[$index] $name
         if(Test-Path -LiteralPath $source) {
             $destination=Join-Path $backupRoot "$index-$name"

@@ -27,7 +27,7 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 
 1. **Windows-neutral surface.** One plate in the system flyout color (`#F9F9F9` light, `#2C2C2C` dark), one soft shadow, a 1 DIP inset rim; frosted acrylic when Windows transparency is on.
 2. **One orbit.** Every item sits on the 112 DIP orbit: slot 1 at 12 o'clock, clockwise, 360/n apart. Slots never reflow and icons never rotate.
-3. **A quiet center.** Idle Main shows only a faint ring; idle submenus show the ring and a back chevron. A hovered item shows exactly one name; the ring hides while it shows.
+3. **A quiet center.** Idle Main shows only a faint ring; idle submenus show the ring and a back chevron. A hovered item shows exactly one name; the ring hides while it shows. While an app tile is dragged on Manage apps the center shows only the trash.
 4. **Selection is a seat.** A 48 DIP accent-tinted seat replaces the tile fill. Command glyphs and EN/ZH stay foreground.
 5. **Marks stay true.** Vendor marks are never recolored, redrawn or distorted.
 6. **Brief motion.** 83 to 250 ms, no overshoot, scaled from the plate center; reduced motion and high contrast settle at once.
@@ -36,6 +36,7 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 
 | Element | Value |
 | --- | --- |
+| Reel scale | 0.8 (0.3.6): every DIP value in this table draws at 0.8; the effective DPI is the monitor DPI x 0.8, rounded (a 200% display draws the canvas at 616 px) |
 | Canvas | 384 x 384, including the 24 DIP shadow margin |
 | Plate | radius 168; rim 1, inset 0.5 (high contrast 2) |
 | Orbit | radius 112; slot 1 at 12 o'clock, clockwise, step 360/n |
@@ -46,8 +47,9 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 | Glyph-class artwork | long ink side on the 28 DIP keyline x per-brand `opticalScale` |
 | Plated artwork | cropped to its plate, covers 40, clipped to r 10, tile hairline on top |
 | Preferred badge | accent disc r 6 at (+17, -17); plate-colored ring r 7.5 (1.5 cutout); path check 1.5 in `textOnAccent` |
-| Adjust chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40, flanking slot 0: the EN/ZH tile on the + hub, and the app on its App actions page (left earlier, right later in the reel); `secondary`, `foreground` while slot 0 is selected; a side that cannot move (the app is first or last) draws at the disabled 0.36 and never turns `foreground` |
+| Adjust chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40, flanking slot 0, the EN/ZH tile on the + hub; `secondary`, `foreground` while slot 0 is selected |
 | Back chevron | E76B at em 14, `secondary`, idle submenus only |
+| Drag trash | Manage apps, only while a tile is lifted: Remove (E74D) at em 20 in `critical` inside a `critical` ring of 1.5 at the center-zone edge (r 44); armed (pointer inside r 44): a `criticalFill` disc r 30 with the glyph in `textOnCritical`, over the shrunken tile; disabled at 0.36 while one app remains |
 | Center name | 14 DIP / 600, one line, 132 x 20 box on the plate center |
 | Shadow | blur 16 (std dev 8), offset y 8; knocked out under the plate |
 | Pixel grid | centers, tiles and seats snap to device pixels; hairlines at least 1 px; hit testing keeps exact geometry |
@@ -66,13 +68,15 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 | accentText | AccentDark2 (`#003E92`) | AccentLight3 (`#99EBFF`) | COLOR_HIGHLIGHT |
 | textOnAccent | `#FFFFFF` | `#000000` | COLOR_HIGHLIGHTTEXT |
 | selection (seat fill) | Mix(plate, accent, 0.10) | Mix(plate, accent, 0.18) | COLOR_HIGHLIGHT, HIGHLIGHTTEXT 2.5 stroke |
+| critical (trash glyph, ring) | `#C42B1C` | `#FF99A4` | COLOR_WINDOWTEXT |
+| criticalFill / textOnCritical (armed trash) | `#C42B1C` / `#FFFFFF` | `#FF99A4` / `#000000` | COLOR_HIGHLIGHT / COLOR_HIGHLIGHTTEXT |
 | selectionText | foreground | foreground | COLOR_HIGHLIGHTTEXT |
 | outline (native editor only) | `#CCCCCC` | `#4A4A4A` | COLOR_WINDOWTEXT |
 | shadowOpacity | 14% | 26% | none |
 
 - The accent is a role: UISettings ramp steps, never the raw `UIColorType::Accent`. Fallbacks apply only when the ramp is unavailable. A sample ramp (Windows default blue on the capture machine) is on page 3.
 - Mix(a, b, t) = a + (b - a) * t per channel, opaque. Translucent roles composite over the plate.
-- WCAG 2.2 with the fallback accents (light / dark): label on plate 16.36 / 13.97, glyph on seat 14.09 / 9.43, chevrons on plate 6.25 / 8.96, seat stroke on plate 5.99 / 7.76, badge check 6.31 / 11.67. All pass (4.5:1 text, 3:1 non-text).
+- WCAG 2.2 with the fallback accents (light / dark): label on plate 16.36 / 13.97, glyph on seat 14.09 / 9.43, chevrons on plate 6.25 / 8.96, seat stroke on plate 5.99 / 7.76, badge check 6.31 / 11.67. All pass (4.5:1 text, 3:1 non-text). The critical colors are WinUI `SystemFillColorCritical`, used for the drag trash only; red is never used elsewhere.
 
 ## Typography
 
@@ -96,13 +100,13 @@ Command glyphs: Add E710, Manage F0E2, Preferred E930, Sun E706, Moon E708, Edit
 
 ## States
 
-Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one name, ring hidden); disabled (0.36, named on hover, never seated); blocked chevron side (0.36, never `foreground`); preferred (badge); edge-gated (secondary ring 1.5 and dot, no selection); keyboard focus (the same seat); commit (the choice holds 50 ms while the rest fades). High contrast uses live system colors and paints the seat COLOR_HIGHLIGHT.
+Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one name, ring hidden); disabled (0.36, named on hover, never seated); preferred (badge); dragged (Manage apps: the tile lifts to 1.08 and follows the pointer, the others slide to open its slot, the trash alone owns the center; over the armed trash the tile shrinks to 0.7 at 0.4 beneath it); edge-gated (secondary ring 1.5 and dot, no selection); keyboard focus (the same seat); commit (the choice holds 50 ms while the rest fades). High contrast uses live system colors and paints the seat COLOR_HIGHLIGHT.
 
 ## Layouts and navigation
 
-- One to nine items: Preferred with one app (1), App actions (3-4: the app itself in slot 0, Edit, Preferred, and Remove while more than one app remains), Main (2-9: up to 8 apps and +), the + hub (5), Presets (up to 8: five presets, Custom, Previous, Next).
+- One to nine items: App actions (3-4: the app itself in slot 0, Edit, Preferred, and Remove while more than one app remains), Main (2-9: up to 8 apps and +), the + hub (4), Manage apps (2-9: the apps and Add), Presets (up to 8: parked apps first, then presets, five per page, Custom, Previous, Next).
 - At 8 apps the hub and Manage keep their Add slot, disabled, without reflow.
-- Main (depth 0) -> + hub (1) -> Manage apps / Preferred agent (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D) and Appearance act in place. On App actions the same chevrons (or A/D) move the app one place earlier or later, in place; with one app they are not drawn. The center or Esc returns one level.
+- Main (depth 0) -> + hub (1) -> Manage apps (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D) and Appearance act in place. On Manage apps a dragged tile reorders the reel in place, and the center trash takes an app out of it; App actions has no reorder control. The center or Esc returns one level.
 
 ## Placement and edge gating
 
@@ -123,7 +127,8 @@ The pointer is the plate center whenever the 384 DIP canvas fits (offset 0). At 
 | Handoff | the tapped tile travels to the center in 200 ms, scaling to 0.5, and fades over the last 83 ms as the back chevron appears; the outgoing name clears in 33 ms |
 | Swap (presets) | out 83 ms; in 120 ms from 0.98, decelerate |
 | Language | only the monogram crossfades (83 ms) |
-| Move (App actions) | the page updates in place; a chevron side that reaches or leaves an end crossfades to or from 0.36 in 83 ms |
+| Drag (Manage apps) | lift: the tile scales to 1.08 in 120 ms and then follows the pointer without easing; the other apps slide to their open slots in 167 ms; the trash fades in over 83 ms and arms with a 0.88 -> 1 pop |
+| Drop | every app settles from where it is to its saved slot in 200 ms on the drill curve; a removed tile falls into the trash (to 0.3, transparent) in 167 ms while the trash fades; a canceled drag returns every tile in 200 ms |
 | Reduced motion, high contrast | the same path with every duration 1 ms |
 
 Never: staggered entrances, hover magnification, overshoot or elastic curves, a rim notch, pointer-anchored origins, perimeter stroke animation, connector lines.
@@ -133,7 +138,7 @@ Never: staggered entrances, hover magnification, overshoot or elastic curves, a 
 - Solid (transparency off): opaque plate, one baked shadow, 1 DIP rim.
 - Frosted (transparency on): HostBackdrop -> Blend(Luminosity) with the tint at luminosity opacity (light `#FCFCFC` at 0.85, dark `#2C2C2C` at 0.96) -> Blend(Color) with the tint (0 / 0.15) -> 2% noise, 256 px tile. Tiles use the same roles (light tile at 70%).
 - Solid whenever CompositionCapabilities reports effects unsupported or slow, the backdrop cannot be created, high contrast is on, or energy saver is on.
-- Layers, back to front: shadow, backdrop, plate and rim, ring and gate, seat, page items, handoff clone, two label visuals.
+- Layers, back to front: shadow, backdrop, plate and rim, ring and gate, seat, page items, handoff clone, back chevron, drag trash, two label visuals.
 
 ## Do and don't
 
@@ -148,7 +153,8 @@ Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, s
 - 100, 150 and 200% through the DPI override.
 - Motion strips: open, cancel, seat appear and travel, drill-in with handoff, drill-out, commit (visual evidence, not frame-rate measurement).
 - EN/ZH: idle Main pixel-identical; the hub differs only inside the monogram.
-- Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections stay within 2 levels per channel of the 0.3.4 captures in five variants (0.3.5.1, every channel compared; the 0.3.5 report of 0 differing pixels compared only alpha); App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam).
+- Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections stay within 2 levels per channel of the 0.3.4 captures in five variants (0.3.5.1, every channel compared; the 0.3.5 report of 0 differing pixels compared only alpha); App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam). 0.3.6 removed those chevrons with the reorder they served.
+- Drag and trash (0.3.6): `output/runtime/v0.3.6/*-manage-drag.png` and `*-manage-trash.png` show a tile lifted over another slot and over the armed trash in seven variants; the 0.8 reel scale and the four-item hub make every 0.3.6 still a new reference.
 - Placement: zero interior offset, minimal clamp at eight edge and corner positions, no cursor warp.
 
 Not verified:

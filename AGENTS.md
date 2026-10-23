@@ -10,7 +10,7 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
 - Only the newest version is kept (the user's rule since 2026-10-22): after a release is published, delete the older GitHub releases together with their tags (`gh release delete <tag> --cleanup-tag`, then `git tag -d <tag>`), and remove the older packages and release notes from `artifacts/`. The commits stay in history; configuration backups in `artifacts/backups/` are kept.
 - Commits use the existing author, `baka_sayaka <60833924+bakasayaka@users.noreply.github.com>`, passed per command. Never change git config. Commit or push only when the user asks.
 - Interaction and visual checks run through the test seam: `tests/run-reel-seam.py` and `tools/capture-seam.py` drive a separate unpackaged test instance through its own channel. They never move the pointer, send input or take the foreground, and the installed reel keeps running.
-- `tests/run-radial.py`, `tests/run-language-invariance.py` and `tools/capture-v034.py` are 0.3.4 evidence. They drive the real pointer, need the installed instance to quit first and must not run while the user works. Restart the installed reel afterwards with `tools/open-installed.ps1 -View Background`.
+- `tests/run-radial.py`, `tests/run-language-invariance.py` and `tools/capture-v034.py` are 0.3.4 evidence, and `tools/capture-native-wheels.py` is older evidence; all of them assume the five-item hub with Preferred agent and the 384 DIP window size. They drive the real pointer, need the installed instance to quit first and must not run while the user works. Restart the installed reel afterwards with `tools/open-installed.ps1 -View Background`.
 - Settled decisions; do not reopen them without the user:
   - Soft Orbit with one plate.
   - A quiet center: one name on hover, no titles or captions.
@@ -22,6 +22,9 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
   - While the reel is closed, a short tap opens the preferred local agent, never a web page; a hold opens the reel.
   - Inside an open menu every input confirms, goes back or adjusts: a tap, or a new hold and its release, confirms the selected item (approved 2026-10-21).
   - The reel starts in the background at sign-in through a packaged startup task (approved 2026-10-21).
+  - The reel draws at 0.8 of its DIP geometry (`geometry.scale`; requested 2026-10-23).
+  - Apps are reordered only by dragging their tiles on Manage apps; while a tile is dragged the center shows a red trash, and dropping on it takes the app out of the reel without deleting it: its settings wait first on Add. App actions has no reorder chevrons (requested 2026-10-23).
+  - The preferred agent is set only from an app's actions page; the hub has no Preferred agent entry (requested 2026-10-23).
 
 ## Sessions
 
@@ -29,6 +32,7 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
 | --- | --- | --- |
 | Codex | `01a15515-8bd6-7c13-b974-98614ac37e54` | `%USERPROFILE%\.codex\sessions\2026\10\19\rollout-2026-10-19T18-53-57-01a15515-8bd6-7c13-b974-98614ac37e54.jsonl` |
 | Claude Code | `f4bd2732-bc2e-40e3-bdc3-52ecd97171f3` | `%USERPROFILE%\.claude\projects\c--dev-copilot-reel\f4bd2732-bc2e-40e3-bdc3-52ecd97171f3.jsonl` |
+| Claude Code (0.3.6) | `4cf620db-e965-4178-9bd4-a5b67a0a85a4` | `%USERPROFILE%\.claude\projects\C--dev-copilot-reel\4cf620db-e965-4178-9bd4-a5b67a0a85a4.jsonl` |
 | Cursor | `dc23e9cc-f13b-4052-819b-5fa60d746ad3` | `%USERPROFILE%\.cursor\projects\c-dev-copilot-reel\agent-transcripts\dc23e9cc-f13b-4052-819b-5fa60d746ad3\` |
 
 ### Codex: product, platform and interaction
@@ -82,6 +86,13 @@ Work, 2026-10-22 (0.3.5.1, released as `v0.3.5.1-beta` and installed here):
 - Packaged agents and launcher stubs are brought forward; network targets are never touched on the UI thread; a reinstall restores a turned-off startup task; `ParseUri` accepts `&inputTimestamp=`; a cold start from Start or search opens the preview.
 - Reverse-engineered why the provider cannot be hidden behind a separate Start entry (`docs/validation.md`, v0.3.5.1).
 
+Work, 2026-10-23 (0.3.6, session `4cf620db`, released as the prerelease `v0.3.6-beta` and installed here):
+- Renamed the GitHub repository to `bakasayaka/copilot-reel` and pointed `origin` at it; the local folder is still `C:\dev\copilot_reel`.
+- The reel draws at 0.8 of its DIP geometry: `geometry.scale` / `vi::kReelScale`, applied as a whole effective DPI (`ReelDpi` in `src/main.cpp`), so placement, hit testing, surfaces and artwork stay on one pixel grid and the seam harness needs no geometry change.
+- Drag to reorder on Manage apps (`Controller::Press`/`DragPointer`/`Drop`, `DropSlot`, `MoveEntry` from/to), with a red center trash (`critical` palette roles, `geometry.trash`) that parks an app in `parked.ini` (`Park`, `LoadParked`/`SaveParked`, a backup before an unreadable list is rewritten). Add lists parked apps first and `MenuAction::Restore` puts one back as saved. A/D move and Delete parks the selected app; Remove from reel parks too. Renderer: `BeginDrag`/`DragTo`/`EndDrag` and `PageTransition::Reflow`, which starts each tile where it is drawn.
+- Removed the App actions reorder chevrons and the hub's Preferred agent page (`MenuPage::Entry` keeps 5); Set as preferred returns to Manage apps.
+- Seam: `TestAction::Press`/`Release`, group `c` rewritten, `tools/capture-seam.py` captures the drag and trash and compares with the new `output/runtime/v0.3.6` references. A five-lens review with adversarial verification; all confirmed findings fixed (`docs/validation.md`, v0.3.6).
+
 ### Cursor: build, release and distribution
 
 Role: toolchain, multi-architecture builds, signing, the GitHub remote and releases.
@@ -91,16 +102,17 @@ Work, 2026-10-20:
   - `tools/build.ps1 -Architecture arm64` and `tools/package.ps1 -Architecture arm64` produce it, and `tools/toolchain-manifest.json` pins the toolchain;
   - `tools/install-development.ps1` accepts only x64 packages;
   - ARM64 binaries are checked for PE machine `0xAA64` and never run on this x64 host.
-- Ran the x64 regression: unit tests, 21/21 radial groups, and 0 differing pixels between languages. Created the private repository <https://github.com/bakasayaka/copilot_reel> and pushed `main`.
+- Ran the x64 regression: unit tests, 21/21 radial groups, and 0 differing pixels between languages. Created the private repository <https://github.com/bakasayaka/copilot-reel> (renamed from `copilot_reel` on 2026-10-23) and pushed `main`.
 - Published the prerelease `v0.3.4-beta`. It carries both packages, signed with the development certificate `CN=CopilotReel Development` (thumbprint `061ED5990CEBC4F2D7C252ABE3EFE7EB99D6239F`). The ARM64 package was signed after the release was created and replaced on it. The matching `docs/validation.md` update was left uncommitted.
 - Commit: `b6fb4e7`.
 
 ## Current state
 
-- 0.3.5.1 x64 is installed on this machine and runs in the background; its startup task is enabled. The Copilot key is bound to it. GitHub carries only the prerelease `v0.3.5.1-beta`, with signed x64 and ARM64 packages; older releases and tags were removed under the keep-the-newest rule.
-- `main` tracks `origin/main` on GitHub. The ARM64 package has never run on ARM hardware.
+- 0.3.6.0 x64 is installed on this machine and runs in the background; the Copilot key is bound to it. GitHub carries only the prerelease `v0.3.6-beta`, with signed x64 and ARM64 packages; older releases and tags were removed under the keep-the-newest rule.
+- `main` tracks `origin/main` on GitHub, now `bakasayaka/copilot-reel` (GitHub reports the repository as public). The ARM64 package has never run on ARM hardware. The development certificate's PFX in `artifacts/signing/` has no password: `signtool sign /fd SHA256 /f artifacts\signing\CopilotReel-Development.pfx <msix>`.
 - Open validation items are listed in `docs/validation.md`. The physical Copilot key still has to confirm: tap and hold inside an open menu, a cold start, the start after sign-in, a cold start from Start (`foreground=` in `run.log`), and running agents coming forward.
-- VI v0.9 is not regenerated for 0.3.5/0.3.5.1: it has no App actions scene (`design/vi/source/reel.py` still names `languageControl`) and draws the Claude Science preset with the Claude mark. The tokens and the Placement page source already use the plate-radius gate.
+- VI v0.9 is not regenerated for 0.3.5-0.3.6: it has no App actions or drag scene, still draws the hub with Preferred agent and a Preferred page (`design/vi/source/reel.py`), and draws the Claude Science preset with the Claude mark. The tokens and docs already describe the 0.8 scale, the trash and the four-item hub.
+- A real mouse drag (capture, `WM_CAPTURECHANGED`, the system drag threshold) has only been exercised through the seam, which skips capture; it needs one check by hand.
 
 ## Open product questions
 

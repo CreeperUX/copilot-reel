@@ -75,7 +75,8 @@ function Glyph([string]$name) {
 function Palette([string]$theme) {
     $p = "palettes.$theme"
     @("inline constexpr Palette k$($theme.Substring(0, 1).ToUpperInvariant() + $theme.Substring(1)){") +
-    @('plate', 'foreground', 'secondary', 'outline', 'tile', 'tileStroke', 'plateStroke', 'ringIdle', 'textOnAccent' |
+    @('plate', 'foreground', 'secondary', 'outline', 'tile', 'tileStroke', 'plateStroke', 'ringIdle', 'textOnAccent',
+      'critical', 'criticalFill', 'textOnCritical' |
         ForEach-Object { "    .$_ = $(Color "$p.$_")," }) +
     @("    .seatTint = $(Unit "$p.seatTint"), .shadowOpacity = $(Unit "$p.shadowOpacity"), .frostedTileAlpha = $(Unit "$p.frostedTileAlpha"),",
       "    .accentFallback = $(Color "$p.accent.fallback"), .accentTextFallback = $(Color "$p.accentText.fallback"),",
@@ -130,7 +131,8 @@ $lines = @(
     'struct Color { float r, g, b, a; };'
     'struct Bezier { float x1, y1, x2, y2; };'
     "inline constexpr wchar_t kSchemaVersion[] = $(Text 'schemaVersion');"
-    '// Geometry (DIP)'
+    '// Geometry (DIP). The reel draws at kReelScale: its effective DPI is round(monitor DPI * kReelScale).'
+    "inline constexpr float kReelScale = $(Unit "$g.scale");"
     "inline constexpr float kCanvas = $(Float "$g.canvas"), kPlateRadius = $(Float "$g.plate.radius"), kOrbitRadius = $(Float "$g.orbit.radius"), kCenterZoneRadius = $(Float "$g.centerZone.radius");"
     "inline constexpr float kTile = $(Float "$g.tile.size"), kTileRadius = $(Float "$g.tile.radius"), kTileStroke = $(Float "$g.tile.stroke");"
     "inline constexpr float kSeat = $(Float "$g.seat.size"), kSeatRadius = $(Float "$g.seat.radius"), kSeatStroke = $(Float "$g.seat.stroke"), kSeatStrokeHighContrast = $(Float "$g.seat.strokeHighContrast");"
@@ -143,9 +145,11 @@ $lines = @(
     "inline constexpr float kRingStroke = $(Float "$g.centerZone.ringStroke"), kRingGatedStroke = $(Float "$g.centerZone.ringGatedStroke"), kGateDotRadius = $(Float "$g.centerZone.gateDotRadius");"
     "inline constexpr float kPlateStroke = $(Float "$g.plate.stroke"), kPlateStrokeHighContrast = $(Float "$g.plate.strokeHighContrast");"
     "inline constexpr float kShadowBlur = $(Float 'elevation.shadowBlur'), kShadowOffsetY = $(Float 'elevation.shadowOffsetY');   // Fluent flyout elevation"
+    "inline constexpr float kTrashEm = $(Float "$g.trash.em"), kTrashRingStroke = $(Float "$g.trash.ringStroke"), kTrashArmedRadius = $(Float "$g.trash.armedRadius");"
     "inline constexpr float kDisabledOpacity = $(Unit "$g.disabledOpacity");"
     '// Palettes. Alpha < 1 composites over the plate; selection = Mix(plate, accent, seatTint).'
-    'struct Palette { Color plate, foreground, secondary, outline, tile, tileStroke, plateStroke, ringIdle, textOnAccent;'
+    'struct Palette { Color plate, foreground, secondary, outline, tile, tileStroke, plateStroke, ringIdle, textOnAccent,'
+    '                 critical, criticalFill, textOnCritical;'
     '                 float seatTint, shadowOpacity, frostedTileAlpha; Color accentFallback, accentTextFallback; };'
 ) + (Palette 'light') + (Palette 'dark') + @(
     '// Acrylic (frosted) recipe'
@@ -176,6 +180,8 @@ $lines = @(
     "inline constexpr unsigned kHandoffMs = $(UInt "$m.handoff.travelMs"), kHandoffFadeMs = $(UInt "$m.handoff.fadeMs"), kHandoffLabelFadeMs = $(UInt "$m.handoff.labelFadeMs");  inline constexpr float kHandoffScaleTo = $(Float "$m.handoff.scaleTo");"
     "inline constexpr unsigned kSwapMs = $(UInt "$m.swap.enterMs"), kSwapExitMs = $(UInt "$m.swap.exitMs");  inline constexpr float kSwapScaleFrom = $(Float "$m.swap.enterScaleFrom");"
     "inline constexpr unsigned kMonogramFadeMs = $(UInt "$m.language.monogramCrossfadeMs");"
+    "inline constexpr unsigned kDragLiftMs = $(UInt "$m.drag.liftMs"), kDragReflowMs = $(UInt "$m.drag.reflowMs"), kDragArmMs = $(UInt "$m.drag.armMs"), kDragSettleMs = $(UInt "$m.drag.settleMs"), kDragRemoveMs = $(UInt "$m.drag.removeMs");"
+    "inline constexpr float kDragLiftScale = $(Float "$m.drag.liftScale"), kDragArmScaleFrom = $(Float "$m.drag.armScaleFrom"), kDragOverTrashScale = $(Float "$m.drag.overTrashScale"), kDragOverTrashOpacity = $(Unit "$m.drag.overTrashOpacity"), kDragRemoveScaleTo = $(Float "$m.drag.removeScaleTo");"
     "inline constexpr unsigned kReducedMotionMs = $(UInt "$m.reducedMotion.durationMs");"
     "inline constexpr Bezier kLinear$(Curve linear);"
     "inline constexpr Bezier kDecelerate$(Curve decelerate);   // Fluent FastOutSlowIn"
