@@ -2,6 +2,18 @@
 
 Snapshot: 2026-10-23, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.6.1**. This records demonstrated behavior and its limits, not full release acceptance.
 
+## Installed-app picker and editor layout (fork contribution, 2026-10-24)
+
+Recorded on a contributor's ARM64 Windows 11 PC (NVIDIA RTX Spark N1X, 200% scaling), not the x64 machine above. The package is `0.3.6.1` ARM64 built from branch `feature/installed-app-picker`, signed with that machine's own development certificate.
+
+| Area | Evidence and scope |
+| --- | --- |
+| ARM64 on ARM | First run of the ARM64 package on ARM hardware: installed, registered (`ProviderDeclarationValid`, `SelectedByUser` true), started in the background and bound to the Copilot key. All eight unit-test executables ran natively and passed; the installed executable equals the build. |
+| Picker | `installed_apps_tests` classified entries recorded from this machine's Start and listed 114 of its 129 All apps entries; every listed app passed `IsVerifiedLocalApplication`. The user picked Claude (a package) in the real editor and saw its AUMID filled in. |
+| Editor layout | A scratch harness opened the focused editor off-screen with an isolated `COPILOT_REEL_DATA_DIR` and captured the Edit, Advanced and Choose app pages, including search, an empty result and a pick, in English and Chinese with `PrintWindow`. Fixed from those captures: text fields drew square borders with their text at the top; they are now rounded painted frames with a centered borderless EDIT and an accent ring while focused. Every page uses one grid (72 DIP rows from 72, a footer at 304), with square 32 DIP header buttons, equal 8 DIP gaps beside the target, Advanced in the footer, a 32 DIP combo box, whole list rows, dark list scrollbars in dark mode, an explained empty or loading list, a disabled Choose that no longer looks primary, and Up/Down from the search box. |
+
+Not verified: light theme and high contrast (the machine stays dark), scaling other than 200%, and keyboard-only use of the picker by hand.
+
 ## Verified in v0.3.6.1
 
 The user reported that after installing 0.3.6 a Copilot hold showed nothing while a tap still opened ChatGPT. `run.log` recorded every hold (`Hold started`, then `Gesture canceled before selection`), and a capture of the reel's own window showed it fully drawn. It was not topmost: the reel calls `SetWindowPos(HWND_TOPMOST)` on every opening, and Windows ignores that call, while still returning success, for a process without foreground rights. A background start (the startup task, or `tools/open-installed.ps1 -View Background` after an install) has none, so the reel opened beneath the maximized Claude window. Calling `SetWindowPos` on it from outside also left it non-topmost, while the same call made a fresh test instance or Notepad topmost. Opening the preview once from Start granted the rights. This had been latent since 0.3.5 added the startup task; an earlier resident reel had presumably been raised once by a preview and kept `WS_EX_TOPMOST`.

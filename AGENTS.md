@@ -34,6 +34,7 @@ Copilot Reel is developed by several coding agents in turn. Before starting, rea
 | Claude Code | `f4bd2732-bc2e-40e3-bdc3-52ecd97171f3` | `%USERPROFILE%\.claude\projects\c--dev-copilot-reel\f4bd2732-bc2e-40e3-bdc3-52ecd97171f3.jsonl` |
 | Claude Code (0.3.6) | `4cf620db-e965-4178-9bd4-a5b67a0a85a4` | `%USERPROFILE%\.claude\projects\C--dev-copilot-reel\4cf620db-e965-4178-9bd4-a5b67a0a85a4.jsonl` |
 | Cursor | `dc23e9cc-f13b-4052-819b-5fa60d746ad3` | `%USERPROFILE%\.cursor\projects\c-dev-copilot-reel\agent-transcripts\dc23e9cc-f13b-4052-819b-5fa60d746ad3\` |
+| Claude Code (CreeperUX fork) | `7da4ef51-28c5-4f30-a436-de72a2e32478` | `%USERPROFILE%\.claude\projects\C--Users-Creep-Documents-Claude-Workspace-Lumen\7da4ef51-28c5-4f30-a436-de72a2e32478.jsonl` |
 
 ### Codex: product, platform and interaction
 
@@ -108,6 +109,17 @@ Work, 2026-10-20:
 - Ran the x64 regression: unit tests, 21/21 radial groups, and 0 differing pixels between languages. Created the private repository <https://github.com/bakasayaka/copilot-reel> (renamed from `copilot_reel` on 2026-10-23) and pushed `main`.
 - Published the prerelease `v0.3.4-beta`. It carries both packages, signed with the development certificate `CN=CopilotReel Development` (thumbprint `061ED5990CEBC4F2D7C252ABE3EFE7EB99D6239F`). The ARM64 package was signed after the release was created and replaced on it. The matching `docs/validation.md` update was left uncommitted.
 - Commit: `b6fb4e7`.
+
+### Claude Code (CreeperUX fork): installed-app picker
+
+Role: a contribution from a fork, `CreeperUX/copilot-reel`, offered to `bakasayaka/copilot-reel` as a pull request. It ran on another machine, an ARM64 Windows 11 PC (NVIDIA RTX Spark N1X), with its own self-signed `CN=CopilotReel Development` certificate; the AGENTS.md reinstall rule and [This machine](#this-machine) describe the maintainer's x64 PC, not this one. Commits use the contributor's own author.
+
+Work, 2026-10-24 (branch `feature/installed-app-picker`):
+- The user asked to pick an app from what Windows has registered instead of typing a path. The editor gained **Choose app…** beside the target: a page that lists Start's All apps (`src/installed_apps.*`, `InstalledApps`) with their Start icons and a search box. Packages store their AUMID; desktop apps store their Start shortcut's executable and arguments, so both pass the short tap's local-application check (`StartEntryApp`). Websites, documents, MMC consoles, shell locations and uninstallers are left out. **Browse…** and the editable target stay.
+- The list is read on a worker thread once per editor window; icons follow one message each.
+- Audited the focused editor's pages from captures at 200% in both languages and fixed their layout: rounded, vertically centered text fields with a focus ring (painted frames around borderless EDIT controls), one DIP grid for every page, square header buttons, even gaps, Advanced in the footer, whole list rows, dark list scrollbars, empty and loading messages, a disabled primary button that reads as disabled, and Up/Down from the search box (`docs/validation.md`). The quick-menu pages (Home, Apps, Appearance, Settings, About) and `ShowSettings` in `src/settings.cpp` are never opened by the product and were left as they are.
+- `tests/installed_apps_tests.cpp` covers the classification with entries recorded from this machine's Start, and checks that every app listed here passes `IsVerifiedLocalApplication`.
+- First ARM64 run on ARM hardware: the ARM64 package is installed and runs on this machine (`docs/validation.md`).
 
 ## Current state
 
