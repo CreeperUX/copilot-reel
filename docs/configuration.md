@@ -21,11 +21,16 @@ Language preference is stored independently in `%LOCALAPPDATA%\CopilotReel\prefe
 ```ini
 [General]
 Language=en-US
+ReelSize=100
 ```
 
 Both languages read the same `apps.ini` and `behavior.ini` in the active profile. Switching language writes only `preferences.ini`; it never selects another application list, icon set, target order, or preferred target. The installed MSIX and a standalone development executable may have separate Windows application-data scopes. That distinction is packaging, not language. Isolated tests explicitly override their scope with `COPILOT_REEL_DATA_DIR`. Diagnostics expose the active `dataPath` and `language`.
 
 The supported persisted values are `en-US` and `zh-CN`. Missing or invalid values select English. The radial adjustment applies only after its atomic preference write succeeds. The command-only wheel disables IME composition so A/D work under a Chinese keyboard layout; native text editors keep their input method. Windows-owned dialog controls may follow the Windows display language.
+
+## Reel size
+
+Open **Main reel > +** and choose **Reel size** to step the reel through 70%, 85%, 100% and 115%; after 115% it returns to 70%. The tile shows the current step itself. 100% is the 0.8 scale the reel always used. The open reel resizes in place around the point it opened at: at a screen edge it moves inward only as far as the new size needs, and on a small work area the whole canvas shrinks to fit, exactly as when it opens, so no part of it leaves the work area. The step is stored as `ReelSize` beside the language in `preferences.ini` (`ReelSize=85`); a missing or unknown value selects 100%, and saving either preference keeps the other. Diagnostics expose `reelSize`. The native editor window keeps its size.
 
 ## Preferred agent
 

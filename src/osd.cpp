@@ -40,8 +40,9 @@ enum Id : int {
     Back = 100, Close, Apps, AppearancePage, SettingsPage, AppList, Add, Edit,
     Remove, Up, Down, Save, Name, Target, Browse, Advanced, Kind, Arguments,
     Directory, LanguageChoice, About, WindowsAppearance, Done, ChooseApp, Search,
-    InstalledList, Pick, FirstLabel = 500
+    InstalledList, Pick, InstalledViewport, FirstLabel = 500
 };
+constexpr wchar_t kViewportClass[] = L"CopilotReel.ListViewport";
 // Start's All apps arrive from a worker: the list, then each icon as it is extracted.
 constexpr UINT kInstalledAppsMessage = WM_APP + 30, kInstalledIconMessage = WM_APP + 31;
 struct InstalledIcon { size_t index; std::vector<BYTE> pixels; };
@@ -84,6 +85,10 @@ struct State {
     std::wstring query;
     UINT iconSize = 0;
     bool listing = false, listed = false;
+    // The picker list's pixel scroll: its full height, the hidden part above, and wheel travel
+    // not yet applied (a fraction of a pixel).
+    int listHeight = 0, listOffset = 0;
+    double listWheel = 0;
     HFONT font = nullptr;
     HBRUSH surfaceBrush = nullptr, inputBrush = nullptr;
     Appearance appearance;
@@ -427,6 +432,123 @@ void ThemeList(State& state,HWND list) {
     if(list)SetWindowTheme(list,state.appearance.dark && !state.appearance.highContrast?L"DarkMode_Explorer":L"Explorer",nullptr);
 }
 
+// The picker list scrolls by pixels. A LISTBOX scrolls by whole rows only, which turns a precision
+// touchpad's small wheel deltas into 34 DIP jumps; so the LISTBOX is as tall as all its rows, inside
+// a clipping viewport that moves it and owns the scroll bar. The LISTBOX keeps selection, keys,
+// double-click and accessibility.
+int ListRow(const State& state) {return state.Px(kRowHeight);}
+int ViewportHeight(HWND viewport) {RECT client{};GetClientRect(viewport,&client);return client.bottom;}
+
+void ScrollListTo(State& state,int offset) {
+    const HWND viewport=state.Control(InstalledViewport),list=state.Control(InstalledList);
+    if(!viewport||!list)return;
+    offset=std::clamp(offset,0,std::max(0,state.listHeight-ViewportHeight(viewport)));
+    if(offset==state.listOffset)return;
+    state.listOffset=offset;
+    SCROLLINFO info{sizeof(info),SIF_POS};info.nPos=offset;SetScrollInfo(viewport,SB_VERT,&info,TRUE);
+    // Moving the child keeps its drawn rows; only the strip it uncovers repaints.
+    SetWindowPos(list,nullptr,0,-offset,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+    UpdateWindow(list);
+}
+
+// After the rows change: size the LISTBOX to them and the scroll bar to the viewport.
+void LayoutList(State& state) {
+    const HWND viewport=state.Control(InstalledViewport),list=state.Control(InstalledList);
+    if(!viewport||!list)return;
+    const int rows=std::max(0,static_cast<int>(SendMessageW(list,LB_GETCOUNT,0,0)));
+    const int view=ViewportHeight(viewport);
+    state.listHeight=std::max(view,rows*ListRow(state));
+    state.listOffset=std::clamp(state.listOffset,0,state.listHeight-view);
+    state.listWheel=0;
+    SCROLLINFO info{sizeof(info),SIF_RANGE|SIF_PAGE|SIF_POS,0,state.listHeight-1,static_cast<UINT>(view),state.listOffset};
+    SetScrollInfo(viewport,SB_VERT,&info,TRUE);
+    // Read the width after the bar shows or hides.
+    RECT client{};GetClientRect(viewport,&client);
+    SetWindowPos(list,nullptr,0,-state.listOffset,client.right,state.listHeight,SWP_NOZORDER|SWP_NOACTIVATE);
+}
+
+void RevealSelection(State& state) {
+    const HWND viewport=state.Control(InstalledViewport),list=state.Control(InstalledList);
+    if(!viewport||!list)return;
+    const auto selected=SendMessageW(list,LB_GETCURSEL,0,0);
+    if(selected==LB_ERR)return;
+    const int row=ListRow(state),top=static_cast<int>(selected)*row,view=ViewportHeight(viewport);
+    if(top<state.listOffset)ScrollListTo(state,top);
+    else if(top+row>state.listOffset+view)ScrollListTo(state,top+row-view);
+}
+
+// Each delta moves the list by its share of the system's lines per notch, so a touchpad's small
+// deltas move it a few pixels at a time and a mouse notch still moves three rows.
+void WheelList(State& state,int delta) {
+    const HWND viewport=state.Control(InstalledViewport);
+    if(!viewport)return;
+    UINT lines=3;SystemParametersInfoW(SPI_GETWHEELSCROLLLINES,0,&lines,0);
+    const int view=ViewportHeight(viewport);
+    const double notch=lines==WHEEL_PAGESCROLL?view:std::min<double>(view,static_cast<double>(lines)*ListRow(state));
+    const double pixels=-static_cast<double>(delta)*notch/WHEEL_DELTA;
+    if(pixels*state.listWheel<0)state.listWheel=0;  // a reversal drops the leftover
+    state.listWheel+=pixels;
+    const int step=static_cast<int>(state.listWheel);
+    state.listWheel-=step;
+    if(step)ScrollListTo(state,state.listOffset+step);
+}
+
+void ScrollListBar(State& state,int request) {
+    const HWND viewport=state.Control(InstalledViewport);
+    if(!viewport)return;
+    SCROLLINFO info{sizeof(info),SIF_ALL};GetScrollInfo(viewport,SB_VERT,&info);
+    int offset=state.listOffset;
+    switch(request) {
+    case SB_LINEUP:offset-=ListRow(state);break;
+    case SB_LINEDOWN:offset+=ListRow(state);break;
+    case SB_PAGEUP:offset-=static_cast<int>(info.nPage);break;
+    case SB_PAGEDOWN:offset+=static_cast<int>(info.nPage);break;
+    case SB_THUMBTRACK:case SB_THUMBPOSITION:offset=info.nTrackPos;break;
+    case SB_TOP:offset=0;break;
+    case SB_BOTTOM:offset=state.listHeight;break;
+    default:return;
+    }
+    ScrollListTo(state,offset);
+}
+
+LRESULT CALLBACK ViewportProc(HWND viewport,UINT message,WPARAM wParam,LPARAM lParam) {
+    auto* state=reinterpret_cast<State*>(GetWindowLongPtrW(viewport,GWLP_USERDATA));
+    switch(message) {
+    // The list's owner-draw, color and notification messages belong to the editor window.
+    case WM_DRAWITEM:case WM_MEASUREITEM:case WM_CTLCOLORLISTBOX:
+        return SendMessageW(GetParent(viewport),message,wParam,lParam);
+    case WM_COMMAND:
+        if(state && LOWORD(wParam)==InstalledList && HIWORD(wParam)==LBN_SELCHANGE)RevealSelection(*state);
+        return SendMessageW(GetParent(viewport),message,wParam,lParam);
+    case WM_VSCROLL:if(state)ScrollListBar(*state,LOWORD(wParam));return 0;
+    case WM_MOUSEWHEEL:if(state)WheelList(*state,GET_WHEEL_DELTA_WPARAM(wParam));return 0;
+    case WM_ERASEBKGND:return 1;  // the LISTBOX always covers the client area
+    }
+    return DefWindowProcW(viewport,message,wParam,lParam);
+}
+
+LRESULT CALLBACK ListProc(HWND list,UINT message,WPARAM wParam,LPARAM lParam,
+    UINT_PTR subclassId,DWORD_PTR reference) {
+    auto* state=reinterpret_cast<State*>(reference);
+    if(message==WM_NCDESTROY) {
+        RemoveWindowSubclass(list,ListProc,subclassId);
+        return DefSubclassProc(list,message,wParam,lParam);
+    }
+    if(message==WM_MOUSEWHEEL) {WheelList(*state,GET_WHEEL_DELTA_WPARAM(wParam));return 0;}
+    // The LISTBOX shows all its rows at once, so its own page would be the whole list.
+    if(message==WM_KEYDOWN && (wParam==VK_NEXT||wParam==VK_PRIOR)) {
+        const int count=static_cast<int>(SendMessageW(list,LB_GETCOUNT,0,0));
+        if(count<=0)return 0;
+        const int rows=std::max(1,ViewportHeight(GetParent(list))/ListRow(*state)-1);
+        const auto current=SendMessageW(list,LB_GETCURSEL,0,0);
+        const int selected=std::clamp((current==LB_ERR?0:static_cast<int>(current))+(wParam==VK_NEXT?rows:-rows),0,count-1);
+        SendMessageW(list,LB_SETCURSEL,selected,0);
+        SendMessageW(GetParent(list),WM_COMMAND,MAKEWPARAM(InstalledList,LBN_SELCHANGE),reinterpret_cast<LPARAM>(list));
+        return 0;
+    }
+    return DefSubclassProc(list,message,wParam,lParam);
+}
+
 void StyleCombo(State& state,HWND control) {
     // The closed field is the item height plus a 1 DIP border on each side: a 32 DIP field.
     SendMessageW(control,CB_SETITEMHEIGHT,static_cast<WPARAM>(-1),state.Px(kFieldHeight-2));
@@ -587,10 +709,11 @@ void Filter(State& state) {
         for(const auto index:state.visible)
             SendMessageW(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(state.installed[index].target.name.c_str()));
         SendMessageW(list,LB_SETCURSEL,state.visible.empty()?-1:0,0);
+        state.listOffset=0;LayoutList(state);
         SendMessageW(list,WM_SETREDRAW,TRUE,0);
         InvalidateRect(list,nullptr,TRUE);
         // An empty list would be a blank box; Paint explains the empty or loading state instead.
-        ShowWindow(list,state.listed && !state.visible.empty()?SW_SHOWNA:SW_HIDE);
+        ShowWindow(state.Control(InstalledViewport),state.listed && !state.visible.empty()?SW_SHOWNA:SW_HIDE);
     }
     EnableWindow(state.Control(Pick),!state.visible.empty());
     InvalidateRect(state.window,nullptr,FALSE);
@@ -679,12 +802,19 @@ void BuildPage(State& state) {
         const auto search=InputField(state,Search,state.query,kMargin,kContentY,contentWidth,128);
         SendMessageW(search,EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(Tr(L"Search apps",L"搜索应用")));
         SetWindowSubclass(search,SearchProc,1,reinterpret_cast<DWORD_PTR>(&state));
-        // Whole rows only: a half-cut last row reads as a rendering fault.
-        const auto list=Control(state,InstalledList,L"LISTBOX",Tr(L"Installed apps",L"已安装的应用"),
-            WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT,
-            kMargin,kContentY+kFieldHeight+12,contentWidth,kListRows*kRowHeight);
+        // Whole rows at rest: a half-cut last row reads as a rendering fault.
+        const auto viewport=Control(state,InstalledViewport,kViewportClass,L"",WS_VSCROLL|WS_CLIPCHILDREN,
+            kMargin,kContentY+kFieldHeight+12,contentWidth,kListRows*kRowHeight,WS_EX_CONTROLPARENT);
+        SetWindowLongPtrW(viewport,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(&state));
+        const auto list=CreateWindowExW(0,L"LISTBOX",Tr(L"Installed apps",L"已安装的应用"),
+            WS_CHILD|WS_VISIBLE|WS_TABSTOP|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT,
+            0,0,state.Px(contentWidth),state.Px(kListRows*kRowHeight),viewport,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(InstalledList)),GetModuleHandleW(nullptr),nullptr);
+        state.controls[InstalledList]=list;
+        SendMessageW(list,WM_SETFONT,reinterpret_cast<WPARAM>(state.font),TRUE);
+        SetWindowSubclass(list,ListProc,1,reinterpret_cast<DWORD_PTR>(&state));
         SendMessageW(list,LB_SETITEMHEIGHT,0,state.Px(kRowHeight));
-        ThemeList(state,list);
+        ThemeList(state,viewport);
         Button(state,Pick,Tr(L"Choose",L"选择"),primaryX,kFooterY,kSideButton,kFooterHeight);
         Filter(state);
         break;
@@ -709,7 +839,7 @@ void UpdateAppearance(State& state) {
     DwmSetWindowAttribute(state.window,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
     DWM_WINDOW_CORNER_PREFERENCE corners=DWMWCP_ROUND;
     DwmSetWindowAttribute(state.window,DWMWA_WINDOW_CORNER_PREFERENCE,&corners,sizeof(corners));
-    ThemeList(state,state.Control(InstalledList));
+    ThemeList(state,state.Control(InstalledViewport));
     ThemeList(state,state.Control(AppList));
     RedrawWindow(state.window,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
 }
@@ -984,7 +1114,13 @@ LRESULT CALLBACK OsdProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
         case kInstalledIconMessage: {
             std::unique_ptr<InstalledIcon> icon(reinterpret_cast<InstalledIcon*>(lParam));
             if(icon->index<state->icons.size())state->icons[icon->index]=std::move(icon->pixels);
-            if(state->page==Page::Picker)InvalidateRect(state->Control(InstalledList),nullptr,FALSE);
+            // Only the arriving icon's row repaints; icons stream in while the user scrolls.
+            const HWND list=state->Control(InstalledList);
+            const auto row=std::find(state->visible.begin(),state->visible.end(),icon->index);
+            RECT bounds{};
+            if(state->page==Page::Picker && list && row!=state->visible.end() &&
+                SendMessageW(list,LB_GETITEMRECT,static_cast<WPARAM>(row-state->visible.begin()),reinterpret_cast<LPARAM>(&bounds))!=LB_ERR)
+                InvalidateRect(list,&bounds,FALSE);
             return 0;
         }
         case WM_DPICHANGED: {
@@ -1036,6 +1172,13 @@ void ShowOsdAt(HWND owner,int editorIndex,bool focusedEditor,const AppTarget* pr
         cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hIcon=LoadIconW(cls.hInstance,MAKEINTRESOURCEW(1));
         cls.lpszClassName=kOsdClass;
         if(!RegisterClassExW(&cls)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {
+            MessageBoxW(owner,Tr(L"The quick menu window could not be registered.",L"无法注册快捷菜单窗口。"),kAppName,MB_OK|MB_ICONERROR);
+            return;
+        }
+        WNDCLASSEXW viewport{sizeof(viewport)};
+        viewport.lpfnWndProc=ViewportProc;viewport.hInstance=cls.hInstance;
+        viewport.hCursor=LoadCursorW(nullptr,IDC_ARROW);viewport.lpszClassName=kViewportClass;
+        if(!RegisterClassExW(&viewport)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {
             MessageBoxW(owner,Tr(L"The quick menu window could not be registered.",L"无法注册快捷菜单窗口。"),kAppName,MB_OK|MB_ICONERROR);
             return;
         }

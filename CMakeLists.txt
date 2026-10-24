@@ -29,7 +29,7 @@ add_custom_command(
   COMMENT "Generating src/vi_tokens.h from design/vi/tokens.json"
   VERBATIM)
 add_custom_target(vi_tokens DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/vi_tokens.stamp")
-add_executable(CopilotReel WIN32 src/main.cpp src/appearance.cpp src/renderer.cpp src/settings.cpp src/localization.cpp src/iconography.cpp src/osd.cpp src/behavior.cpp src/presets.cpp src/official_icons.cpp src/local_launch.cpp src/installed_apps.cpp src/artwork.cpp src/acrylic.cpp src/test_input.cpp src/vi_tokens.h packaging/app.rc)
+add_executable(CopilotReel WIN32 src/main.cpp src/appearance.cpp src/renderer.cpp src/settings.cpp src/localization.cpp src/iconography.cpp src/osd.cpp src/behavior.cpp src/presets.cpp src/official_icons.cpp src/local_launch.cpp src/installed_apps.cpp src/artwork.cpp src/acrylic.cpp src/test_input.cpp src/tray_menu.cpp src/vi_tokens.h packaging/app.rc)
 add_dependencies(CopilotReel vi_tokens)
 add_custom_command(TARGET CopilotReel POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -41,7 +41,7 @@ target_compile_definitions(CopilotReel PRIVATE UNICODE _UNICODE NOMINMAX WIN32_L
 if(MSVC)
   target_compile_options(CopilotReel PRIVATE /utf-8 /EHsc /W4)
 endif()
-target_link_libraries(CopilotReel PRIVATE d3d11 d2d1 dwrite dxgi dxguid dwmapi windowsapp CoreMessaging user32 gdi32 shell32 ole32 oleaut32 propsys shlwapi comdlg32 comctl32 advapi32 wtsapi32 windowscodecs uuid imm32 uxtheme)
+target_link_libraries(CopilotReel PRIVATE d3d11 d2d1 dwrite dxgi dxguid dwmapi windowsapp CoreMessaging user32 gdi32 shell32 ole32 oleaut32 propsys shlwapi comdlg32 comctl32 advapi32 wtsapi32 windowscodecs uuid imm32 uxtheme shcore)
 enable_testing()
 add_executable(core_tests tests/core_tests.cpp src/localization.cpp src/settings.cpp)
 target_include_directories(core_tests PRIVATE src)
