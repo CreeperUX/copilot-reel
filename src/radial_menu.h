@@ -158,24 +158,24 @@ inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarge
     switch(page) {
     case MenuPage::Main:
         entries(MenuAction::Launch);
-        action(Tr(L"Apps and settings",L"应用与设置"),L"reel:add",MenuAction::Settings);break;
+        action(Tr(L"Apps and settings",L"应用与设置",L"アプリと設定"),L"reel:add",MenuAction::Settings);break;
     case MenuPage::Manage:
         entries(MenuAction::Entry);
-        action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets,-1,canAdd);break;
+        action(Tr(L"Add app",L"添加应用",L"アプリを追加"),L"reel:add",MenuAction::Presets,-1,canAdd);break;
     case MenuPage::Presets:
         for(size_t i=offset;i<std::min(offset+5,presets.size());++i)
             result.push_back({presets[i],i<restorable?MenuAction::Restore:MenuAction::Preset,static_cast<int>(i)});
-        action(Tr(L"Custom app",L"自定义应用"),L"reel:add",MenuAction::Custom);
-        if(offset>0)action(Tr(L"Previous",L"上一页"),L"reel:previous",MenuAction::Previous);
-        if(offset+5<presets.size())action(Tr(L"Next",L"下一页"),L"reel:next",MenuAction::Next);break;
+        action(Tr(L"Custom app",L"自定义应用",L"手動で追加"),L"reel:add",MenuAction::Custom);
+        if(offset>0)action(Tr(L"Previous",L"上一页",L"前へ"),L"reel:previous",MenuAction::Previous);
+        if(offset+5<presets.size())action(Tr(L"Next",L"下一页",L"次へ"),L"reel:next",MenuAction::Next);break;
     case MenuPage::Settings:
-        action(Tr(L"Language",L"语言"),L"reel:language",MenuAction::Language);
-        action(Tr(L"Appearance",L"外观"),L"reel:appearance",MenuAction::Appearance);
+        action(Tr(L"Language",L"语言",L"言語"),L"reel:language",MenuAction::Language);
+        action(Tr(L"Appearance",L"外观",L"外観"),L"reel:appearance",MenuAction::Appearance);
         // Shows its step in the tile; each confirm moves to the next and wraps.
-        action(Tr(L"Reel size",L"轮盘大小"),L"reel:size",MenuAction::Size);
-        action(Tr(L"Manage apps",L"管理应用"),L"reel:manage",MenuAction::Manage);
-        action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets,-1,canAdd);
-        action(Tr(L"About",L"关于"),L"reel:about",MenuAction::About,-1,true,UpdateWaiting(about)?TileBadge::Dot:TileBadge::None);break;
+        action(Tr(L"Reel size",L"轮盘大小",L"リールの大きさ"),L"reel:size",MenuAction::Size);
+        action(Tr(L"Manage apps",L"管理应用",L"アプリの管理"),L"reel:manage",MenuAction::Manage);
+        action(Tr(L"Add app",L"添加应用",L"アプリを追加"),L"reel:add",MenuAction::Presets,-1,canAdd);
+        action(Tr(L"About",L"关于",L"バージョン情報"),L"reel:about",MenuAction::About,-1,true,UpdateWaiting(about)?TileBadge::Dot:TileBadge::None);break;
     case MenuPage::About: {
         // The reel's own mark comes first, named by the version and the author, then GitHub's mark,
         // two switches that show their state in the icon and the update tile, which checks or
@@ -184,28 +184,28 @@ inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarge
         const auto state=[](const wchar_t* target,bool on){return std::wstring(target)+(on?L":on":L":off");};
         result.push_back({{about.version+L" · "+kAuthor,TargetKind::Shell,L"reel:author",L"",L""},MenuAction::AboutInfo});
         result.push_back({{L"GitHub",TargetKind::Shell,L"reel:github",L"",L""},MenuAction::GitHub});
-        result.push_back({{Tr(L"Auto-check updates",L"自动检查更新"),TargetKind::Shell,state(L"reel:auto-check",about.autoCheck),L"",L""},
+        result.push_back({{Tr(L"Auto-check updates",L"自动检查更新",L"更新を自動確認"),TargetKind::Shell,state(L"reel:auto-check",about.autoCheck),L"",L""},
             MenuAction::AutoCheck,-1,updatable});
-        result.push_back({{Tr(L"Auto-install updates",L"自动安装更新"),TargetKind::Shell,state(L"reel:auto-install",about.autoInstall),L"",L""},
+        result.push_back({{Tr(L"Auto-install updates",L"自动安装更新",L"更新を自動適用"),TargetKind::Shell,state(L"reel:auto-install",about.autoInstall),L"",L""},
             MenuAction::AutoInstall,-1,updatable});
         const auto& version=about.offered;
         switch(about.stage) {
         case UpdateStage::Unavailable:
-            action(Tr(L"Installed app only",L"安装版才能更新"),L"reel:check-update",MenuAction::CheckUpdate,-1,false);break;
+            action(Tr(L"Installed app only",L"安装版才能更新",L"インストール版のみ"),L"reel:check-update",MenuAction::CheckUpdate,-1,false);break;
         case UpdateStage::Checking:
-            action(Tr(L"Checking…",L"正在检查…"),L"reel:check-update",MenuAction::CheckUpdate);break;
+            action(Tr(L"Checking…",L"正在检查…",L"確認中…"),L"reel:check-update",MenuAction::CheckUpdate);break;
         case UpdateStage::Current:
-            action(Tr(L"Up to date",L"已是最新版本"),L"reel:check-update",MenuAction::CheckUpdate);break;
+            action(Tr(L"Up to date",L"已是最新版本",L"最新版です"),L"reel:check-update",MenuAction::CheckUpdate);break;
         case UpdateStage::Available:
-            action(Tr(L"Install ",L"安装 ")+version,L"reel:install-update",MenuAction::InstallUpdate,-1,true,TileBadge::Dot);break;
+            action(Tr(L"Install ",L"安装 ",L"インストール ")+version,L"reel:install-update",MenuAction::InstallUpdate,-1,true,TileBadge::Dot);break;
         case UpdateStage::Installing:
-            action(Tr(L"Installing ",L"正在安装 ")+version+L"…",L"reel:install-update",MenuAction::InstallUpdate);break;
+            action(Tr(L"Installing ",L"正在安装 ",L"更新中 ")+version+L"…",L"reel:install-update",MenuAction::InstallUpdate);break;
         case UpdateStage::Failed:
-            if(version.empty())action(Tr(L"Check failed · Retry",L"检查失败 · 重试"),L"reel:check-failed",MenuAction::CheckUpdate);
-            else action(Tr(L"Install failed · Retry",L"安装失败 · 重试"),L"reel:install-update",MenuAction::InstallUpdate,-1,true,TileBadge::Dot);
+            if(version.empty())action(Tr(L"Check failed · Retry",L"检查失败 · 重试",L"確認失敗 · 再試行"),L"reel:check-failed",MenuAction::CheckUpdate);
+            else action(Tr(L"Install failed · Retry",L"安装失败 · 重试",L"更新失敗 · 再試行"),L"reel:install-update",MenuAction::InstallUpdate,-1,true,TileBadge::Dot);
             break;
         default:
-            action(Tr(L"Check for updates",L"检查更新"),L"reel:check-update",MenuAction::CheckUpdate);break;
+            action(Tr(L"Check for updates",L"检查更新",L"更新を確認"),L"reel:check-update",MenuAction::CheckUpdate);break;
         }
         break;
     }
@@ -213,9 +213,9 @@ inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarge
         // The app itself comes first and carries its preferred badge; choosing it is done.
         // Its place in the reel changes by dragging it on the Manage page.
         if(editing>=0 && static_cast<size_t>(editing)<apps.size())result.push_back({apps[editing],MenuAction::Done,editing});
-        action(Tr(L"Edit app",L"编辑应用"),L"reel:edit",MenuAction::Edit,editing);
-        action(Tr(L"Set as preferred",L"设为首选"),L"reel:preferred",MenuAction::SetPreferred,editing);
-        if(apps.size()>1)action(Tr(L"Remove from reel",L"从轮盘移除"),L"reel:remove",MenuAction::Remove,editing);break;
+        action(Tr(L"Edit app",L"编辑应用",L"アプリを編集"),L"reel:edit",MenuAction::Edit,editing);
+        action(Tr(L"Set as preferred",L"设为首选",L"既定に設定"),L"reel:preferred",MenuAction::SetPreferred,editing);
+        if(apps.size()>1)action(Tr(L"Remove from reel",L"从轮盘移除",L"リールから外す"),L"reel:remove",MenuAction::Remove,editing);break;
     }
     return result;
 }

@@ -1,62 +1,123 @@
-# Copilot Reel
+<p align="center">
+  <a href="README.md"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/lang-en-on-dark.png"><img src="docs/readme/lang-en-on-light.png" height="32" alt="English"></picture></a>
+  <a href="README.zh-CN.md"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/lang-zh-off-dark.png"><img src="docs/readme/lang-zh-off-light.png" height="32" alt="简体中文"></picture></a>
+  <a href="README.ja.md"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/lang-ja-off-dark.png"><img src="docs/readme/lang-ja-off-light.png" height="32" alt="日本語"></picture></a>
+</p>
 
-A native Windows application wheel that opens centered on the pointer when the Copilot key is held. Move toward an application and release to open it. While the reel is closed, a short Copilot tap directly opens the saved preferred local application.
+<p align="center">
+  <picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/demo-hold-dark-en.gif"><img src="docs/readme/demo-hold-light-en.gif" width="400" alt="Holding the Copilot key opens the reel around the pointer; pointing at Claude and letting go opens Claude."></picture>
+</p>
 
-The native implementation builds and runs. Soft Orbit rendering, Windows appearance synchronization, configuration, single-instance activation, and launching are implemented. A signed development MSIX has been verified as eligible in Windows Settings. The key route remains user-controlled. Current build, test, installation, and remaining physical-input/display/performance evidence is recorded in [validation](docs/validation.md).
+<h1 align="center">Copilot Reel</h1>
 
-The current interface uses nested radial menus: configured agents and one + entry. The + opens a combined hub for language, system appearance, reel size, managing and adding apps, and About; an app's own actions set it as the preferred agent. EN/ZH and sun/moon icons convey state without fixed captions. Hovering an app or command shows its concise name in the center, without an instructional second line. English is the default; Simplified Chinese is a native persistent option. Version 0.3.4 (VI v0.9) brings the Windows 11 neutral plate with a flyout shadow, a concentric selection seat that slides along the orbit, unified official artwork (plated marks fill their tile; open marks share one optical size; system apps use their Shell icons), Segoe Fluent Icons commands, and drill-in page transitions in which the chosen tile becomes the back control. Version 0.3.5 gives every input one meaning in every menu (a tap or a new hold confirms inside a submenu), discovers installed agents for one-tap adding, lets an app move earlier or later in the reel from its actions page, brings an already running agent forward instead of starting it again, and starts in the background at sign-in. Version 0.3.6 draws the whole reel at 0.8 of its former size, reorders apps by dragging their tiles in Manage apps, and takes an app out of the reel by dropping it on the trash that appears in the center while a tile is dragged; the app keeps its settings and waits first on Add. Version 0.3.7 adds Reel size to the hub (70%, 85%, 100% and 115% of that size), a Choose app page in the app editor that lists Start's All apps, an aligned editor layout and a tray menu in the reel's light or dark theme. Version 0.3.8 adds About to the hub: the version and author, a link to the GitHub repository, and switches to check for and install updates from GitHub automatically (checking is on by default, installing off); the update itself is verified and installed by Windows, and the reel starts again. Design values live in one token file shared by the application and the VI. Runtime validation is tracked separately from the visual specification.
+<p align="center"><b>Hold the Copilot key. Point. Let go.</b><br>Your AI apps, one gesture away: a radial launcher made for the Copilot key on Windows 11.</p>
 
-## Behavior
+<p align="center">
+  <a href="https://github.com/bakasayaka/copilot-reel/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/download-en-dark.png"><img src="docs/readme/download-en-light.png" height="48" alt="Download for Windows"></picture></a><br>
+  <sub>Windows 11 · x64 and Arm · free</sub>
+</p>
 
-- The official Windows provider contract supplies the approximately 300 ms hold threshold and start/stop events.
-- The wheel opens without taking keyboard focus. Moving outside its center cancellation zone selects a direction.
-- Releasing commits at most one target, starts the closing animation, and activates that target once.
-- With the reel closed, a short Copilot tap opens the preferred local application; inside an open menu, a tap or a new hold-and-release confirms the selected item, and the center, Esc or right-click goes back. Installed-agent discovery resolves supported legacy website defaults to their native application. If no local target is available, the native application picker asks for an executable or shortcut; a tap never falls back to a website. Optional `Ctrl+Alt+R` opens a click-to-select preview.
-- The + entry combines settings and management for 1-8 targets: executables, shortcuts, URIs, and packaged-app AUMIDs. Presets and app selection remain radial; a focused native editor handles text and launch fields.
-- Recognized entries use verified official artwork, identified by their launch target, with one tile system: plated marks fill and are masked to the tile, open marks sit on a neutral tile at equal optical size, and Windows Settings, Notepad and custom apps use their own Shell icons. Unknown targets use a neutral app glyph. Vendor artwork is never recolored or redrawn; the Windows accent ramp colors only the selection seat and the preferred badge.
-- Ordinary opening leaves the mouse at the center. Only boundary conflicts move the canvas inward; while the mouse is still on the plate it selects by direction as soon as it moves, and only a mouse left outside the plate enters the center first. No connector or accent perimeter is drawn.
-- The + hub stays radial. EN/ZH changes in place through the flanking arrows or A / D. In Manage apps, drag an app's tile to another slot to reorder it, or onto the red trash in the center to take it out of the reel; A / D move the selected app and Delete takes it out. Add offers the apps taken out of the reel first, with their own settings, then installed agents that are not in the reel yet. The center chevron or Esc returns one level. Main has an empty idle center; hovered apps and commands show one concise name at the center.
-- The Soft Orbit base follows Windows light/dark appearance. Transparency effects request a frosted backdrop when supported; otherwise the base is opaque. Selection uses the system accent. High contrast, disabled animations, and energy saver take precedence where applicable.
+<br>
 
-Targets inside the wheel do not need to register as Copilot providers. Only Copilot Reel registers with Windows.
+<h2 align="center">How it works</h2>
 
-## Build and preview
+<table align="center">
+  <tr>
+    <td align="center" width="240"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/step-open-dark-en.png"><img src="docs/readme/step-open-light-en.png" width="200" alt="The reel open around the pointer"></picture><br><b>1 · Hold</b><br><sub>Hold <kbd>Copilot</kbd>. The reel opens around your pointer.</sub></td>
+    <td align="center" width="240"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/step-point-dark-en.png"><img src="docs/readme/step-point-light-en.png" width="200" alt="Claude selected, its name in the middle"></picture><br><b>2 · Point</b><br><sub>Move toward an app. Its name appears in the middle.</sub></td>
+    <td align="center" width="240"><img src="docs/readme/step-launch.png" width="200" alt="Claude opens"><br><b>3 · Let go</b><br><sub>The app opens, or comes to the front if it is already running.</sub></td>
+  </tr>
+</table>
 
-The two release architectures are Windows 11 x64 and Windows 11 ARM64. Both use the same source and the same Win32, Composition, Direct2D, and DirectWrite contracts. The package declares build 22621 as its minimum; this is not a claim that every Copilot hold-state feature has been verified on that build, and the ARM64 package has not been executed on ARM hardware.
+<p align="center">A short tap, without holding, opens your favorite app right away.</p>
+
+<br>
+
+<h2 align="center">Everything else is behind +</h2>
+
+<h3 align="center">Your language, in place</h3>
+<p align="center">English, 简体中文 and 日本語. The arrows switch the language; your apps stay exactly as they are.</p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/demo-hub-dark-en.gif"><img src="docs/readme/demo-hub-light-en.gif" width="360" alt="The + hub switching the language from English through Chinese and Japanese and back"></picture></p>
+
+<h3 align="center">Arrange by dragging</h3>
+<p align="center">In Manage apps, drag a tile to a new place. Drop it on the trash to take it out of the reel; it waits on Add with its settings.</p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/demo-drag-dark-en.gif"><img src="docs/readme/demo-drag-light-en.gif" width="360" alt="Gemini dragged two places on, then Notepad dropped on the red trash in the center"></picture></p>
+
+<h3 align="center">Updates come to you</h3>
+<p align="center">About asks GitHub once a day. When a new version is out, a small dot appears; choose Install and the reel restarts by itself.</p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/demo-about-dark-en.gif"><img src="docs/readme/demo-about-light-en.gif" width="360" alt="About: a switch turned on and off, then Check for updates offering a new version"></picture></p>
+
+<br>
+
+<h2 align="center">Feels like part of Windows</h2>
+
+<p align="center">Light or dark, your accent color, transparency and high contrast: the reel follows your Windows settings, starts quietly when you sign in and never takes your keyboard focus.</p>
+
+<br>
+
+## Get started
+
+1. **Download** two files from the [latest release](https://github.com/bakasayaka/copilot-reel/releases/latest): the package for your PC (`…_x64.msix` for most PCs, `…_arm64.msix` for Windows on Arm) and `CopilotReel-Development.cer`.
+2. **Trust the certificate once.** Open Start, type **PowerShell**, and choose **Run as administrator**. Go to your downloads and check the certificate. It must print `061ED5990CEBC4F2D7C252ABE3EFE7EB99D6239F`; if it prints anything else, stop.
+   ```powershell
+   cd $HOME\Downloads
+   (Get-PfxCertificate .\CopilotReel-Development.cer).Thumbprint
+   ```
+   Then add it to Trusted People:
+   ```powershell
+   Import-Certificate -FilePath .\CopilotReel-Development.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+   ```
+3. **Open the package** and choose **Install**.
+4. **Give it the key.** In **Settings › Personalization › Text input**, under **Customize Copilot key on keyboard**, choose **Copilot Reel**.
+
+> [!TIP]
+> The certificate is needed only once per PC. Later versions install from **+ › About**.
+
+> [!NOTE]
+> Windows in S mode installs only apps from the Microsoft Store, so it cannot install Copilot Reel.
+
+## Questions
+
+<details>
+<summary><b>Is it free? What does it send over the internet?</b></summary>
+<br>
+It is free, with no account and no telemetry. The only request it makes by itself is a daily check on GitHub for a newer version, which you can turn off in <b>+ › About</b>.
+</details>
+
+<details>
+<summary><b>Which apps can I put in the reel?</b></summary>
+<br>
+Up to eight apps, shortcuts or websites. <b>+ › Add app</b> offers the AI apps it finds on your PC, one tap each, and lets you pick any other app from Start.
+</details>
+
+<details>
+<summary><b>How do I choose what a short tap opens?</b></summary>
+<br>
+Open <b>+ › Manage apps</b>, choose the app and then <b>Set as preferred</b>. Its tile shows a small check.
+</details>
+
+<details>
+<summary><b>My keyboard has no Copilot key.</b></summary>
+<br>
+Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>R</kbd>, or click the reel's icon in the notification area, and choose an app with a click.
+</details>
+
+<details>
+<summary><b>Why does it need a certificate?</b></summary>
+<br>
+The package is signed with the project's own certificate instead of a paid one. Windows installs a signed package only from a publisher it trusts, so you tell it to trust this one, once.
+</details>
+
+<details>
+<summary><b>How do I remove it?</b></summary>
+<br>
+Uninstall Copilot Reel in <b>Settings › Apps › Installed apps</b>. Then remove the certificate from PowerShell opened with <b>Run as administrator</b>:
 
 ```powershell
-.\tools\bootstrap-toolchain.ps1
-.\tools\build.ps1
-.\tools\build.ps1 -Architecture arm64
-.\build\Release\CopilotReel.exe --settings
-.\build\Release\CopilotReel.exe --preview
+Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Thumbprint -eq '061ED5990CEBC4F2D7C252ABE3EFE7EB99D6239F' | Remove-Item
 ```
+</details>
 
-Bootstrap downloads pinned Microsoft MSVC and Windows SDK packages for both architectures into the ignored `tools/local` directory, without installing an IDE or changing the machine PATH. The default build is x64 and produces `build/Release/CopilotReel.exe`. `-Architecture arm64` cross-compiles `build/arm64/Release/CopilotReel.exe` and its unit-test binaries, then checks that their PE machine is ARM64 (`0xAA64`). It does not run them on an x64 host. See [toolchain notes](docs/toolchain.md).
+<br>
 
-The application uses C++20, Win32, Windows Composition, Direct2D, and DirectWrite. Geometry and text render at the target DPI on the device-pixel grid; official raster artwork is pre-scaled per DPI with high-quality cubic filtering. `design/vi/tokens.json` is the single source of design values: the build generates `src/vi_tokens.h` from it, and the VI generator reads it directly. PNG/PDF UI previews are reference material, never animation frames. State changes and compositor timelines drive rendering instead of a permanent application frame loop.
-
-## Packaging and Windows integration
-
-```powershell
-.\tools\package.ps1
-.\tools\package.ps1 -Architecture arm64
-.\tools\verify-registration.ps1
-```
-
-Packaging without a certificate produces an unsigned MSIX for inspection. The default package is `artifacts/CopilotReel_<version>_x64.msix`, staged in `artifacts/package`. `-Architecture arm64` stages `artifacts/package-arm64`, writes `ProcessorArchitecture="arm64"` into that package only, and leaves `packaging/AppxManifest.xml` as the x64 source manifest. To sign with an existing certificate whose subject matches the manifest publisher, pass `-CertificateThumbprint`. Neither packaging nor registration verification imports certificates or installs the package automatically. `tools/install-development.ps1` accepts only the x64 package, so an ARM64 package cannot replace the installed x64 app on this host. Development trust is machine-specific; the certificate authorized for this machine is recorded in local, ignored signing artifacts.
-
-The package declares `com.microsoft.windows.copilotkeyprovider` and the private `copilot-reel:` protocol. Existing processes accept the HWND message contract; new instances forward commands to the resident process. Windows controls picker eligibility and the user's selected key binding. See [validation status](docs/validation.md) for demonstrated behavior and remaining checks.
-
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [Provider research and evidence](docs/research.md)
-- [Validation status](docs/validation.md)
-- [Appearance and performance testing plan](docs/testing-plan.md)
-- [Configuration and isolated tests](docs/configuration.md)
-- [Native toolchain](docs/toolchain.md)
-- [Soft Orbit visual identity](docs/visual-identity.md)
-- [Read-only provider inventory](tools/inspect-copilot-providers.ps1)
-
-Development documentation, code comments, diagnostics, and commit messages use English. User-facing localization is maintained separately.
+<p align="center"><sub>Made by baka_sayaka · <a href="docs/development.md">For developers</a> · Japanese text set in Reel Sans JP, from Noto Sans JP under the <a href="assets/fonts/OFL.txt">SIL Open Font License</a></sub></p>

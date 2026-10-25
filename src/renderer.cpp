@@ -2,6 +2,7 @@
 #include "acrylic.h"
 #include "artwork.h"
 #include "display_names.h"
+#include "typography.h"
 #include "vi_tokens.h"
 
 #include <d2d1_1.h>
@@ -42,6 +43,10 @@ constexpr float kPi = std::numbers::pi_v<float>;
 constexpr float kCenter = vi::kCanvas / 2;
 constexpr wchar_t kLanguageTarget[] = L"reel:language";
 constexpr wchar_t kSizeTarget[] = L"reel:size";
+// The language tile shows its state in the icon itself.
+const wchar_t* Monogram(Language language) {
+    return language == Language::SimplifiedChinese ? L"ZH" : language == Language::Japanese ? L"JA" : L"EN";
+}
 
 D2D1_COLOR_F Color(const Rgba& c) { return {c.r, c.g, c.b, c.a}; }
 bool Same(const Rgba& a, const Rgba& b) { return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a; }
@@ -318,20 +323,8 @@ struct OrbitRenderer::Impl {
     }
 
     void CreateTextFormats() {
-        if (!fallback) {
-            // Han and CJK punctuation use Microsoft YaHei UI instead of per-character
-            // JhengHei UI / Yu Gothic UI; the system fallback follows for everything else.
-            com_ptr<IDWriteFontFallbackBuilder> builder;
-            com_ptr<IDWriteFontFallback> system;
-            DWRITE_UNICODE_RANGE ranges[std::size(vi::kCjkRanges)]{};
-            for (size_t i = 0; i != std::size(ranges); ++i) ranges[i] = {vi::kCjkRanges[i].first, vi::kCjkRanges[i].last};
-            const wchar_t* family[] = {vi::kCjkFamily};
-            if (SUCCEEDED(dwrite->CreateFontFallbackBuilder(builder.put())) &&
-                SUCCEEDED(dwrite->GetSystemFontFallback(system.put())) &&
-                SUCCEEDED(builder->AddMapping(ranges, static_cast<UINT32>(std::size(ranges)), family, 1)) &&
-                SUCCEEDED(builder->AddMappings(system.get())))
-                builder->CreateFontFallback(fallback.put());
-        }
+        // One CJK fallback for every language; the formats' locale picks its mapping (src/typography.h).
+        if (!fallback && FAILED(CreateCjkFallback(dwrite.get(), ExecutableFolder(), fallback.put()))) fallback = nullptr;
         // The WWS family of the Windows 11 variable face; static Segoe UI elsewhere.
         textFamily = vi::kTextFallbackFamily;
         com_ptr<IDWriteFontCollection> fonts;
@@ -527,6 +520,8 @@ struct OrbitRenderer::Impl {
         com_ptr<IDWriteTextLayout> layout;
         winrt::check_hresult(dwrite->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format,
             width, size * 4, layout.put()));
+        // A name with kana is Japanese in every interface language, so its kanji take Japanese forms.
+        if (HasKana(text)) layout->SetLocaleName(vi::kJapaneseLocale, {0, static_cast<UINT32>(text.size())});
         DWRITE_LINE_METRICS line{};
         UINT32 lines = 0;
         layout->GetLineMetrics(&line, 1, &lines);
@@ -611,7 +606,7 @@ struct OrbitRenderer::Impl {
         const auto glyph = Color(selected && appearance.highContrast ? appearance.selectionText : appearance.foreground);
         const bool darkPlate = DarkPlate();
         if (visual.target == kLanguageTarget) {
-            DrawCentered(context, language == Language::English ? L"EN" : L"ZH", monogramFormat.get(),
+            DrawCentered(context, Monogram(language), monogramFormat.get(),
                 vi::kMonogramSize, {h, h}, vi::kTile, glyph);
         } else if (visual.target == kSizeTarget) {
             DrawCentered(context, sizeLabel.c_str(), sizeMonogramFormat.get(), vi::kSizeMonogramSize, {h, h}, vi::kTile, glyph);
@@ -641,7 +636,7 @@ struct OrbitRenderer::Impl {
         // A Shell icon that appears later (a drive or package becoming available) changes it.
         key += ArtworkIdentity(visual, DarkPlate());
         key += L"|" + std::to_wstring(static_cast<int>(ClassifyArtwork(visual)));
-        if (visual.target == kLanguageTarget) key += language == Language::English ? L"|EN" : L"|ZH";
+        if (visual.target == kLanguageTarget) key += std::wstring(L"|") + Monogram(language);
         if (visual.target == kSizeTarget) key += L"|" + sizeLabel;
         return key;
     }

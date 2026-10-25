@@ -72,6 +72,10 @@ inline constexpr unsigned kTextWeight = 600;
 inline constexpr wchar_t kCjkFamily[] = L"Microsoft YaHei UI", kCjkLocale[] = L"zh-CN";
 struct UnicodeRange { unsigned first, last; };
 inline constexpr UnicodeRange kCjkRanges[] = {{0x2E80, 0x2FDF}, {0x3000, 0x303F}, {0x3400, 0x4DBF}, {0x4E00, 0x9FFF}, {0xF900, 0xFAFF}, {0xFF00, 0xFFEF}};
+inline constexpr wchar_t kJapaneseFamily[] = L"Reel Sans JP", kJapaneseSystemFamily[] = L"Yu Gothic UI", kJapaneseLocale[] = L"ja-JP";
+// The bundled Japanese faces, relative to the executable.
+inline constexpr const wchar_t* kJapaneseFontFiles[] = {L"assets/fonts/ReelSansJP-Regular.ttf", L"assets/fonts/ReelSansJP-SemiBold.ttf"};
+inline constexpr UnicodeRange kKanaRanges[] = {{0x3040, 0x309F}, {0x30A0, 0x30FF}, {0x31F0, 0x31FF}, {0xFF65, 0xFF9F}};
 // Command glyphs (Segoe Fluent Icons code points)
 inline constexpr wchar_t kIconFamily[] = L"Segoe Fluent Icons", kIconFallbackFamily[] = L"Segoe MDL2 Assets";
 inline constexpr wchar_t kGlyphAdd = L'\xE710', kGlyphManage = L'\xF0E2', kGlyphPreferred = L'\xE930', kGlyphSun = L'\xE706', kGlyphMoon = L'\xE708';

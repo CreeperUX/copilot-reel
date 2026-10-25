@@ -1,15 +1,22 @@
 #pragma once
 
 namespace reel {
-enum class Language { English, SimplifiedChinese };
+// The interface languages, in the order the hub's language tile steps through them.
+enum class Language { English, SimplifiedChinese, Japanese };
+inline constexpr unsigned kLanguageCount = 3;
 
 Language CurrentLanguage() noexcept;
-// BCP 47 locale for text shaping and diagnostics.
+// BCP 47 locale for text shaping, preferences and diagnostics.
 inline const wchar_t* LocaleName(Language language) noexcept {
-    return language == Language::SimplifiedChinese ? L"zh-CN" : L"en-US";
+    return language == Language::SimplifiedChinese ? L"zh-CN" : language == Language::Japanese ? L"ja-JP" : L"en-US";
+}
+// The language one step later (+1) or earlier (-1) than `language`, wrapping.
+inline Language StepLanguage(Language language, int direction) noexcept {
+    const int count = static_cast<int>(kLanguageCount);
+    return static_cast<Language>(((static_cast<int>(language) + direction) % count + count) % count);
 }
 void SetLanguage(Language language) noexcept;
-const wchar_t* Tr(const wchar_t* english, const wchar_t* chinese) noexcept;
+const wchar_t* Tr(const wchar_t* english, const wchar_t* chinese, const wchar_t* japanese) noexcept;
 // Missing or invalid preferences select English. Loading also sets the current language.
 Language LoadLanguage() noexcept;
 // Preferences are independent of apps.ini and use the same data-directory override.

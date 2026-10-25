@@ -32,6 +32,7 @@ Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'CopilotReel.exe')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\AppxManifest.xml') -Destination (Join-Path $stage 'AppxManifest.xml')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\assets') -Destination $stage -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\brands') -Destination (Join-Path $stage 'assets') -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\fonts') -Destination (Join-Path $stage 'assets') -Recurse -Force
 $manifestPath=Join-Path $stage 'AppxManifest.xml'
 $manifestText=[System.IO.File]::ReadAllText($manifestPath)
 if(-not $manifestText.Contains('ProcessorArchitecture="x64"')) {throw 'AppxManifest.xml has no x64 architecture token to set for this package.'}

@@ -10,5 +10,8 @@
 *.png binary
 *.ico binary
 *.zip binary
+*.gif binary
+*.ttf binary
 # Preserve upstream artwork and license bytes exactly as recorded in provenance.
 assets/brands/* -text whitespace=cr-at-eol,-blank-at-eof
+assets/fonts/* -text whitespace=cr-at-eol,-blank-at-eof

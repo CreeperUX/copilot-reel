@@ -183,6 +183,11 @@ void TestPreferences() {
     reel::SetReelSize(reel::vi::kReelSizeDefault);
     Require(reel::LoadReelSize() == 0 && reel::ReelSizePercent(0) == 70, "saving the language keeps the reel size");
     Require(reel::LoadLanguage() == reel::Language::SimplifiedChinese, "saving the reel size keeps the language");
+    Require(reel::SaveLanguage(reel::Language::Japanese) && reel::LoadLanguage() == reel::Language::Japanese &&
+        reel::LoadReelSize() == 0, "Japanese round-trips as ja-JP and keeps the reel size");
+    Require(WritePrivateProfileStringW(L"General", L"Language", L"ja", (data.root + L"\\profile-b\\preferences.ini").c_str()) != 0,
+        "fixture should write an unknown locale");
+    Require(reel::LoadLanguage() == reel::Language::English, "an unknown locale reads as English");
     Require(reel::SaveReelSize(reel::vi::kReelSizeCount - 1) && reel::LoadReelSize() == reel::vi::kReelSizeCount - 1,
         "the largest step round-trips");
     const auto path = data.root + L"\\profile-b\\preferences.ini";

@@ -21,10 +21,13 @@ from tokens import ICON, TYPE, cjk_ranges
 
 FONTS = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
 CACHE = Path(tempfile.gettempdir()) / 'copilot-reel-vi' / 'fonts'
-# Windows family -> file. Static families map weights; the variable family maps its file.
+REPO = Path(__file__).resolve().parents[3]
+# Windows family -> file. Static families map weights; the variable family maps its file. The
+# bundled Japanese face is read from the repository, as the application reads it beside itself.
 FILES = {'Segoe UI Variable': 'SegUIVar.ttf', 'Segoe UI': {400: 'segoeui.ttf', 600: 'seguisb.ttf', 700: 'segoeuib.ttf'},
          'Segoe Fluent Icons': 'SegoeIcons.ttf', 'Segoe MDL2 Assets': 'segmdl2.ttf',
-         'Microsoft YaHei UI': {400: 'msyh.ttc', 700: 'msyhbd.ttc'}, 'Consolas': {400: 'consola.ttf', 700: 'consolab.ttf'}}
+         'Microsoft YaHei UI': {400: 'msyh.ttc', 700: 'msyhbd.ttc'}, 'Consolas': {400: 'consola.ttf', 700: 'consolab.ttf'},
+         TYPE['japanese']['family']: {400: REPO / TYPE['japanese']['files'][0], 600: REPO / TYPE['japanese']['files'][1]}}
 
 _CSS = {}   # registered key -> (css family list, weight)
 
@@ -95,6 +98,8 @@ FACES = {
     'monogram': (TYPE['preferred'], TYPE['iconMonogram']['weight']),
     'cjk': (TYPE['cjk']['family'], 700 if TYPE['weight'] >= 600 else 400),   # 600 resolves to YaHei UI Bold
     'cjk-regular': (TYPE['cjk']['family'], 400),
+    'ja': (TYPE['japanese']['family'], TYPE['applicationLabel']['weight']),
+    'ja-regular': (TYPE['japanese']['family'], 400),
     'display': ('Segoe UI Variable Display', 600),
     'text': ('Segoe UI Variable Text', 400),
     'text-sb': ('Segoe UI Variable Text', 600),

@@ -6,7 +6,7 @@ Soft Orbit for Copilot Reel 0.3.4: a Windows-neutral plate with one flyout shado
 - `vectors/`: active SVG masters on the 384 DIP canvas: `radial-{main,hub,language,preferred,manage,presets}-{light,dark}.svg`, `radial-{main,hub}-contrast.svg`, `radial-main-{light,dark}-frosted.svg`.
 - `stylesheet.typ`: Typst token sheet that reads `tokens.json`; it repeats no values.
 - `source/build_vi.py`: builds the PDF, the SVG masters, the 2x previews and the review zip.
-- `source/pages.py`: the 15 specification pages; `source/reel.py`: vector mirror of `src/renderer.cpp`; `source/scene.py`, `art.py`, `fonts.py`, `tokens.py`, `layout.py`, `masters.py`: drawing, artwork, font, token, layout and master helpers.
+- `source/pages.py`: the 16 specification pages (page 4 sets the label in all three scripts; page 16 compares them with Apple's pairing and the Windows faces); `source/reel.py`: vector mirror of `src/renderer.cpp`; `source/scene.py`, `art.py`, `fonts.py`, `tokens.py`, `layout.py`, `masters.py`: drawing, artwork, font, token, layout and master helpers.
 - [Review PDF](../../output/pdf/copilot-reel-vi-v0.9.pdf) and [normative summary](../../docs/visual-identity.md).
 
 ## Rebuild
@@ -15,8 +15,8 @@ Soft Orbit for Copilot Reel 0.3.4: a Windows-neutral plate with one flyout shado
 uv run --python 3.14 --with reportlab --with pillow --with fonttools --with numpy python design/vi/source/build_vi.py
 ```
 
-`--pages 2,7` rebuilds selected pages for review. The build needs the Windows fonts Segoe UI Variable, Segoe Fluent Icons, Microsoft YaHei UI and Consolas, and renders previews with Poppler `pdftoppm` or PyMuPDF. It never writes `tokens.json`.
+`--pages 2,7` rebuilds selected pages for review; it writes a PDF of those pages only, so finish with a full build. The build needs the Windows fonts Segoe UI Variable, Segoe Fluent Icons, Microsoft YaHei UI and Consolas, and the repository's `assets/fonts/` Reel Sans JP, and renders previews with Poppler `pdftoppm` or PyMuPDF. It never writes `tokens.json`.
 
-Scenes are vector and use the token accent fallbacks; frosted scenes are labelled tonal illustrations. Official vendor PNGs are embedded unmodified, with plated marks clipped to the tile shape exactly as the application does. Pages 12 and 15 show native captures from `output/runtime/v0.3.4/`. Neither the PDF nor the PNG previews ever become application UI frames. Older PDF versions are historical reviews, not the current design contract.
+Scenes are vector and use the token accent fallbacks; frosted scenes are labelled tonal illustrations. Official vendor PNGs are embedded unmodified, with plated marks clipped to the tile shape exactly as the application does. Pages 12 and 15 show native captures from `output/runtime/v0.3.4/`, and page 16 the Japanese face comparison in `evidence/typography-ja.png`. Neither the PDF nor the PNG previews ever become application UI frames. Older PDF versions are historical reviews, not the current design contract.
 
 Asset ownership and sources live in `assets/brands/provenance.json`. The live frosted backdrop, real High Contrast themes, physical Copilot-key timing and high-refresh performance remain runtime validation items in `docs/validation.md`.

@@ -414,30 +414,33 @@ def p03():
 # 04 Typography ------------------------------------------------------------------------------
 
 def p04():
+    ja = TYPE['japanese']
     p = Page(4, 'Typography', 'One name, centered on its cap height.',
-             f'{TYPE["preferred"]} {TYPE["weight"]} for Latin, {TYPE["cjk"]["family"]} for Chinese. One line, never a second.')
+             f'{TYPE["preferred"]} {TYPE["weight"]} for Latin, {TYPE["cjk"]["family"]} for Chinese, {ja["family"]} for Japanese. One line, never a second.')
     s = p.s
-    k = 4.0
+    k = 3.0
     lw, lh = LABEL['width'] * k, LABEL['height'] * k
     x0, y0 = ML, TOP + 8
-    pw, ph = lw + 150, 196
+    pw, ph = 678, 132
     cap = fonts.cap_ratio()
-    for i, (text, note) in enumerate([('Claude', f'{TYPE["preferred"]}  ·  {TYPE["weight"]}  ·  {f(LABEL["size"])} DIP'),
-                                      ('首选应用', f'{TYPE["cjk"]["family"]}  ·  Bold, the face DirectWrite picks for {TYPE["weight"]}  ·  {f(LABEL["size"])} DIP')]):
-        y = y0 + i * (ph + 16)
+    specimens = [('Claude', 'cjk', f'{TYPE["preferred"]}  ·  {TYPE["weight"]}  ·  {f(LABEL["size"])} DIP'),
+                 ('管理应用', 'cjk', f'{TYPE["cjk"]["family"]}  ·  Bold, the face DirectWrite picks for {TYPE["weight"]}'),
+                 ('アプリの管理', 'ja', f'{ja["family"]}  ·  {TYPE["weight"]}, bundled  ·  page 16')]
+    for i, (text, cjk, note) in enumerate(specimens):
+        y = y0 + i * (ph + 12)
         panel(s, x0, y, pw, ph, fill=PAL['light']['plate'])
         bx = x0 + 24
-        cx, cy = bx + lw / 2, y + ph / 2 + 6
+        cx, cy = bx + lw / 2, y + ph / 2 + 10
         s.rect(bx, cy - lh / 2, lw, lh, stroke=RED, sw=0.7, dash=[3, 3])
         base = cy + cap * LABEL['size'] * k / 2
         top = base - cap * LABEL['size'] * k
         for yy, name in ((top, 'cap height'), (cy, 'plate center'), (base, 'baseline')):
             s.line(bx - 10, yy, bx + lw + 12, yy, RED, 0.6, dash=None if name == 'plate center' else [2, 2])
             s.text(bx + lw + 18, yy + 4, name, 10.5, RED, face='small-sb')
-        R.centered_text(s, text, cx, cy, LABEL['size'] * k, LIGHT.foreground, 'label')
-        caption(s, x0 + 18, y + 24, note, INK2, size=11.5, face='small-sb')
-    caption(s, x0, y0 + 2 * (ph + 16) + 4, f'Box {f(LABEL["width"])} × {f(LABEL["height"])} on the plate center.  Baseline = center + capHeight × size / 2, '
-            f'capHeight {cap:.2f} em from the Latin face, also for Chinese.', RED, size=11, face='small-sb')
+        s.text(cx, base, text, LABEL['size'] * k, LIGHT.foreground, face='label', cjk=cjk, align='center')
+        caption(s, x0 + 18, y + 22, note, INK2, size=11.5, face='small-sb')
+    caption(s, x0, y0 + 3 * (ph + 12) + 4, f'Box {f(LABEL["width"])} × {f(LABEL["height"])} on the plate center.  Baseline = center + capHeight × size / 2, '
+            f'capHeight {cap:.2f} em from the Latin face, for every script.', RED, size=11, face='small-sb')
 
     # Truncation
     x1 = x0 + pw + 40
@@ -460,12 +463,14 @@ def p04():
     y = y0 + 56 + 4 * 58 + 22
     heading(s, x1, y, 'Type tokens', 14)
     rows = [('Label', f'{f(LABEL["size"])} DIP / {LABEL["weight"]}, {LABEL["lines"]} line, {f(LABEL["width"])} × {f(LABEL["height"])}, {LABEL["color"]}'),
-            ('Monogram', f'EN / ZH, {f(MONOGRAM["size"])} DIP / {MONOGRAM["weight"]}, cap-height centered, {MONOGRAM["color"]}'),
+            ('Monogram', f'{" / ".join(MONOGRAM["states"])}, {f(MONOGRAM["size"])} DIP / {MONOGRAM["weight"]}, cap-height centered, {MONOGRAM["color"]}'),
             ('Latin', f'{TYPE["preferred"]} ({TYPE["familyModel"]}); fallback {TYPE["fallback"]}'),
             ('Chinese', f'{TYPE["cjk"]["family"]}, {TYPE["cjk"]["locale"]}; then the system fallback'),
+            ('Japanese', f'{TYPE["japanese"]["family"]} 400 / 600, then {TYPE["japanese"]["systemFamily"]}'),
             ('CJK ranges', ', '.join('U+' + r for r in TYPE['cjk']['ranges'][:3])),
             ('', ', '.join('U+' + r for r in TYPE['cjk']['ranges'][3:])),
-            ('Locales', f'{TYPE["locales"]["en"]} default, {TYPE["locales"]["zh"]}; the formats rebuild on switch'),
+            ('Kana ranges', ', '.join('U+' + r for r in TYPE['japanese']['ranges'])),
+            ('Locales', f'{TYPE["locales"]["en"]} default, {TYPE["locales"]["zh"]}, {TYPE["locales"]["ja"]}; kana make a name {TYPE["locales"]["ja"]}'),
             ('Never drawn', ', '.join(OSD['neverDrawn'][:3])),
             ('', ', '.join(OSD['neverDrawn'][3:]))]
     for i, (a, b) in enumerate(rows):
@@ -473,19 +478,19 @@ def p04():
         s.text(x1, yy, a, 12, INK, face='small-sb')
         s.text(x1 + 104, yy, b, 12, INK2, face='small')
     # Monogram tiles
-    yb = y0 + 2 * (ph + 16) + 26
-    k2, bw2, bh2 = 1.9, 204, 112
+    yb = y0 + 3 * (ph + 12) + 26
+    k2, bw2, bh2 = 1.6, 236, 112
     for j, th in enumerate((LIGHT, DARK)):
         bx = x0 + j * (bw2 + 14)
         panel(s, bx, yb, bw2, bh2, fill=th.plate)
-        for i, code in enumerate(('EN', 'ZH')):
-            cx = bx + bw2 / 2 + (i - .5) * 92
+        for i, code in enumerate(MONOGRAM['states']):
+            cx = bx + bw2 / 2 + (i - 1) * 74
             with s.group(cx - R.C * k2, yb + bh2 / 2 - R.C * k2, k2):
                 R.draw_tile(s, th, R.C, R.C)
                 R.draw_art(s, th, R.LANGUAGE, R.C, R.C, lang=code)
     tx = x0 + 2 * (bw2 + 14) + 10
     heading(s, tx, yb + 28, 'The language is the icon', 13.5)
-    para(s, tx, yb + 50, 'EN / ZH names the interface language. Built-in labels are localized; user app names never are.',
+    para(s, tx, yb + 50, 'EN / ZH / JA names the interface language. Built-in labels are localized; user app names never are.',
          pw - (tx - x0), 12.5, 18)
     return p
 
@@ -583,7 +588,8 @@ def p06():
     keys = []
     for b in ICON['brands']:
         k = 'chatgpt' if b['key'].startswith('chatgpt') else b['key']
-        if k not in keys:
+        # App marks only: the reel's own mark and GitHub's belong to About, not to an app tile.
+        if k not in keys and k in BRAND_NAMES:
             keys.append(k)
     keys += ['notepad', 'settings', 'generic']
     cols, gap = 6, 16
@@ -1354,4 +1360,70 @@ def fr_status():
     return MATERIAL['frosted']['blendModeVerified']
 
 
-PAGES = [p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15]
+# 16 Typography in three scripts --------------------------------------------------------------
+
+def p16():
+    ja = TYPE['japanese']
+    p = Page(16, 'Typography', 'Three scripts, one voice.',
+             "Apple's system pairing is the reference; the reel keeps Windows' own faces where they match it and bundles one where they do not.")
+    s = p.s
+    x0, y0 = ML, TOP + 14
+    cols = [0, 130, 300, 490]     # script, Apple, Windows, Copilot Reel (specimen)
+    wl = 790
+    for c, title in zip(cols, ('Script', 'Apple reference', 'Windows system', 'Copilot Reel')):
+        s.text(x0 + c, y0, title, 12, INK3, face='small-sb')
+    s.line(x0, y0 + 10, x0 + wl, y0 + 10, RULE, 1)
+    rows = [('Latin', 'SF Pro', 'Segoe UI Variable', f'{TYPE["preferred"]} {TYPE["weight"]}', 'Manage apps', 'cjk'),
+            ('Chinese', 'PingFang SC', TYPE['cjk']['family'], f'{TYPE["cjk"]["family"]} Bold', '管理应用', 'cjk'),
+            ('Japanese', 'Hiragino Sans', ja['systemFamily'], f'{ja["family"]} {TYPE["weight"]}', 'アプリの管理', 'ja')]
+    rh = 88
+    for i, (script, apple, system, reel, specimen, cjk) in enumerate(rows):
+        y = y0 + 22 + i * rh
+        if i == 2:
+            s.rect(x0 - 10, y - 4, wl + 20, rh - 8, fill=PANEL, r=10)
+        heading(s, x0, y + 26, script, 14)
+        caption(s, x0 + cols[1], y + 26, apple, INK2, size=12.5)
+        caption(s, x0 + cols[2], y + 26, system, INK2, size=12.5)
+        caption(s, x0 + cols[3], y + 26, reel, INK, size=12.5, face='small-sb')
+        s.text(x0 + cols[3], y + 64, specimen, 28, INK, face='label', cjk=cjk)
+        s.line(x0, y + rh - 12, x0 + wl, y + rh - 12, RULE, 1)
+
+    y = y0 + 22 + 3 * rh + 20
+    heading(s, x0, y, 'Why Japanese is bundled', 14)
+    y = para(s, x0, y + 22, 'SF Pro, PingFang SC and Hiragino Sans share a large face, low stroke contrast, flat terminals and open '
+             'counters, so mixed-script names sit evenly. Hiragino drops the uroko at stroke shoulders, centres each glyph\'s '
+             'weight and draws kana slightly large. Fontworks\' Rodin and UD faces share that build, but neither they nor Hiragino '
+             'may ship inside another app without a licence, and Fontworks\' open faces are a pencil script or geometric brand faces. '
+             'Yu Gothic UI is hinted but draws condensed kana. Noto Sans JP (Source Han Sans) is the open face closest to Hiragino.',
+             wl, 12.5, 18)
+    y += 18
+    heading(s, x0, y, 'One fallback, chosen by locale', 14)
+    rules = [('1', f'{ja["locale"]} text: Han, CJK punctuation and kana to {ja["family"]}, then {ja["systemFamily"]} for what the subset lacks.'),
+             ('2', f'Other locales: kana to {ja["family"]}; Han and punctuation to {TYPE["cjk"]["family"]}, which keeps mainland forms.'),
+             ('3', f'Everything else: the system fallback. A name that contains kana is laid out as {ja["locale"]} in every interface.')]
+    for i, (n, rule) in enumerate(rules):
+        yy = y + 22 + i * 19
+        s.text(x0, yy, n, 12, RED, face='small-sb')
+        s.text(x0 + 18, yy, rule, 12, INK2, face='small')
+
+    x1 = x0 + wl + 50
+    w1 = W - MR - x1
+    heading(s, x1, y0 + 4, ja['family'], 14)
+    facts = ['Noto Sans JP 2.004, static instances at 400 and 600',
+             'Windows-31J, kana, CJK symbols and the interface strings: 7,617 characters, 2.4 MB a weight',
+             "Segoe UI's line metrics, 1.079 / 0.251 em, so a Japanese line is as tall as an English one",
+             'Renamed under the SIL Open Font License; OFL.txt ships beside it (tools/build-fonts.py)']
+    yy = y0 + 26
+    for line in facts:
+        yy = para(s, x1, yy, '–  ' + line, w1, 12, 17) + 4
+    img = Image.open(ROOT / 'design' / 'vi' / 'evidence' / 'typography-ja.png').convert('RGB')
+    iy = yy + 10
+    ih = min(w1 * img.height / img.width, BOTTOM - 30 - iy)
+    iw = ih * img.width / img.height
+    s.image(img, x1, iy, iw, ih, jpeg=False)
+    w = tag(s, x1, iy + ih + 20, 'native')
+    caption(s, x1 + w + 8, iy + ih + 20, f'Hub at 96, 144, 192 DPI: {ja["family"]} (left), {ja["systemFamily"]} (right)', INK2, size=11)
+    return p
+
+
+PAGES = [p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16]

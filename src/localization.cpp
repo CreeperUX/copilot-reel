@@ -30,12 +30,16 @@ std::wstring PreferencesPath() {
 Language CurrentLanguage() noexcept { return currentLanguage.load(std::memory_order_relaxed); }
 
 void SetLanguage(Language language) noexcept {
-    currentLanguage.store(language == Language::SimplifiedChinese ? language : Language::English,
+    currentLanguage.store(language == Language::SimplifiedChinese || language == Language::Japanese ? language : Language::English,
         std::memory_order_relaxed);
 }
 
-const wchar_t* Tr(const wchar_t* english, const wchar_t* chinese) noexcept {
-    return CurrentLanguage() == Language::SimplifiedChinese ? chinese : english;
+const wchar_t* Tr(const wchar_t* english, const wchar_t* chinese, const wchar_t* japanese) noexcept {
+    switch (CurrentLanguage()) {
+    case Language::SimplifiedChinese: return chinese;
+    case Language::Japanese: return japanese;
+    default: return english;
+    }
 }
 
 Language LoadLanguage() noexcept {
@@ -46,7 +50,8 @@ Language LoadLanguage() noexcept {
             std::array<wchar_t, 32> value{};
             GetPrivateProfileStringW(L"General", L"Language", L"en-US", value.data(),
                 static_cast<DWORD>(value.size()), path.c_str());
-            if (std::wstring_view(value.data()) == L"zh-CN") language = Language::SimplifiedChinese;
+            for (unsigned i = 0; i < kLanguageCount; ++i)
+                if (std::wstring_view(value.data()) == LocaleName(static_cast<Language>(i))) language = static_cast<Language>(i);
         }
     } catch (...) { }
     SetLanguage(language);
@@ -111,7 +116,7 @@ bool WritePreferences(Language language, unsigned reelSize, const UpdatePreferen
         if (path.empty()) return false;
         const auto directory = path.substr(0, path.find_last_of(L"\\/"));
         if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) return false;
-        const wchar_t* value = language == Language::SimplifiedChinese ? L"zh-CN" : L"en-US";
+        const wchar_t* value = LocaleName(language);
         const std::wstring content=std::wstring(L"\xfeff[General]\r\nLanguage=")+value+
             L"\r\nReelSize="+std::to_wstring(ReelSizePercent(reelSize))+
             L"\r\n[Updates]\r\nAutoCheck="+(updates.autoCheck?L"1":L"0")+L"\r\nAutoInstall="+(updates.autoInstall?L"1":L"0")+

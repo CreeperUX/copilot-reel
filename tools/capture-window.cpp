@@ -111,7 +111,7 @@ int wmain(int argc, wchar_t** argv) {
         if (sequence) {
             const std::filesystem::path directory(argv[2]);
             const unsigned duration = std::wcstoul(argv[4], nullptr, 10);
-            if (!directory.is_absolute() || duration < 100 || duration > 3000 ||
+            if (!directory.is_absolute() || duration < 100 || duration > 10000 ||
                 (std::filesystem::exists(directory) && !std::filesystem::is_empty(directory)))
                 winrt::throw_hresult(E_INVALIDARG);
             std::filesystem::create_directories(directory);
@@ -133,7 +133,7 @@ int wmain(int argc, wchar_t** argv) {
                 D3D11_TEXTURE2D_DESC description{};
                 input->GetDesc(&description);
                 const size_t bytes = static_cast<size_t>(description.Width) * description.Height * 4;
-                if (samples.size() >= 120 || allocatedBytes + bytes > 256 * 1024 * 1024) break;
+                if (samples.size() >= 240 || allocatedBytes + bytes > 256 * 1024 * 1024) break;
                 description.BindFlags = 0;
                 description.MiscFlags = 0;
                 winrt::com_ptr<ID3D11Texture2D> copy;
@@ -154,13 +154,14 @@ int wmain(int argc, wchar_t** argv) {
             pool.Close();
             if (samples.empty()) winrt::throw_hresult(HRESULT_FROM_WIN32(WAIT_TIMEOUT));
             std::ofstream metadata(directory / L"frames.csv");
-            metadata << "frame,captureMilliseconds,width,height\n";
+            // systemTicks is the frame's QPC time in 100 ns units, comparable with a fixture's own clock.
+            metadata << "frame,captureMilliseconds,width,height,systemTicks\n";
             for (size_t index = 0; index < samples.size(); ++index) {
                 const auto& sample = samples[index];
                 const auto name = L"frame-" + std::to_wstring(index) + L".png";
                 SavePng((directory / name).c_str(), device.get(), context.get(), sample.texture.get(), sample.width, sample.height);
                 metadata << index << ',' << (sample.captureTicks - samples.front().captureTicks) / 10000.0
-                         << ',' << sample.width << ',' << sample.height << '\n';
+                         << ',' << sample.width << ',' << sample.height << ',' << sample.captureTicks << '\n';
             }
             return 0;
         }

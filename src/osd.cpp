@@ -6,6 +6,7 @@
 #include "installed_apps.h"
 #include "list_viewport.h"
 #include "settings.h"
+#include "typography.h"
 #include "vi_tokens.h"
 
 #include <commdlg.h>
@@ -130,14 +131,14 @@ void NavigateBack(State& state);
 
 const wchar_t* PageTitle(const State& state) {
     switch(state.page) {
-    case Page::Home:return Tr(L"Quick menu",L"快捷菜单");
-    case Page::Apps:return Tr(L"Apps",L"应用");
-    case Page::Appearance:return Tr(L"Appearance",L"外观");
-    case Page::Settings:return Tr(L"Settings",L"设置");
-    case Page::Editor:return state.adding?Tr(L"Add app",L"添加应用"):Tr(L"Edit app",L"编辑应用");
-    case Page::Advanced:return Tr(L"Advanced",L"高级选项");
-    case Page::Picker:return Tr(L"Choose app",L"选择应用");
-    default:return Tr(L"About",L"关于");
+    case Page::Home:return Tr(L"Quick menu",L"快捷菜单",L"簡易メニュー");
+    case Page::Apps:return Tr(L"Apps",L"应用",L"アプリ");
+    case Page::Appearance:return Tr(L"Appearance",L"外观",L"外観");
+    case Page::Settings:return Tr(L"Settings",L"设置",L"設定");
+    case Page::Editor:return state.adding?Tr(L"Add app",L"添加应用",L"アプリを追加"):Tr(L"Edit app",L"编辑应用",L"アプリを編集");
+    case Page::Advanced:return Tr(L"Advanced",L"高级选项",L"詳細設定");
+    case Page::Picker:return Tr(L"Choose app",L"选择应用",L"アプリを選択");
+    default:return Tr(L"About",L"关于",L"バージョン情報");
     }
 }
 
@@ -194,29 +195,21 @@ void Scroll(State& state,int bar,int request) {
     RedrawWindow(state.window,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
 }
 
-// Han and CJK punctuation resolve to Microsoft YaHei UI instead of per-glyph JhengHei UI
-// or Yu Gothic UI; the system fallback follows. The mapping has no locale so Chinese
-// app names typed while the interface is English use the same face.
+// The reel's CJK fallback (src/typography.h); the formats' locale picks its mapping.
 IDWriteFontFallback* CjkFallback(State& state) {
     if (state.fallbackTried || !state.textFactory) return state.fallback.Get();
     state.fallbackTried = true;
     ComPtr<IDWriteFactory2> factory;
-    ComPtr<IDWriteFontFallbackBuilder> builder;
-    ComPtr<IDWriteFontFallback> system;
-    if (FAILED(state.textFactory.As(&factory)) || FAILED(factory->CreateFontFallbackBuilder(&builder)) ||
-        FAILED(factory->GetSystemFontFallback(&system))) return nullptr;
-    DWRITE_UNICODE_RANGE ranges[std::size(vi::kCjkRanges)]{};
-    for (size_t i = 0; i != std::size(ranges); ++i) ranges[i] = {vi::kCjkRanges[i].first, vi::kCjkRanges[i].last};
-    const wchar_t* family[] = {vi::kCjkFamily};
-    if (SUCCEEDED(builder->AddMapping(ranges, static_cast<UINT32>(std::size(ranges)), family, 1, nullptr, nullptr, nullptr, 1.0f)) &&
-        SUCCEEDED(builder->AddMappings(system.Get())))
-        builder->CreateFontFallback(&state.fallback);
+    if (FAILED(state.textFactory.As(&factory)) || FAILED(CreateCjkFallback(factory.Get(), ExecutableFolder(), &state.fallback)))
+        state.fallback.Reset();
     return state.fallback.Get();
 }
 
 IDWriteTextFormat* Format(State& state, int size, bool bold = false) {
-    // Formats carry the interface locale (zh-CN selects mainland CJK forms).
-    if (state.formatLanguage != CurrentLanguage()) { state.formats.clear(); state.formatLanguage = CurrentLanguage(); }
+    // Formats carry the interface locale (zh-CN selects mainland CJK forms, ja-JP Japanese ones).
+    if (state.formatLanguage != CurrentLanguage()) {
+        state.formats.clear(); state.formatLanguage = CurrentLanguage();
+    }
     const int key = size + (bold ? 100 : 0);
     auto& format = state.formats[key];
     if (!format && state.textFactory) {
@@ -244,8 +237,15 @@ void DrawText(State& state, ID2D1RenderTarget* target, const std::wstring& text,
     if (!format) return;
     format->SetTextAlignment(alignment);
     ComPtr<ID2D1SolidColorBrush> brush;
-    if (SUCCEEDED(target->CreateSolidColorBrush(Color(color), &brush)))
-        target->DrawTextW(text.c_str(), static_cast<UINT32>(text.size()), format, rect, brush.Get());
+    if (FAILED(target->CreateSolidColorBrush(Color(color), &brush))) return;
+    // A name with kana is Japanese in every interface language, so its kanji take Japanese forms.
+    ComPtr<IDWriteTextLayout> layout;
+    if (HasKana(text) && state.formatLanguage != Language::Japanese &&
+        SUCCEEDED(state.textFactory->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format,
+            rect.right - rect.left, rect.bottom - rect.top, &layout)) &&
+        SUCCEEDED(layout->SetLocaleName(vi::kJapaneseLocale, {0, static_cast<UINT32>(text.size())})))
+        target->DrawTextLayout({rect.left, rect.top}, layout.Get(), brush.Get());
+    else target->DrawTextW(text.c_str(), static_cast<UINT32>(text.size()), format, rect, brush.Get());
 }
 void RoundRect(ID2D1RenderTarget* target, D2D1_RECT_F rect, float radius, Rgba fill,
     Rgba stroke, float strokeWidth = 0) {
@@ -301,46 +301,46 @@ void Paint(State& state) {
             RoundRect(target,frame,kFieldRadius,state.Tile(),focused?state.appearance.accent:state.appearance.outline,focused?1.5f:1.f);
         }
         if (state.page == Page::Home) {
-            DrawText(state,target,Tr(L"Quick menu",L"快捷菜单"),D2D1::RectF(24,77,width-24,113),state.appearance.foreground,26,true);
+            DrawText(state,target,Tr(L"Quick menu",L"快捷菜单",L"簡易メニュー"),D2D1::RectF(24,77,width-24,113),state.appearance.foreground,26,true);
             DrawText(state,target,L"Soft Orbit",D2D1::RectF(24,317,260,340),state.appearance.secondary,12);
-            DrawText(state,target,Tr(L"Esc closes",L"Esc 关闭"),D2D1::RectF(300,317,width-24,340),state.appearance.secondary,12,false,DWRITE_TEXT_ALIGNMENT_TRAILING);
+            DrawText(state,target,Tr(L"Esc closes",L"Esc 关闭",L"Esc で閉じる"),D2D1::RectF(300,317,width-24,340),state.appearance.secondary,12,false,DWRITE_TEXT_ALIGNMENT_TRAILING);
         } else if (state.page == Page::Apps) {
-            const auto count = std::to_wstring(state.apps.size()) + Tr(L" of 8 entries", L" / 8 个入口");
+            const auto count = std::to_wstring(state.apps.size()) + Tr(L" of 8 entries", L" / 8 个入口", L" / 8 項目");
             DrawText(state,target,count,D2D1::RectF(24,65,width-24,86),state.appearance.secondary,12);
         } else if (state.page == Page::Appearance) {
-            const wchar_t* labels[] = {Tr(L"Theme",L"主题"),Tr(L"Material",L"材质"),Tr(L"Selection color",L"选中颜色")};
+            const wchar_t* labels[] = {Tr(L"Theme",L"主题",L"テーマ"),Tr(L"Material",L"材质",L"素材"),Tr(L"Selection color",L"选中颜色",L"選択時の色")};
             const wchar_t* values[] = {
-                state.appearance.highContrast ? Tr(L"High contrast",L"高对比度") : state.appearance.dark ? Tr(L"Windows dark",L"Windows 深色") : Tr(L"Windows light",L"Windows 浅色"),
-                state.appearance.transparency ? Tr(L"Windows transparency",L"Windows 透明效果") : Tr(L"Solid color",L"纯色"),
-                Tr(L"Windows accent",L"Windows 强调色")};
+                state.appearance.highContrast ? Tr(L"High contrast",L"高对比度",L"コントラスト テーマ") : state.appearance.dark ? Tr(L"Windows dark",L"Windows 深色",L"Windows ダーク モード") : Tr(L"Windows light",L"Windows 浅色",L"Windows ライト モード"),
+                state.appearance.transparency ? Tr(L"Windows transparency",L"Windows 透明效果",L"Windows の透明効果") : Tr(L"Solid color",L"纯色",L"単色"),
+                Tr(L"Windows accent",L"Windows 强调色",L"Windows のアクセント カラー")};
             for (int i=0;i<3;++i) {
                 const float y = 82+i*56.f;
                 RoundRect(target,D2D1::RectF(24,y,width-24,y+47),8,state.Tile(),state.appearance.outline);
                 DrawText(state,target,labels[i],D2D1::RectF(40,y+13,230,y+36),state.appearance.foreground);
                 DrawText(state,target,values[i],D2D1::RectF(225,y+13,width-40,y+36),state.appearance.secondary,13,false,DWRITE_TEXT_ALIGNMENT_TRAILING);
             }
-            DrawText(state,target,Tr(L"Follows Windows. No duplicate theme switches.",L"跟随 Windows，无需重复设置主题。"),D2D1::RectF(24,267,width-24,290),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Follows Windows. No duplicate theme switches.",L"跟随 Windows，无需重复设置主题。",L"Windows に従います。テーマを別に設定する必要はありません。"),D2D1::RectF(24,267,width-24,290),state.appearance.secondary,12);
         } else if (state.page == Page::Settings) {
             RoundRect(target,D2D1::RectF(24,82,width-24,138),8,state.Tile(),state.appearance.outline);
-            DrawText(state,target,Tr(L"Changes apply immediately.",L"更改立即生效。"),D2D1::RectF(24,277,width-24,299),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Changes apply immediately.",L"更改立即生效。",L"変更はすぐに反映されます。"),D2D1::RectF(24,277,width-24,299),state.appearance.secondary,12);
         } else if (state.page == Page::About) {
             DrawText(state,target,L"Copilot Reel",D2D1::RectF(24,86,width-24,127),state.appearance.foreground,28,true);
-            DrawText(state,target,Tr(L"Soft Orbit / native Windows launcher",L"柔光轨道 / Windows 原生启动器"),D2D1::RectF(24,136,width-24,164),state.appearance.secondary,14);
-            DrawText(state,target,Tr(L"Version 0.3.8",L"版本 0.3.8"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
-            DrawText(state,target,Tr(L"Hold the Copilot key, choose an app, then release.",L"按住 Copilot 键，选择应用，然后松开。"),D2D1::RectF(24,194,width-24,220),state.appearance.foreground,14);
-            DrawText(state,target,Tr(L"Windows controls the theme, transparency and motion.",L"主题、透明效果和动画均遵循 Windows 设置。"),D2D1::RectF(24,233,width-24,259),state.appearance.secondary,13);
+            DrawText(state,target,Tr(L"Soft Orbit / native Windows launcher",L"柔光轨道 / Windows 原生启动器",L"柔らかな軌道 / Windows 標準のアプリ起動ツール"),D2D1::RectF(24,136,width-24,164),state.appearance.secondary,14);
+            DrawText(state,target,Tr(L"Version 0.3.8",L"版本 0.3.8",L"バージョン 0.3.8"),D2D1::RectF(24,166,width-24,189),state.appearance.secondary,12);
+            DrawText(state,target,Tr(L"Hold the Copilot key, choose an app, then release.",L"按住 Copilot 键，选择应用，然后松开。",L"Copilot キーを押したままアプリを選び、離します。"),D2D1::RectF(24,194,width-24,220),state.appearance.foreground,14);
+            DrawText(state,target,Tr(L"Windows controls the theme, transparency and motion.",L"主题、透明效果和动画均遵循 Windows 设置。",L"テーマ、透明効果、アニメーション効果は Windows の設定に従います。"),D2D1::RectF(24,233,width-24,259),state.appearance.secondary,13);
         } else if (state.page == Page::Picker) {
             // The list hides while there is nothing to show; its area then explains why.
             const float listTop = kContentY+kFieldHeight+12.f;
             if (!state.listed || state.visible.empty()) {
-                const auto* message = !state.listed ? Tr(L"Reading apps from Start…",L"正在读取开始菜单中的应用…") :
-                    state.installed.empty() ? Tr(L"No apps were found in Start.",L"开始菜单中没有找到应用。") :
-                    Tr(L"No apps match your search.",L"没有匹配的应用。");
+                const auto* message = !state.listed ? Tr(L"Reading apps from Start…",L"正在读取开始菜单中的应用…",L"スタートからアプリを読み込んでいます…") :
+                    state.installed.empty() ? Tr(L"No apps were found in Start.",L"开始菜单中没有找到应用。",L"スタートにアプリが見つかりませんでした。") :
+                    Tr(L"No apps match your search.",L"没有匹配的应用。",L"検索に一致するアプリはありません。");
                 DrawText(state,target,message,D2D1::RectF(kMargin,listTop+kListRows*kRowHeight/2.f-10,width-kMargin,listTop+kListRows*kRowHeight/2.f+12),
                     state.appearance.secondary,14,false,DWRITE_TEXT_ALIGNMENT_CENTER);
             }
             if (state.listed)
-                DrawText(state,target,std::to_wstring(state.visible.size())+Tr(L" apps",L" 个应用"),
+                DrawText(state,target,std::to_wstring(state.visible.size())+Tr(L" apps",L" 个应用",L" 個のアプリ"),
                     D2D1::RectF(kMargin,kFooterY+kFooterHeight/2.f-9,300,kFooterY+kFooterHeight/2.f+9),state.appearance.secondary,12);
         }
         if (!state.status.empty() && state.page != Page::Home)
@@ -518,7 +518,7 @@ void DrawControl(State& state, const DRAWITEMSTRUCT& item) {
         DrawText(state,target,AppDisplayName(app),D2D1::RectF(46,7,width-115,31),
             selected?state.appearance.selectionText:foreground,14);
         const bool website = app.target.starts_with(L"https:") || app.target.starts_with(L"http:");
-        DrawText(state,target,website?Tr(L"Website",L"网页"):Tr(L"Application",L"应用"),
+        DrawText(state,target,website?Tr(L"Website",L"网页",L"Web サイト"):Tr(L"Application",L"应用",L"アプリ"),
             D2D1::RectF(width-112,8,width-16,31),selected?state.appearance.selectionText:state.appearance.secondary,12,false,DWRITE_TEXT_ALIGNMENT_TRAILING);
     } else if (item.CtlID == InstalledList && item.itemID < state.visible.size()) {
         const auto index = state.visible[item.itemID];
@@ -535,7 +535,7 @@ void DrawControl(State& state, const DRAWITEMSTRUCT& item) {
             if (brush) DrawAppSymbol(target,app.target,D2D1::RectF(12,6,34,28),brush.Get(),1.6f);
         }
         DrawText(state,target,app.target.name,D2D1::RectF(46,7,width-130,31),text,14);
-        DrawText(state,target,app.packaged?Tr(L"Packaged app",L"打包应用"):Tr(L"Desktop app",L"桌面应用"),
+        DrawText(state,target,app.packaged?Tr(L"Packaged app",L"打包应用",L"パッケージ アプリ"):Tr(L"Desktop app",L"桌面应用",L"デスクトップ アプリ"),
             D2D1::RectF(width-124,8,width-16,31),selected?state.appearance.selectionText:state.appearance.secondary,12,false,DWRITE_TEXT_ALIGNMENT_TRAILING);
     } else if (tile) {
         // Accent-colored marks use the text accent; accent itself is reserved for focus outlines.
@@ -543,8 +543,8 @@ void DrawControl(State& state, const DRAWITEMSTRUCT& item) {
         target->CreateSolidColorBrush(Color(focused?state.appearance.accentText:foreground),&brush);
         if (brush) CategoryIcon(target,static_cast<int>(item.CtlID),28,33,brush.Get());
         DrawText(state,target,Text(item.hwndItem),D2D1::RectF(16,69,width-12,96),foreground,16,true);
-        const auto detail = item.CtlID == Apps ? std::to_wstring(state.apps.size())+Tr(L" entries",L" 个入口") :
-            std::wstring(item.CtlID == AppearancePage ? Tr(L"Follows Windows",L"跟随 Windows") : Tr(L"Language & more",L"语言与更多设置"));
+        const auto detail = item.CtlID == Apps ? std::to_wstring(state.apps.size())+Tr(L" entries",L" 个入口",L" 項目") :
+            std::wstring(item.CtlID == AppearancePage ? Tr(L"Follows Windows",L"跟随 Windows",L"Windows に合わせる") : Tr(L"Language & more",L"语言与更多设置",L"言語とその他の設定"));
         DrawText(state,target,detail,D2D1::RectF(16,104,width-10,130),state.appearance.secondary,12);
     } else if (item.CtlID == Back || item.CtlID == Close) {
         ComPtr<ID2D1SolidColorBrush> brush;
@@ -603,9 +603,11 @@ void EditField(State& state,int id,const wchar_t* label,const std::wstring& valu
     Label(state,label,x,y,width);
     InputField(state,id,value,x,y+kLabelToField,width,limit);
 }
+// The controls' GDI font: Segoe UI, or Yu Gothic UI in Japanese, so kanji take Japanese forms.
 void UpdateFont(State& state) {
     auto font=CreateFontW(-state.Px(14),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,
+        ControlFamily(CurrentLanguage()));
     if (font) { if(state.font)DeleteObject(state.font); state.font=font; }
 }
 void ResizeToPage(State& state) {
@@ -655,86 +657,86 @@ void BuildPage(State& state) {
     const auto windowTitle=std::wstring(L"Copilot Reel — ")+PageTitle(state);
     SetWindowTextW(state.window,windowTitle.c_str());
     ResizeToPage(state);
-    if(state.page!=Page::Home) Button(state,Back,Tr(L"Back",L"返回"),kMargin,kHeaderY,kHeaderSize,kHeaderSize);
-    Button(state,Close,Tr(L"Close",L"关闭"),kWidth-kMargin-kHeaderSize,kHeaderY,kHeaderSize,kHeaderSize);
+    if(state.page!=Page::Home) Button(state,Back,Tr(L"Back",L"返回",L"戻る"),kMargin,kHeaderY,kHeaderSize,kHeaderSize);
+    Button(state,Close,Tr(L"Close",L"关闭",L"閉じる"),kWidth-kMargin-kHeaderSize,kHeaderY,kHeaderSize,kHeaderSize);
     // Content rows, the right-hand side buttons of a field, and the footer's primary button.
     const auto row=[](int index){return kContentY+index*kRowPitch;};
     const int contentWidth=kWidth-2*kMargin, primaryX=kWidth-kMargin-kSideButton;
     switch(state.page) {
     case Page::Home:
-        Button(state,Apps,Tr(L"Apps",L"应用"),24,132,160,144);
-        Button(state,AppearancePage,Tr(L"Appearance",L"外观"),200,132,160,144);
-        Button(state,SettingsPage,Tr(L"Settings",L"设置"),376,132,160,144);
+        Button(state,Apps,Tr(L"Apps",L"应用",L"アプリ"),24,132,160,144);
+        Button(state,AppearancePage,Tr(L"Appearance",L"外观",L"外観"),200,132,160,144);
+        Button(state,SettingsPage,Tr(L"Settings",L"设置",L"設定"),376,132,160,144);
         break;
     case Page::Apps: {
-        Button(state,Add,Tr(L"+ Add app",L"+ 添加应用"),374,20,120,32);
+        Button(state,Add,Tr(L"+ Add app",L"+ 添加应用",L"+ アプリを追加"),374,20,120,32);
         EnableWindow(state.Control(Add),state.apps.size()<8);
-        const auto list=Control(state,AppList,L"LISTBOX",Tr(L"Applications",L"应用列表"),
+        const auto list=Control(state,AppList,L"LISTBOX",Tr(L"Applications",L"应用列表",L"アプリ一覧"),
             WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT,24,90,512,204);
         SendMessageW(list,LB_SETITEMHEIGHT,0,state.Px(34));
         for(const auto& app:state.apps)SendMessageW(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(AppDisplayName(app).c_str()));
         state.selected=std::clamp(state.selected,0,static_cast<int>(state.apps.size())-1);
         SendMessageW(list,LB_SETCURSEL,state.selected,0);
-        Button(state,Edit,Tr(L"Edit",L"编辑"),24,304,112);
-        Button(state,Remove,Tr(L"Remove",L"移除"),148,304,112);
-        Button(state,Up,Tr(L"Move up",L"上移"),284,304,120);
-        Button(state,Down,Tr(L"Move down",L"下移"),416,304,120);
+        Button(state,Edit,Tr(L"Edit",L"编辑",L"編集"),24,304,112);
+        Button(state,Remove,Tr(L"Remove",L"移除",L"削除"),148,304,112);
+        Button(state,Up,Tr(L"Move up",L"上移",L"上へ移動"),284,304,120);
+        Button(state,Down,Tr(L"Move down",L"下移",L"下へ移動"),416,304,120);
         EnableWindow(state.Control(Remove),state.apps.size()>1);
         EnableWindow(state.Control(Up),state.selected>0);
         EnableWindow(state.Control(Down),state.selected+1<static_cast<int>(state.apps.size()));
         break;
     }
     case Page::Settings: {
-        Label(state,Tr(L"Language",L"语言"),40,99,165);
+        Label(state,Tr(L"Language",L"语言",L"言語"),40,99,165);
         const auto combo=Control(state,LanguageChoice,L"COMBOBOX",L"",WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,266,94,254,150);
-        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"English"));
-        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(Tr(L"Simplified Chinese",L"简体中文")));
-        SendMessageW(combo,CB_SETCURSEL,CurrentLanguage()==Language::SimplifiedChinese?1:0,0);
+        // Each language is named in itself, in Language order.
+        for(const auto* name:{L"English",L"简体中文",L"日本語"})SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));
+        SendMessageW(combo,CB_SETCURSEL,static_cast<WPARAM>(CurrentLanguage()),0);
         StyleCombo(state,combo);
-        Button(state,About,Tr(L"About Copilot Reel",L"关于 Copilot Reel"),24,154,512,47);
+        Button(state,About,Tr(L"About Copilot Reel",L"关于 Copilot Reel",L"Copilot Reel について"),24,154,512,47);
         break;
     }
     case Page::Appearance:
-        Button(state,WindowsAppearance,Tr(L"Open Windows appearance",L"打开 Windows 外观设置"),24,302,250);
+        Button(state,WindowsAppearance,Tr(L"Open Windows appearance",L"打开 Windows 外观设置",L"Windows の個人用設定を開く"),24,302,250);
         break;
     case Page::Editor: {
-        EditField(state,Name,Tr(L"Name",L"名称"),AppDisplayName(state.draft),kMargin,row(0),contentWidth,128);
+        EditField(state,Name,Tr(L"Name",L"名称",L"名前"),AppDisplayName(state.draft),kMargin,row(0),contentWidth,128);
         // The target shares its row with two equal buttons, each kGap apart.
         const int targetWidth=contentWidth-2*(kSideButton+kGap), fieldY=row(1)+kLabelToField;
         EditField(state,Target,state.draft.kind==TargetKind::Aumid?
-            Tr(L"Application ID (AUMID)",L"应用 ID (AUMID)"):
-            Tr(L"Open with · app, shortcut or website",L"打开目标 · 应用、快捷方式或网页"),state.draft.target,kMargin,row(1),targetWidth);
-        Button(state,ChooseApp,Tr(L"Choose app…",L"选择应用…"),kMargin+targetWidth+kGap,fieldY,kSideButton,kFieldHeight);
-        Button(state,Browse,Tr(L"Browse…",L"浏览…"),primaryX,fieldY,kSideButton,kFieldHeight);
+            Tr(L"Application ID (AUMID)",L"应用 ID (AUMID)",L"アプリ ID (AUMID)"):
+            Tr(L"Open with · app, shortcut or website",L"打开目标 · 应用、快捷方式或网页",L"開く対象 · アプリ、ショートカット、Web サイト"),state.draft.target,kMargin,row(1),targetWidth);
+        Button(state,ChooseApp,Tr(L"Choose app…",L"选择应用…",L"アプリを選択…"),kMargin+targetWidth+kGap,fieldY,kSideButton,kFieldHeight);
+        Button(state,Browse,Tr(L"Browse…",L"浏览…",L"参照…"),primaryX,fieldY,kSideButton,kFieldHeight);
         EnableWindow(state.Control(Browse),state.draft.kind==TargetKind::Shell);
         // Secondary navigation sits opposite the primary action in the footer.
-        Button(state,Advanced,Tr(L"Advanced  ›",L"高级选项  ›"),kMargin,kFooterY,150,kFooterHeight);
-        Button(state,Save,Tr(L"Save",L"保存"),primaryX,kFooterY,kSideButton,kFooterHeight);
+        Button(state,Advanced,Tr(L"Advanced  ›",L"高级选项  ›",L"詳細設定  ›"),kMargin,kFooterY,150,kFooterHeight);
+        Button(state,Save,Tr(L"Save",L"保存",L"保存"),primaryX,kFooterY,kSideButton,kFooterHeight);
         break;
     }
     case Page::Advanced: {
-        Label(state,Tr(L"Launch method",L"启动方式"),kMargin,row(0),contentWidth);
+        Label(state,Tr(L"Launch method",L"启动方式",L"起動方法"),kMargin,row(0),contentWidth);
         const auto combo=Control(state,Kind,L"COMBOBOX",L"",WS_TABSTOP|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,
             kMargin,row(0)+kLabelToField,contentWidth,150);
-        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(Tr(L"Application, shortcut or URI",L"应用、快捷方式或 URI")));
-        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(Tr(L"Packaged application (AUMID)",L"打包应用 (AUMID)")));
+        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(Tr(L"Application, shortcut or URI",L"应用、快捷方式或 URI",L"アプリ、ショートカット、URI")));
+        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(Tr(L"Packaged application (AUMID)",L"打包应用 (AUMID)",L"パッケージ アプリ (AUMID)")));
         SendMessageW(combo,CB_SETCURSEL,state.draft.kind==TargetKind::Aumid?1:0,0);
         StyleCombo(state,combo);
-        EditField(state,Arguments,Tr(L"Arguments (optional)",L"启动参数（可选）"),state.draft.arguments,kMargin,row(1),contentWidth);
-        EditField(state,Directory,Tr(L"Working directory (optional)",L"工作目录（可选）"),state.draft.workingDirectory,kMargin,row(2),contentWidth);
+        EditField(state,Arguments,Tr(L"Arguments (optional)",L"启动参数（可选）",L"引数 (省略可)"),state.draft.arguments,kMargin,row(1),contentWidth);
+        EditField(state,Directory,Tr(L"Working directory (optional)",L"工作目录（可选）",L"作業フォルダー (省略可)"),state.draft.workingDirectory,kMargin,row(2),contentWidth);
         EnableWindow(state.Control(Directory),state.draft.kind==TargetKind::Shell);
-        Button(state,Done,Tr(L"Done",L"完成"),primaryX,kFooterY,kSideButton,kFooterHeight);
+        Button(state,Done,Tr(L"Done",L"完成",L"完了"),primaryX,kFooterY,kSideButton,kFooterHeight);
         break;
     }
     case Page::Picker: {
         const auto search=InputField(state,Search,state.query,kMargin,kContentY,contentWidth,128);
-        SendMessageW(search,EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(Tr(L"Search apps",L"搜索应用")));
+        SendMessageW(search,EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(Tr(L"Search apps",L"搜索应用",L"アプリを検索")));
         SetWindowSubclass(search,SearchProc,1,reinterpret_cast<DWORD_PTR>(&state));
         // Whole rows at rest: a half-cut last row reads as a rendering fault.
         const auto viewport=Control(state,InstalledViewport,kViewportClass,L"",WS_VSCROLL|WS_CLIPCHILDREN,
             kMargin,kContentY+kFieldHeight+12,contentWidth,kListRows*kRowHeight,WS_EX_CONTROLPARENT);
         SetWindowLongPtrW(viewport,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(&state));
-        const auto list=CreateWindowExW(0,L"LISTBOX",Tr(L"Installed apps",L"已安装的应用"),
+        const auto list=CreateWindowExW(0,L"LISTBOX",Tr(L"Installed apps",L"已安装的应用",L"インストール済みのアプリ"),
             WS_CHILD|WS_VISIBLE|WS_TABSTOP|LBS_NOTIFY|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|LBS_NOINTEGRALHEIGHT,
             0,0,state.Px(contentWidth),state.Px(kListRows*kRowHeight),viewport,
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(InstalledList)),GetModuleHandleW(nullptr),nullptr);
@@ -744,7 +746,7 @@ void BuildPage(State& state) {
         SendMessageW(list,LB_SETITEMHEIGHT,0,state.Px(kRowHeight));
         state.scroll.viewport=viewport;state.scroll.list=list;state.scroll.row=state.Px(kRowHeight);
         ThemeList(state,viewport);
-        Button(state,Pick,Tr(L"Choose",L"选择"),primaryX,kFooterY,kSideButton,kFooterHeight);
+        Button(state,Pick,Tr(L"Choose",L"选择",L"選択"),primaryX,kFooterY,kSideButton,kFooterHeight);
         Filter(state);
         break;
     }
@@ -776,11 +778,11 @@ void UpdateAppearance(State& state) {
 bool Persist(State& state,const std::vector<AppTarget>& candidate) {
     std::wstring error;
     if(!SaveTargets(candidate,error)) {
-        MessageBoxW(state.window,error.c_str(),Tr(L"Cannot save applications",L"无法保存应用"),MB_OK|MB_ICONWARNING);
+        MessageBoxW(state.window,error.c_str(),Tr(L"Cannot save applications",L"无法保存应用",L"アプリを保存できません"),MB_OK|MB_ICONWARNING);
         return false;
     }
     state.apps=candidate;
-    state.status=Tr(L"Saved",L"已保存");
+    state.status=Tr(L"Saved",L"已保存",L"保存しました");
     PostMessageW(state.notifyOwner,kConfigChangedMessage,0,0);
     return true;
 }
@@ -797,7 +799,7 @@ bool SaveDraft(State& state) {
 bool MayLeaveEditor(State& state) {
     if(!state.dirty || (state.page!=Page::Editor&&state.page!=Page::Advanced&&state.page!=Page::Picker))return true;
     const int response=MessageBoxW(state.window,
-        Tr(L"Save your changes to this application?",L"保存对此应用的修改？"),kAppName,MB_YESNOCANCEL|MB_ICONQUESTION);
+        Tr(L"Save your changes to this application?",L"保存对此应用的修改？",L"このアプリへの変更を保存しますか?"),kAppName,MB_YESNOCANCEL|MB_ICONQUESTION);
     if(response==IDCANCEL)return false;
     return response!=IDYES || SaveDraft(state);
 }
@@ -914,7 +916,8 @@ void BrowseTarget(State& state) {
     OPENFILENAMEW dialog{sizeof(dialog)};
     dialog.hwndOwner=state.window;
     dialog.lpstrFilter=Tr(L"Applications and shortcuts\0*.exe;*.lnk;*.url\0All files\0*.*\0\0",
-        L"应用和快捷方式\0*.exe;*.lnk;*.url\0所有文件\0*.*\0\0");
+        L"应用和快捷方式\0*.exe;*.lnk;*.url\0所有文件\0*.*\0\0",
+        L"アプリとショートカット\0*.exe;*.lnk;*.url\0すべてのファイル\0*.*\0\0");
     dialog.lpstrFile=path; dialog.nMaxFile=static_cast<DWORD>(std::size(path));
     dialog.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR|OFN_EXPLORER;
     if(GetOpenFileNameW(&dialog)) {
@@ -953,11 +956,11 @@ void Command(State& state,int id,int notification) {
         return;
     }
     if(id==LanguageChoice && notification==CBN_SELCHANGE) {
-        const auto language=SendMessageW(state.Control(LanguageChoice),CB_GETCURSEL,0,0)==1?
-            Language::SimplifiedChinese:Language::English;
+        const auto selected=SendMessageW(state.Control(LanguageChoice),CB_GETCURSEL,0,0);
+        const auto language=selected>0 && selected<static_cast<LRESULT>(kLanguageCount)?static_cast<Language>(selected):Language::English;
         if(!SaveLanguage(language)) {
-            MessageBoxW(state.window,Tr(L"The language preference could not be saved.",L"无法保存语言设置。"),kAppName,MB_OK|MB_ICONWARNING);
-            SendMessageW(state.Control(LanguageChoice),CB_SETCURSEL,CurrentLanguage()==Language::SimplifiedChinese?1:0,0);
+            MessageBoxW(state.window,Tr(L"The language preference could not be saved.",L"无法保存语言设置。",L"言語の設定を保存できませんでした。"),kAppName,MB_OK|MB_ICONWARNING);
+            SendMessageW(state.Control(LanguageChoice),CB_SETCURSEL,static_cast<WPARAM>(CurrentLanguage()),0);
             return;
         }
         SetLanguage(language);PostMessageW(state.notifyOwner,kLanguageChangedMessage,0,0);
@@ -992,7 +995,7 @@ void Command(State& state,int id,int notification) {
     case Save:CompleteEdit(state);break;
     case Remove:
         if(state.apps.size()>1 && MessageBoxW(state.window,
-            (std::wstring(Tr(L"Remove ",L"移除 "))+AppDisplayName(state.apps.at(static_cast<size_t>(state.selected)))+L"?").c_str(),
+            (std::wstring(Tr(L"Remove ",L"移除 ",L""))+AppDisplayName(state.apps.at(static_cast<size_t>(state.selected)))+Tr(L"?",L"?",L" を削除しますか?")).c_str(),
             kAppName,MB_YESNO|MB_ICONQUESTION)==IDYES) {
             auto candidate=state.apps;candidate.erase(candidate.begin()+state.selected);
             if(Persist(state,candidate))BuildPage(state);
@@ -1008,7 +1011,7 @@ void Command(State& state,int id,int notification) {
     }
     case WindowsAppearance:
         if(reinterpret_cast<INT_PTR>(ShellExecuteW(state.window,L"open",L"ms-settings:personalization-colors",nullptr,nullptr,SW_SHOWNORMAL))<=32)
-            MessageBoxW(state.window,Tr(L"Windows appearance settings could not be opened.",L"无法打开 Windows 外观设置。"),kAppName,MB_OK|MB_ICONWARNING);
+            MessageBoxW(state.window,Tr(L"Windows appearance settings could not be opened.",L"无法打开 Windows 外观设置。",L"Windows の個人用設定を開けませんでした。"),kAppName,MB_OK|MB_ICONWARNING);
         break;
     }
 }
@@ -1074,7 +1077,7 @@ LRESULT CALLBACK OsdProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
         case WM_COMMAND:Command(*state,LOWORD(wParam),HIWORD(wParam));return 0;
         case WM_KEYDOWN:if(wParam==VK_ESCAPE){NavigateBack(*state);return 0;}break;
         case WM_SETTINGCHANGE:case WM_THEMECHANGED:case kAppearanceMessage:UpdateAppearance(*state);return 0;
-        case kLanguageChangedMessage:BuildPage(*state);return 0;
+        case kLanguageChangedMessage:UpdateFont(*state);BuildPage(*state);return 0;
         case kInstalledMessage:ReceiveInstalled(*state);return 0;
         case WM_DPICHANGED: {
             state->dpi=HIWORD(wParam);
@@ -1095,7 +1098,8 @@ LRESULT CALLBACK OsdProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
     } catch(...) {
         if(message==WM_CREATE)return -1;
         MessageBoxW(window,Tr(L"The menu could not complete that action.",
-            L"菜单无法完成此操作。"),kAppName,MB_OK|MB_ICONWARNING);
+            L"菜单无法完成此操作。",
+            L"メニューでこの操作を完了できませんでした。"),kAppName,MB_OK|MB_ICONWARNING);
     }
     return DefWindowProcW(window,message,wParam,lParam);
 }
@@ -1126,14 +1130,14 @@ void ShowOsdAt(HWND owner,int editorIndex,bool focusedEditor,const AppTarget* pr
         cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hIcon=LoadIconW(cls.hInstance,MAKEINTRESOURCEW(1));
         cls.lpszClassName=kOsdClass;
         if(!RegisterClassExW(&cls)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {
-            MessageBoxW(owner,Tr(L"The quick menu window could not be registered.",L"无法注册快捷菜单窗口。"),kAppName,MB_OK|MB_ICONERROR);
+            MessageBoxW(owner,Tr(L"The quick menu window could not be registered.",L"无法注册快捷菜单窗口。",L"簡易メニューのウィンドウを登録できませんでした。"),kAppName,MB_OK|MB_ICONERROR);
             return;
         }
         WNDCLASSEXW viewport{sizeof(viewport)};
         viewport.lpfnWndProc=ViewportProc;viewport.hInstance=cls.hInstance;
         viewport.hCursor=LoadCursorW(nullptr,IDC_ARROW);viewport.lpszClassName=kViewportClass;
         if(!RegisterClassExW(&viewport)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {
-            MessageBoxW(owner,Tr(L"The quick menu window could not be registered.",L"无法注册快捷菜单窗口。"),kAppName,MB_OK|MB_ICONERROR);
+            MessageBoxW(owner,Tr(L"The quick menu window could not be registered.",L"无法注册快捷菜单窗口。",L"簡易メニューのウィンドウを登録できませんでした。"),kAppName,MB_OK|MB_ICONERROR);
             return;
         }
         auto state=std::make_unique<State>();state->notifyOwner=owner;
@@ -1160,10 +1164,10 @@ void ShowOsdAt(HWND owner,int editorIndex,bool focusedEditor,const AppTarget* pr
         const int width=bounds.right-bounds.left,height=bounds.bottom-bounds.top;
         const int x=monitor.rcWork.left+(monitor.rcWork.right-monitor.rcWork.left-width)/2;
         const int y=monitor.rcWork.top+(monitor.rcWork.bottom-monitor.rcWork.top-height)/2;
-        gOsd=CreateWindowExW(extended,kOsdClass,Tr(L"Copilot Reel — Quick menu",L"Copilot Reel — 快捷菜单"),
+        gOsd=CreateWindowExW(extended,kOsdClass,Tr(L"Copilot Reel — Quick menu",L"Copilot Reel — 快捷菜单",L"Copilot Reel — 簡易メニュー"),
             style,x,y,width,height,nullptr,nullptr,cls.hInstance,&state);
         if(!gOsd) {
-            MessageBoxW(owner,Tr(L"The quick menu could not be created.",L"无法创建快捷菜单。"),kAppName,MB_OK|MB_ICONERROR);
+            MessageBoxW(owner,Tr(L"The quick menu could not be created.",L"无法创建快捷菜单。",L"簡易メニューを作成できませんでした。"),kAppName,MB_OK|MB_ICONERROR);
             return;
         }
         // WM_CREATE uses the actual monitor DPI. Recenter after its size correction.
@@ -1173,7 +1177,7 @@ void ShowOsdAt(HWND owner,int editorIndex,bool focusedEditor,const AppTarget* pr
         ShowWindow(gOsd,SW_SHOWNORMAL);UpdateWindow(gOsd);SetForegroundWindow(gOsd);
         if(!error.empty())MessageBoxW(gOsd,error.c_str(),kAppName,MB_OK|MB_ICONWARNING);
     } catch(...) {
-        MessageBoxW(owner,Tr(L"The quick menu could not be opened.",L"无法打开快捷菜单。"),kAppName,MB_OK|MB_ICONERROR);
+        MessageBoxW(owner,Tr(L"The quick menu could not be opened.",L"无法打开快捷菜单。",L"簡易メニューを開けませんでした。"),kAppName,MB_OK|MB_ICONERROR);
     }
 }
 void ShowOsd(HWND owner) { ShowOsdAt(owner,-1,false); }

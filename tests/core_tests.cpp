@@ -473,6 +473,11 @@ int main() {
     Check(translatedSettings[0].visual.name!=settings[0].visual.name &&
         translatedSettings[0].action==settings[0].action && translatedSettings[0].visual.target==settings[0].visual.target,
         "language changes labels without changing action identity");
+    SetLanguage(Language::Japanese);
+    const auto japaneseSettings=BuildMenu(MenuPage::Settings,noApps,presets);
+    Check(japaneseSettings[0].visual.name!=settings[0].visual.name && japaneseSettings[0].visual.name!=translatedSettings[0].visual.name &&
+        japaneseSettings[0].action==settings[0].action && japaneseSettings[0].visual.target==settings[0].visual.target,
+        "Japanese labels keep the same action identity");
     SetLanguage(Language::English);
     Check(ParseUri(L"copilot-reel://?state=Down")==Command::HoldStart, "protocol down");
     Check(ParseUri(L"copilot-reel://?state=Up")==Command::HoldStop, "protocol up");

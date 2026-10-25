@@ -1,5 +1,6 @@
 #include "settings.h"
 #include "localization.h"
+#include "typography.h"
 
 #include <commdlg.h>
 #include <shlobj.h>
@@ -89,8 +90,8 @@ bool WriteList(const std::wstring& path, const FileFormat& format, const std::ve
 
 bool Validate(const std::vector<AppTarget>& targets, std::wstring& error, const FileFormat& format = kReelFormat) {
     if (targets.size() < format.minimum || targets.size() > format.maximum) {
-        error = &format == &kReelFormat ? Tr(L"The reel requires between 1 and 8 applications.", L"轮盘需要 1 至 8 个应用。") :
-            Tr(L"At most 16 apps can wait outside the reel.", L"轮盘外最多保留 16 个应用。");
+        error = &format == &kReelFormat ? Tr(L"The reel requires between 1 and 8 applications.", L"轮盘需要 1 至 8 个应用。", L"リールには 1 ～ 8 個のアプリが必要です。") :
+            Tr(L"At most 16 apps can wait outside the reel.", L"轮盘外最多保留 16 个应用。", L"リールの外に置けるアプリは最大 16 個です。");
         return false;
     }
     for (std::size_t i = 0; i < targets.size(); ++i) {
@@ -99,9 +100,10 @@ bool Validate(const std::vector<AppTarget>& targets, std::wstring& error, const 
             !ValidText(app.target, 8192) || !ValidText(app.arguments, 8192) ||
             !ValidText(app.workingDirectory, 8192) ||
             (app.kind != TargetKind::Shell && app.kind != TargetKind::Aumid)) {
-            error = std::wstring(Tr(L"Invalid application ", L"无效的应用 ")) + std::to_wstring(i + 1) +
+            error = std::wstring(Tr(L"Invalid application ", L"无效的应用 ", L"無効なアプリ ")) + std::to_wstring(i + 1) +
                 Tr(L": name and target are required. Names support up to 128 characters; other fields support 8192. Line breaks are not allowed.",
-                   L"：名称和目标不能为空。名称最多 128 字符，其他字段最多 8192 字符，不能包含换行。");
+                   L"：名称和目标不能为空。名称最多 128 字符，其他字段最多 8192 字符，不能包含换行。",
+                   L": 名前と対象は必須です。名前は 128 文字まで、その他の項目は 8192 文字までで、改行は使えません。");
             return false;
         }
     }
@@ -227,37 +229,38 @@ void RefreshLanguage(HWND window, SettingsState& state) {
     const auto label = [&](int id, const wchar_t* text) {
         SetWindowTextW(Control(state, id), text);
     };
-    SetWindowTextW(window, Tr(L"Copilot Reel — Application settings", L"Copilot Reel — 应用设置"));
-    label(IdLanguageLabel, Tr(L"Language", L"语言"));
+    SetWindowTextW(window, Tr(L"Copilot Reel — Application settings", L"Copilot Reel — 应用设置", L"Copilot Reel — アプリ設定"));
+    label(IdLanguageLabel, Tr(L"Language", L"语言", L"言語"));
     label(IdInfo, Tr(
         L"Configure 1–8 entries. Choose installed applications for short-tap activation.\r\nSave applies your edits. Add creates another entry from the current form.",
-        L"配置 1–8 个轮盘入口。请为短按启动选择已安装的本机应用。\r\n编辑后可直接保存；“添加”会把当前表单追加为新应用。"));
-    label(IdNameLabel, Tr(L"Display name", L"显示名称"));
-    label(IdKindLabel, Tr(L"Launch method", L"启动方式"));
-    label(IdTargetLabel, Tr(L"Target: application, shortcut, URI, or AUMID", L"目标：程序、快捷方式、网址、协议或 AUMID"));
-    label(IdBrowse, Tr(L"Browse…", L"浏览…"));
-    label(IdArgsLabel, Tr(L"Arguments (optional)", L"启动参数（可选）"));
-    label(IdWorkingLabel, Tr(L"Working directory (optional; Shell only)", L"工作目录（可选，仅 Shell）"));
-    label(IdAdd, Tr(L"Add as new", L"添加为新应用"));
-    label(IdUpdate, Tr(L"Update selected", L"更新所选应用"));
-    label(IdUp, Tr(L"Up", L"上移"));
-    label(IdDown, Tr(L"Down", L"下移"));
-    label(IdRemove, Tr(L"Remove", L"移除"));
-    label(IdSave, Tr(L"Save and apply", L"保存并应用"));
-    label(IdClose, Tr(L"Close", L"关闭"));
+        L"配置 1–8 个轮盘入口。请为短按启动选择已安装的本机应用。\r\n编辑后可直接保存；“添加”会把当前表单追加为新应用。",
+        L"1 ～ 8 個の項目を設定します。短押しで起動するには、インストール済みのアプリを選んでください。\r\n「保存」で編集内容を反映し、「追加」で現在のフォームから項目を追加します。"));
+    label(IdNameLabel, Tr(L"Display name", L"显示名称", L"表示名"));
+    label(IdKindLabel, Tr(L"Launch method", L"启动方式", L"起動方法"));
+    label(IdTargetLabel, Tr(L"Target: application, shortcut, URI, or AUMID", L"目标：程序、快捷方式、网址、协议或 AUMID", L"対象: アプリ、ショートカット、URI、または AUMID"));
+    label(IdBrowse, Tr(L"Browse…", L"浏览…", L"参照…"));
+    label(IdArgsLabel, Tr(L"Arguments (optional)", L"启动参数（可选）", L"引数 (省略可)"));
+    label(IdWorkingLabel, Tr(L"Working directory (optional; Shell only)", L"工作目录（可选，仅 Shell）", L"作業フォルダー (省略可、Shell のみ)"));
+    label(IdAdd, Tr(L"Add as new", L"添加为新应用", L"新規として追加"));
+    label(IdUpdate, Tr(L"Update selected", L"更新所选应用", L"選択項目を更新"));
+    label(IdUp, Tr(L"Up", L"上移", L"上へ"));
+    label(IdDown, Tr(L"Down", L"下移", L"下へ"));
+    label(IdRemove, Tr(L"Remove", L"移除", L"削除"));
+    label(IdSave, Tr(L"Save and apply", L"保存并应用", L"保存して適用"));
+    label(IdClose, Tr(L"Close", L"关闭", L"閉じる"));
     const auto kind = Control(state, IdKind);
     const LRESULT selected = SendMessageW(kind, CB_GETCURSEL, 0, 0);
     SendMessageW(kind, CB_RESETCONTENT, 0, 0);
-    SendMessageW(kind, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Tr(L"Shell — application / shortcut / URI", L"Shell — 程序 / 快捷方式 / URI")));
-    SendMessageW(kind, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Tr(L"AUMID — installed packaged application", L"AUMID — 已安装的打包应用")));
+    SendMessageW(kind, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Tr(L"Shell — application / shortcut / URI", L"Shell — 程序 / 快捷方式 / URI", L"Shell — アプリ / ショートカット / URI")));
+    SendMessageW(kind, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Tr(L"AUMID — installed packaged application", L"AUMID — 已安装的打包应用", L"AUMID — インストール済みのパッケージ アプリ")));
     SendMessageW(kind, CB_SETCURSEL, selected == 1 ? 1 : 0, 0);
     const auto language = Control(state, IdLanguage);
     SendMessageW(language, CB_RESETCONTENT, 0, 0);
-    SendMessageW(language, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"English"));
-    SendMessageW(language, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Tr(L"Simplified Chinese", L"简体中文")));
-    SendMessageW(language, CB_SETCURSEL, CurrentLanguage() == Language::SimplifiedChinese ? 1 : 0, 0);
-    Status(state, state.dirty || state.draftDirty ? Tr(L"There are unsaved changes.", L"有未保存的修改。") :
-        Tr(L"Save to apply application changes.", L"更改将在保存后应用。"));
+    // Each language is named in itself, in Language order.
+    for (const auto* name : {L"English", L"简体中文", L"日本語"}) SendMessageW(language, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
+    SendMessageW(language, CB_SETCURSEL, static_cast<WPARAM>(CurrentLanguage()), 0);
+    Status(state, state.dirty || state.draftDirty ? Tr(L"There are unsaved changes.", L"有未保存的修改。", L"保存されていない変更があります。") :
+        Tr(L"Save to apply application changes.", L"更改将在保存后应用。", L"保存するとアプリの変更が反映されます。"));
 }
 
 void UpdateButtons(SettingsState& state) {
@@ -298,7 +301,7 @@ bool ReadDraft(HWND window, SettingsState& state, AppTarget& app) {
     app.workingDirectory = app.kind == TargetKind::Shell ? TextOf(Control(state, IdWorking)) : L"";
     std::wstring error;
     if (!Validate({app}, error)) {
-        MessageBoxW(window, error.c_str(), Tr(L"Cannot apply changes", L"无法应用修改"), MB_OK | MB_ICONWARNING);
+        MessageBoxW(window, error.c_str(), Tr(L"Cannot apply changes", L"无法应用修改", L"変更を適用できません"), MB_OK | MB_ICONWARNING);
         return false;
     }
     return true;
@@ -318,7 +321,7 @@ void SetFont(HWND window, SettingsState& state) {
     state.dpi = GetDpiForWindow(window);
     auto font = CreateFontW(-MulDiv(10, static_cast<int>(state.dpi), 72), 0, 0, 0,
         FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, ControlFamily(CurrentLanguage()));
     if (!font) return;
     for (const auto& [id, control] : state.controls) {
         (void)id;
@@ -409,10 +412,11 @@ void Browse(HWND window, SettingsState& state) {
     dialog.lStructSize = sizeof(dialog);
     dialog.hwndOwner = window;
     dialog.lpstrFilter = Tr(L"Applications or shortcuts (*.exe;*.lnk)\0*.exe;*.lnk\0All files (*.*)\0*.*\0\0",
-        L"应用或快捷方式 (*.exe;*.lnk)\0*.exe;*.lnk\0所有文件 (*.*)\0*.*\0\0");
+        L"应用或快捷方式 (*.exe;*.lnk)\0*.exe;*.lnk\0所有文件 (*.*)\0*.*\0\0",
+        L"アプリまたはショートカット (*.exe;*.lnk)\0*.exe;*.lnk\0すべてのファイル (*.*)\0*.*\0\0");
     dialog.lpstrFile = path.data();
     dialog.nMaxFile = static_cast<DWORD>(path.size());
-    dialog.lpstrTitle = Tr(L"Select an application for the reel", L"选择轮盘要打开的应用");
+    dialog.lpstrTitle = Tr(L"Select an application for the reel", L"选择轮盘要打开的应用", L"リールで開くアプリを選択");
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_DONTADDTORECENT | OFN_NODEREFERENCELINKS;
     if (GetOpenFileNameW(&dialog)) {
         SetWindowTextW(Control(state, IdTarget), path.data());
@@ -420,7 +424,7 @@ void Browse(HWND window, SettingsState& state) {
         state.draftDirty = true;
         UpdateButtons(state);
     } else if (const DWORD error = CommDlgExtendedError(); error != 0) {
-        Status(state, std::wstring(Tr(L"File picker error: ", L"文件选择器错误：")) + std::to_wstring(error));
+        Status(state, std::wstring(Tr(L"File picker error: ", L"文件选择器错误：", L"ファイルを選択できませんでした: ")) + std::to_wstring(error));
     }
 }
 
@@ -429,11 +433,11 @@ void SaveFromWindow(HWND window, SettingsState& state) {
     Populate(state, state.selected);
     std::wstring error;
     if (!SaveTargets(state.apps, error)) {
-        MessageBoxW(window, error.c_str(), Tr(L"Save failed; original configuration retained", L"保存失败；原配置未替换"), MB_OK | MB_ICONERROR);
+        MessageBoxW(window, error.c_str(), Tr(L"Save failed; original configuration retained", L"保存失败；原配置未替换", L"保存に失敗しました。元の構成はそのままです"), MB_OK | MB_ICONERROR);
         return;
     }
     state.dirty = false;
-    Status(state, Tr(L"Saved. The reel configuration is now applied.", L"已保存，轮盘配置已应用。"));
+    Status(state, Tr(L"Saved. The reel configuration is now applied.", L"已保存，轮盘配置已应用。", L"保存しました。リールの構成を反映しました。"));
     if (IsWindow(state.notifyOwner)) PostMessageW(state.notifyOwner, kConfigChangedMessage, 0, 0);
 }
 
@@ -449,12 +453,12 @@ LRESULT HandleSettings(HWND window, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_CREATE:
         if (!BuildControls(window, *state)) return -1;
         if (!state->initialError.empty()) {
-            Status(*state, Tr(L"Defaults loaded. Check the original configuration before saving.", L"配置读取失败；显示默认入口。保存前请检查原文件。"));
+            Status(*state, Tr(L"Defaults loaded. Check the original configuration before saving.", L"配置读取失败；显示默认入口。保存前请检查原文件。", L"既定の項目を読み込みました。保存する前に元の構成を確認してください。"));
             PostMessageW(window, WM_APP + 100, 0, 0);
         }
         return 0;
     case WM_APP + 100:
-        MessageBoxW(window, state->initialError.c_str(), Tr(L"Configuration notice", L"配置读取提示"), MB_OK | MB_ICONWARNING);
+        MessageBoxW(window, state->initialError.c_str(), Tr(L"Configuration notice", L"配置读取提示", L"構成についての通知"), MB_OK | MB_ICONWARNING);
         return 0;
     case WM_SIZE:
         if (state->controls.size() == 23) Layout(window, *state);
@@ -484,18 +488,19 @@ LRESULT HandleSettings(HWND window, UINT message, WPARAM wParam, LPARAM lParam) 
         if (state->populating) return 0;
         if (id == IdLanguage && notification == CBN_SELCHANGE) {
             const auto selected = SendMessageW(Control(*state, IdLanguage), CB_GETCURSEL, 0, 0);
-            const auto language = selected == 1 ? Language::SimplifiedChinese : Language::English;
+            const auto language = selected > 0 && selected < static_cast<LRESULT>(kLanguageCount) ? static_cast<Language>(selected) : Language::English;
             SetLanguage(language);
             const bool saved = SaveLanguage(language);
+            SetFont(window, *state);
             RefreshLanguage(window, *state);
-            if (!saved) Status(*state, Tr(L"Language changed for this session; the preference could not be saved.", L"当前会话语言已更改，但无法保存语言偏好。"));
+            if (!saved) Status(*state, Tr(L"Language changed for this session; the preference could not be saved.", L"当前会话语言已更改，但无法保存语言偏好。", L"今回の起動中は言語を変更しましたが、設定を保存できませんでした。"));
             if (IsWindow(state->notifyOwner)) PostMessageW(state->notifyOwner, kLanguageChangedMessage, 0, 0);
             return 0;
         }
         if (((id == IdName || id == IdTarget || id == IdArgs || id == IdWorking) && notification == EN_CHANGE) ||
             (id == IdKind && notification == CBN_SELCHANGE)) {
             state->draftDirty = true;
-            Status(*state, Tr(L"There are unsaved changes.", L"有未保存的修改。"));
+            Status(*state, Tr(L"There are unsaved changes.", L"有未保存的修改。", L"保存されていない変更があります。"));
             UpdateButtons(*state);
             return 0;
         }
@@ -516,14 +521,14 @@ LRESULT HandleSettings(HWND window, UINT message, WPARAM wParam, LPARAM lParam) 
             state->apps.push_back(std::move(app));
             state->dirty = true;
             Populate(*state, static_cast<int>(state->apps.size()) - 1);
-            Status(*state, Tr(L"Entry added. Save to apply.", L"已加入列表；请保存以应用。"));
+            Status(*state, Tr(L"Entry added. Save to apply.", L"已加入列表；请保存以应用。", L"項目を追加しました。保存すると反映されます。"));
             break;
         }
         case IdUpdate:
             state->draftDirty = true;
             if (ApplyDraft(window, *state)) {
                 Populate(*state, state->selected);
-                Status(*state, Tr(L"Entry updated. Save to apply.", L"已更新列表；请保存以应用。"));
+                Status(*state, Tr(L"Entry updated. Save to apply.", L"已更新列表；请保存以应用。", L"項目を更新しました。保存すると反映されます。"));
             }
             break;
         case IdRemove:
@@ -531,7 +536,7 @@ LRESULT HandleSettings(HWND window, UINT message, WPARAM wParam, LPARAM lParam) 
                 state->apps.erase(state->apps.begin() + state->selected);
                 state->dirty = true;
                 Populate(*state, state->selected);
-                Status(*state, Tr(L"Entry removed. Save to apply.", L"已从列表移除；请保存以应用。"));
+                Status(*state, Tr(L"Entry removed. Save to apply.", L"已从列表移除；请保存以应用。", L"項目を削除しました。保存すると反映されます。"));
             }
             break;
         case IdUp:
@@ -541,7 +546,7 @@ LRESULT HandleSettings(HWND window, UINT message, WPARAM wParam, LPARAM lParam) 
             std::swap(state->apps.at(static_cast<std::size_t>(state->selected)), state->apps.at(static_cast<std::size_t>(next)));
             state->dirty = true;
             Populate(*state, next);
-            Status(*state, Tr(L"Order updated. Save to apply.", L"已调整顺序；请保存以应用。"));
+            Status(*state, Tr(L"Order updated. Save to apply.", L"已调整顺序；请保存以应用。", L"順序を変更しました。保存すると反映されます。"));
             break;
         }
         case IDOK:
@@ -554,8 +559,8 @@ LRESULT HandleSettings(HWND window, UINT message, WPARAM wParam, LPARAM lParam) 
     }
     case WM_CLOSE:
         if (state->dirty || state->draftDirty) {
-            const int answer = MessageBoxW(window, Tr(L"Save the reel application configuration?", L"是否保存轮盘应用配置？"),
-                Tr(L"Unsaved changes", L"存在未保存的修改"), MB_YESNOCANCEL | MB_ICONQUESTION);
+            const int answer = MessageBoxW(window, Tr(L"Save the reel application configuration?", L"是否保存轮盘应用配置？", L"リールのアプリ構成を保存しますか?"),
+                Tr(L"Unsaved changes", L"存在未保存的修改", L"保存されていない変更"), MB_YESNOCANCEL | MB_ICONQUESTION);
             if (answer == IDCANCEL) return 0;
             if (answer == IDYES) {
                 SaveFromWindow(window, *state);
@@ -579,7 +584,8 @@ LRESULT CALLBACK SettingsProc(HWND window, UINT message, WPARAM wParam, LPARAM l
         if (message == WM_NCCREATE) return FALSE;
         if (message == WM_CREATE) return -1;
         MessageBoxW(window, Tr(L"The operation could not be completed. Close settings and try again. The original configuration will not be partially overwritten.",
-            L"无法完成此操作。请关闭设置窗口后重试。原配置文件不会被部分写入。"), L"Copilot Reel", MB_OK | MB_ICONERROR);
+            L"无法完成此操作。请关闭设置窗口后重试。原配置文件不会被部分写入。",
+            L"操作を完了できませんでした。設定を閉じてもう一度お試しください。元の構成が中途半端に上書きされることはありません。"), L"Copilot Reel", MB_OK | MB_ICONERROR);
         return 0;
     }
 }
@@ -602,7 +608,7 @@ std::vector<AppTarget> LoadTargets(std::wstring& error) {
     error.clear();
     try {
         const auto path = ConfigPath();
-        if (path.empty()) { error = Tr(L"Cannot locate the user configuration directory.", L"无法定位用户配置目录。"); return Defaults(); }
+        if (path.empty()) { error = Tr(L"Cannot locate the user configuration directory.", L"无法定位用户配置目录。", L"利用者の構成フォルダーが見つかりません。"); return Defaults(); }
         FileHandle file;
         file.handle = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
             nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -613,29 +619,30 @@ std::vector<AppTarget> LoadTargets(std::wstring& error) {
                 SaveTargets(defaults, error);
                 return defaults;
             }
-            error = std::wstring(Tr(L"Cannot read configuration: ", L"无法读取配置：")) + WinError(code);
+            error = std::wstring(Tr(L"Cannot read configuration: ", L"无法读取配置：", L"構成を読み取れません: ")) + WinError(code);
             return Defaults();
         }
         LARGE_INTEGER size{};
         if (!GetFileSizeEx(file.handle, &size) || size.QuadPart < 2 || size.QuadPart > kMaxConfigBytes || (size.QuadPart % 2) != 0) {
-            error = Tr(L"Invalid configuration length. The original file is retained; default entries are in use.", L"配置文件长度无效。原文件已保留，暂时使用默认入口。");
+            error = Tr(L"Invalid configuration length. The original file is retained; default entries are in use.", L"配置文件长度无效。原文件已保留，暂时使用默认入口。", L"構成の長さが無効です。元のファイルは保持され、既定の項目を使用しています。");
             return Defaults();
         }
         std::wstring content(static_cast<std::size_t>(size.QuadPart / 2), L'\0');
         DWORD read = 0;
         if (!ReadFile(file.handle, content.data(), static_cast<DWORD>(size.QuadPart), &read, nullptr) || read != size.QuadPart) {
-            error = Tr(L"Configuration read failed. The original file is retained; default entries are in use.", L"配置文件读取失败。原文件已保留，暂时使用默认入口。");
+            error = Tr(L"Configuration read failed. The original file is retained; default entries are in use.", L"配置文件读取失败。原文件已保留，暂时使用默认入口。", L"構成を読み取れませんでした。元のファイルは保持され、既定の項目を使用しています。");
             return Defaults();
         }
         std::vector<AppTarget> targets;
         if (content.front() != L'\xfeff' || !Parse(std::wstring_view(content).substr(1), targets)) {
             error = std::wstring(Tr(L"Invalid configuration format. Expected UTF-16 LE with a BOM, Version=1, and 1–8 complete entries. The original file is retained; default entries are in use.\r\n\r\n",
-                L"配置文件格式无效。需要带 BOM 的 UTF-16 LE、Version=1 和 1–8 个完整入口。原文件已保留，暂时使用默认入口。\r\n\r\n")) + path;
+                L"配置文件格式无效。需要带 BOM 的 UTF-16 LE、Version=1 和 1–8 个完整入口。原文件已保留，暂时使用默认入口。\r\n\r\n",
+                L"構成の形式が無効です。BOM 付き UTF-16 LE、Version=1、1 ～ 8 個の完全な項目が必要です。元のファイルは保持され、既定の項目を使用しています。\r\n\r\n")) + path;
             return Defaults();
         }
         return targets;
     } catch (...) {
-        error = Tr(L"An error occurred while reading configuration. The original file is retained; default entries are in use.", L"读取配置时发生错误。原文件已保留，暂时使用默认入口。");
+        error = Tr(L"An error occurred while reading configuration. The original file is retained; default entries are in use.", L"读取配置时发生错误。原文件已保留，暂时使用默认入口。", L"構成の読み取り中に問題が発生しました。元のファイルは保持され、既定の項目を使用しています。");
         return Defaults();
     }
 }
@@ -693,11 +700,11 @@ bool WriteList(const std::wstring& path, const FileFormat& format, const std::ve
     bool temporaryOwned = false;
     try {
         if (!Validate(targets, error, format)) return false;
-        if (path.empty()) { error = Tr(L"Cannot locate the user configuration directory.", L"无法定位用户配置目录。"); return false; }
+        if (path.empty()) { error = Tr(L"Cannot locate the user configuration directory.", L"无法定位用户配置目录。", L"利用者の構成フォルダーが見つかりません。"); return false; }
         // COPILOT_REEL_DATA_DIR may end in '/', which ConfigPath keeps.
         const auto directory = path.substr(0, path.find_last_of(L"\\/"));
         if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
-            error = std::wstring(Tr(L"Cannot create the configuration directory: ", L"无法创建配置目录：")) + WinError(GetLastError());
+            error = std::wstring(Tr(L"Cannot create the configuration directory: ", L"无法创建配置目录：", L"構成フォルダーを作成できません: ")) + WinError(GetLastError());
             return false;
         }
         std::wstring content = std::wstring(L"\xfeff; ") + format.comment + L". UTF-16 LE; backslashes are escaped.\r\n[" +
@@ -711,9 +718,10 @@ bool WriteList(const std::wstring& path, const FileFormat& format, const std::ve
         }
         if (content.size() * sizeof(wchar_t) > format.maxBytes) {
             error = &format == &kReelFormat ?
-                Tr(L"The configuration exceeds 512 KiB. Shorten paths or arguments.", L"配置总大小超过 512 KiB，请缩短参数或路径。") :
+                Tr(L"The configuration exceeds 512 KiB. Shorten paths or arguments.", L"配置总大小超过 512 KiB，请缩短参数或路径。", L"構成が 512 KiB を超えています。ファイルの場所や引数を短くしてください。") :
                 Tr(L"The apps kept outside the reel exceed 2 MiB. Put some back or shorten their paths or arguments.",
-                   L"轮盘外保留的应用超过 2 MiB。请放回部分应用，或缩短其路径或参数。");
+                   L"轮盘外保留的应用超过 2 MiB。请放回部分应用，或缩短其路径或参数。",
+                   L"リールの外に置いたアプリが 2 MiB を超えています。いくつか戻すか、ファイルの場所や引数を短くしてください。");
             return false;
         }
         FileHandle file;
@@ -726,7 +734,7 @@ bool WriteList(const std::wstring& path, const FileFormat& format, const std::ve
             if (GetLastError() != ERROR_FILE_EXISTS && GetLastError() != ERROR_ALREADY_EXISTS) break;
         }
         if (file.handle == INVALID_HANDLE_VALUE) {
-            error = std::wstring(Tr(L"Cannot create a temporary configuration file: ", L"无法创建临时配置文件：")) + WinError(GetLastError());
+            error = std::wstring(Tr(L"Cannot create a temporary configuration file: ", L"无法创建临时配置文件：", L"一時的な構成ファイルを作成できません: ")) + WinError(GetLastError());
             temporary.clear(); // Never delete a file that this call did not create.
             return false;
         }
@@ -737,19 +745,19 @@ bool WriteList(const std::wstring& path, const FileFormat& format, const std::ve
         const DWORD code = GetLastError();
         file.Close();
         if (!flushed) {
-            error = std::wstring(Tr(L"Configuration write failed; the original file is unchanged: ", L"配置写入失败，原文件保持不变：")) + WinError(code);
+            error = std::wstring(Tr(L"Configuration write failed; the original file is unchanged: ", L"配置写入失败，原文件保持不变：", L"構成を書き込めませんでした。元のファイルは変更されていません: ")) + WinError(code);
             DeleteFileW(temporary.c_str());
             return false;
         }
         if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            error = std::wstring(Tr(L"Cannot replace the configuration; the original file is unchanged: ", L"无法替换配置文件，原文件保持不变：")) + WinError(GetLastError());
+            error = std::wstring(Tr(L"Cannot replace the configuration; the original file is unchanged: ", L"无法替换配置文件，原文件保持不变：", L"構成を置き換えられません。元のファイルは変更されていません: ")) + WinError(GetLastError());
             DeleteFileW(temporary.c_str());
             return false;
         }
         return true;
     } catch (...) {
         if (temporaryOwned && !temporary.empty()) DeleteFileW(temporary.c_str());
-        error = Tr(L"An error occurred while saving configuration; the original file is unchanged.", L"保存配置时发生错误，原文件保持不变。");
+        error = Tr(L"An error occurred while saving configuration; the original file is unchanged.", L"保存配置时发生错误，原文件保持不变。", L"構成の保存中に問題が発生しました。元のファイルは変更されていません。");
         return false;
     }
 }
@@ -771,7 +779,7 @@ void ShowSettings(HWND owner) {
         windowClass.hbrBackground = GetSysColorBrush(COLOR_BTNFACE);
         windowClass.lpszClassName = kSettingsClass;
         if (!RegisterClassExW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-            MessageBoxW(owner, Tr(L"Cannot register the settings window.", L"无法注册设置窗口。"), kAppName, MB_OK | MB_ICONERROR);
+            MessageBoxW(owner, Tr(L"Cannot register the settings window.", L"无法注册设置窗口。", L"設定ウィンドウを登録できません。"), kAppName, MB_OK | MB_ICONERROR);
             return;
         }
         auto state = std::make_unique<SettingsState>();
@@ -780,19 +788,19 @@ void ShowSettings(HWND owner) {
         // A visible ownerless window remains usable when the controller / reel is hidden.
         // Ownership of state transfers in WM_NCCREATE; WM_NCDESTROY releases it.
         const UINT dpi = GetDpiForSystem();
-        gSettings = CreateWindowExW(WS_EX_CONTROLPARENT, kSettingsClass, Tr(L"Copilot Reel — Application settings", L"Copilot Reel — 应用设置"),
+        gSettings = CreateWindowExW(WS_EX_CONTROLPARENT, kSettingsClass, Tr(L"Copilot Reel — Application settings", L"Copilot Reel — 应用设置", L"Copilot Reel — アプリ設定"),
             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
             MulDiv(850, static_cast<int>(dpi), 96), MulDiv(685, static_cast<int>(dpi), 96),
             nullptr, nullptr, GetModuleHandleW(nullptr), &state);
         if (!gSettings) {
-            MessageBoxW(owner, Tr(L"Cannot create the settings window.", L"无法创建设置窗口。"), kAppName, MB_OK | MB_ICONERROR);
+            MessageBoxW(owner, Tr(L"Cannot create the settings window.", L"无法创建设置窗口。", L"設定ウィンドウを作成できません。"), kAppName, MB_OK | MB_ICONERROR);
             return;
         }
         ShowWindow(gSettings, SW_SHOWNORMAL);
         UpdateWindow(gSettings);
         SetForegroundWindow(gSettings);
     } catch (...) {
-        MessageBoxW(owner, Tr(L"Cannot open application settings.", L"无法打开应用设置。"), kAppName, MB_OK | MB_ICONERROR);
+        MessageBoxW(owner, Tr(L"Cannot open application settings.", L"无法打开应用设置。", L"アプリ設定を開けません。"), kAppName, MB_OK | MB_ICONERROR);
     }
 }
 } // namespace reel

@@ -28,7 +28,7 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 1. **Windows-neutral surface.** One plate in the system flyout color (`#F9F9F9` light, `#2C2C2C` dark), one soft shadow, a 1 DIP inset rim; frosted acrylic when Windows transparency is on.
 2. **One orbit.** Every item sits on the 112 DIP orbit: slot 1 at 12 o'clock, clockwise, 360/n apart. Slots never reflow and icons never rotate.
 3. **A quiet center.** Idle Main shows only a faint ring; idle submenus show the ring and a back chevron. A hovered item shows exactly one name; the ring hides while it shows. While an app tile is dragged on Manage apps the center shows only the trash.
-4. **Selection is a seat.** A 48 DIP accent-tinted seat replaces the tile fill. Command glyphs and EN/ZH stay foreground.
+4. **Selection is a seat.** A 48 DIP accent-tinted seat replaces the tile fill. Command glyphs and EN/ZH/JA stay foreground.
 5. **Marks stay true.** Vendor marks are never recolored, redrawn or distorted.
 6. **Brief motion.** 83 to 250 ms, no overshoot, scaled from the plate center; reduced motion and high contrast settle at once.
 
@@ -49,7 +49,7 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 | Preferred badge | accent disc r 6 at (+17, -17); plate-colored ring r 7.5 (1.5 cutout); path check 1.5 in `textOnAccent` |
 | Update dot | the badge without its check, smaller: accent disc r 4, plate-colored ring r 5.5, same position; on the hub's About tile and About's update tile while an update waits |
 | Switch | in the command glyph's em: off is ToggleLeft (F19E); on is ToggleFilled (EC11) with the knob (center +0.25, r 0.125) cut out, so the tile or the seat shows through; `foreground`, never accent |
-| Adjust chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40, flanking slot 0, the EN/ZH tile on the + hub; `secondary`, `foreground` while slot 0 is selected |
+| Adjust chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40, flanking slot 0, the EN/ZH/JA tile on the + hub; `secondary`, `foreground` while slot 0 is selected |
 | Back chevron | E76B at em 14, `secondary`, idle submenus only |
 | Drag trash | Manage apps, only while a tile is lifted: Remove (E74D) at em 20 in `critical` inside a `critical` ring of 1.5 at the center-zone edge (r 44); armed (pointer inside r 44): a `criticalFill` disc r 30 with the glyph in `textOnCritical`, over the shrunken tile; disabled at 0.36 while one app remains |
 | Center name | 14 DIP / 600, one line, 132 x 20 box on the plate center |
@@ -82,11 +82,31 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 
 ## Typography
 
-- Latin: Segoe UI Variable Text (WWS), weight 600; fallback Segoe UI.
-- Chinese: Microsoft YaHei UI (zh-CN) for U+2E80-2FDF, 3000-303F, 3400-4DBF, 4E00-9FFF, F900-FAFF, FF00-FFEF, then the system fallback. Weight 600 resolves to YaHei UI Bold.
-- Center name: 14 DIP, one line in 132 x 20, character-ellipsis trimming. Baseline = center + capHeight x size / 2, using the Latin face's cap height (0.70 em), also for Chinese.
-- Measured at 14 DIP: Visual Studio Code 119.7 (fits), Windows Settings 114.1 (fits), IntelliJ IDEA Ultimate 134.2 and DeepSeek Harness (DSH) 158.6 (trimmed).
-- EN / ZH monogram: 16 DIP / 600, centered on the cap height, foreground.
+The reel speaks English, Simplified Chinese and Japanese with one voice: a quiet, open sans in each script, at one weight, on one baseline. Apple's system pairing is the reference: SF Pro, PingFang SC and Hiragino Sans share a large x-height or face, low stroke contrast, flat terminals and generous counters, so mixed-script names sit evenly. On Windows the reel keeps the system's own Latin and Chinese faces and bundles one Japanese face, because the system's Japanese UI face differs most from that reference.
+
+| Script | Face | Why |
+| --- | --- | --- |
+| Latin | Segoe UI Variable Text (WWS), 600; fallback Segoe UI | The Windows 11 system face: hinted, optical sizes, and the face every neighbouring window uses. SF Pro may not ship on Windows. |
+| Chinese (Han, CJK punctuation) | Microsoft YaHei UI (zh-CN), 600 resolves to Bold | Founder Lanting Hei: hinted, mainland forms, open counters like PingFang SC, and on every Windows. |
+| Japanese (kana, and Han in Japanese text) | Reel Sans JP 400 / 600, then Yu Gothic UI | See below. |
+
+Japanese. Hiragino Sans (SCREEN, Apple's Japanese system face) drops the uroko at stroke shoulders, keeps wide counters (futokoro) and an even stroke rhythm, centres each glyph's weight, and draws kana slightly large so solid setting does not look gappy. Fontworks' Rodin and UD families share that modern gothic build, but neither they nor Hiragino may be redistributed without a commercial licence, and Fontworks' open faces (Klee One, LINE Seed JP and the display faces) are a pencil script or geometric brand faces without a 600. Yu Gothic UI, the Windows face, is hinted but draws condensed kana (0.66 em wide on a 0.82 em advance), so Japanese names look narrow next to Segoe. The closest open face is Noto Sans JP (Source Han Sans, SIL Open Font License 1.1): the same uroko-free modern gothic, a large face (kanji 0.898 em) and full-width kana. Other open candidates fall short: IBM Plex Sans JP has a grotesque flavour and a deep descent, BIZ UDPGothic draws small universal-design kana and has no 600, M PLUS lacks part of JIS level 2, and Zen Kaku Gothic New has no 600.
+
+- Reel Sans JP is Noto Sans JP 2.004 in two static instances, 400 (the quick menu) and 600 (the reel), subset to Windows-31J (JIS X 0208 levels 1 and 2 with the NEC and IBM extensions, 7,617 characters with kana, CJK symbols and the interface strings) and renamed, as the OFL asks of a Modified Version. Its line metrics are Segoe UI's (1.079 / 0.251 em), so a Japanese line is as tall as an English one. `tools/build-fonts.py` builds it into `assets/fonts/` (2.4 MB a weight) next to `OFL.txt`.
+- [`design/vi/evidence/typography-ja.png`](../design/vi/evidence/typography-ja.png) compares it with Yu Gothic UI on the hub at 96, 144 and 192 DPI: wider, rounder kana; slightly softer at 96 DPI, because Noto carries no hinting and the reel draws grayscale antialiasing.
+
+Mapping. One custom DirectWrite fallback serves every D2D text format (`src/typography.cpp`); the text's locale picks the mapping, and a character a mapping's font lacks continues to the next (`tests/typography_tests.cpp` checks each rule against `MapCharacters`):
+
+1. ja-JP text: Han, CJK punctuation and kana (U+3040-30FF, 31F0-31FF, FF65-FF9F) to Reel Sans JP, then Yu Gothic UI.
+2. Any other locale: kana to Reel Sans JP, then Yu Gothic UI; Han and CJK punctuation (U+2E80-2FDF, 3000-303F, 3400-4DBF, 4E00-9FFF, F900-FAFF, FF00-FFEF) to Microsoft YaHei UI.
+3. The system fallback for everything else.
+
+The formats carry the interface locale (en-US, zh-CN, ja-JP), and a name that contains kana is laid out as ja-JP in every interface, so "メモ帳" in the English reel takes Japanese kanji forms, not Chinese ones. A Chinese name keeps mainland forms in the Japanese reel only where it shares no kana; Han alone cannot tell the two languages apart. The native controls (GDI) use Segoe UI with the system's font linking, or Yu Gothic UI in Japanese; they never see the bundled faces.
+
+- Center name: 14 DIP, one line in 132 x 20, character-ellipsis trimming. Baseline = center + capHeight x size / 2, using the Latin face's cap height (0.70 em), also for Chinese and Japanese. At the default reel size that is 11.2 px at 100% scaling.
+- Measured at 14 DIP: Visual Studio Code 119.7 (fits), Windows Settings 114.1 (fits), IntelliJ IDEA Ultimate 134.2 and DeepSeek Harness (DSH) 158.6 (trimmed). Every Japanese interface name fits; the widest, インストール 0.3.9, is under 120.
+- EN / ZH / JA monogram: 16 DIP / 600, centered on the cap height, foreground.
+- Japanese wording follows Microsoft's Japanese Windows terms and prefers kanji where a natural kanji word exists (簡易メニュー, 既定, 最新版, 大きさ, 個人用設定); system nouns Windows writes in katakana stay katakana (アプリ, インストール, テーマ, ダーク モード), with Microsoft's half-width space between katakana words.
 - Never drawn: page titles, captions, helper copy, A/D hints, "Move here", a second label line.
 
 ## Iconography
@@ -156,7 +176,7 @@ Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, s
 - The high-contrast code path (seat in COLOR_HIGHLIGHT) with the machine's current, non-high-contrast system colors.
 - 100, 150 and 200% through the DPI override.
 - Motion strips: open, cancel, seat appear and travel, drill-in with handoff, drill-out, commit (visual evidence, not frame-rate measurement).
-- EN/ZH: idle Main pixel-identical; the hub differs only inside the monogram.
+- EN/ZH/JA: idle Main pixel-identical; the hub differs only inside the monogram.
 - Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections stay within 2 levels per channel of the 0.3.4 captures in five variants (0.3.5.1, every channel compared; the 0.3.5 report of 0 differing pixels compared only alpha); App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam). 0.3.6 removed those chevrons with the reorder they served.
 - Drag and trash (0.3.6): `output/runtime/v0.3.6/*-manage-drag.png` and `*-manage-trash.png` show a tile lifted over another slot and over the armed trash in seven variants; the 0.8 reel scale and the four-item hub make every 0.3.6 still a new reference.
 - Reel size (0.3.7): `output/runtime/v0.3.7/` is the reference set for the five-item hub, with the Reel size tile showing `100%` as a 12 DIP monogram in seven variants.
@@ -179,4 +199,4 @@ Known limit (0.3.4): retargeting the seat twice within one spring settle measure
 - [Windows materials](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/materials)
 - [Brand asset policy](brand-assets.md)
 
-Specification date: 2026-10-20. Development documentation, tokens and sources are English; product localization (English, Simplified Chinese) is separate.
+Specification date: 2026-10-20. Development documentation, tokens and sources are English; product localization (English, Simplified Chinese, Japanese) is separate.

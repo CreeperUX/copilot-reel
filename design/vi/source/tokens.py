@@ -196,7 +196,8 @@ def bezier(curve, x):
 
 # Typography
 def cjk_ranges():
-    return [tuple(int(v, 16) for v in r.split('-')) for r in TYPE['cjk']['ranges']]
+    """Han, CJK punctuation and kana: every range the product's CJK fallback maps away from Segoe UI."""
+    return [tuple(int(v, 16) for v in r.split('-')) for r in TYPE['cjk']['ranges'] + TYPE['japanese']['ranges']]
 
 
 # Iconography

@@ -72,13 +72,14 @@ try {
     finally { Pop-Location }
     $flags=@('/nologo','/std:c++20','/utf-8','/EHsc','/MT','/W4','/DUNICODE','/D_UNICODE','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN','/D_WIN32_WINNT=0x0A00',"/I$projectRoot\src")
     if($Configuration -eq 'Debug') { $flags+=@('/Od','/Zi') } else { $flags+=@('/O2','/DNDEBUG') }
-    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','installed_apps.cpp','list_viewport.cpp','updates.cpp','artwork.cpp','acrylic.cpp','test_input.cpp','tray_menu.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
+    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','installed_apps.cpp','list_viewport.cpp','updates.cpp','artwork.cpp','acrylic.cpp','test_input.cpp','tray_menu.cpp','typography.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
     $libraries=@('d3d11.lib','d2d1.lib','dwrite.lib','dxgi.lib','dxguid.lib','dwmapi.lib','windowsapp.lib','CoreMessaging.lib','user32.lib','gdi32.lib','shell32.lib','ole32.lib','oleaut32.lib','propsys.lib','shlwapi.lib','comdlg32.lib','comctl32.lib','advapi32.lib','wtsapi32.lib','windowscodecs.lib','uuid.lib','imm32.lib','uxtheme.lib','shcore.lib','wintrust.lib','crypt32.lib','bcrypt.lib','version.lib')
     Push-Location $buildRoot
     try {
         $buildAssets=Join-Path $buildRoot 'assets'
         New-Item -ItemType Directory -Path $buildAssets -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\brands') -Destination $buildAssets -Recurse -Force
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\fonts') -Destination $buildAssets -Recurse -Force
         & $compiler @flags @sources app.res /Fe:CopilotReel.exe /link /SUBSYSTEM:WINDOWS /MANIFEST:NO @machineLink @libraries
         if($LASTEXITCODE -ne 0) {throw 'Application compilation failed.'}
         Assert-PeMachine (Join-Path $buildRoot 'CopilotReel.exe')
@@ -112,6 +113,9 @@ try {
         & $compiler @flags "$projectRoot\tests\test_input_tests.cpp" "$projectRoot\src\test_input.cpp" /Fe:test_input_tests.exe /link @machineLink user32.lib
         if($LASTEXITCODE -ne 0) {throw 'Test input seam tests compilation failed.'}
         Invoke-CompiledTest 'test_input_tests.exe'
+        & $compiler @flags "$projectRoot\tests\typography_tests.cpp" "$projectRoot\src\typography.cpp" /Fe:typography_tests.exe /link @machineLink dwrite.lib windowsapp.lib ole32.lib user32.lib
+        if($LASTEXITCODE -ne 0) {throw 'Typography tests compilation failed.'}
+        Invoke-CompiledTest 'typography_tests.exe'
         & $compiler @flags "$projectRoot\tests\launch_probe.cpp" /Fe:launch_probe.exe /link /SUBSYSTEM:WINDOWS @machineLink user32.lib
         if($LASTEXITCODE -ne 0) {throw 'Launch probe compilation failed.'}
         Assert-PeMachine (Join-Path $buildRoot 'launch_probe.exe')

@@ -49,6 +49,7 @@ PLUS = 'Apps and settings'
 LANGUAGE, APPEARANCE, SIZE, MANAGE, ADD, ABOUT = 'Language', 'Appearance', 'Reel size', 'Manage apps', 'Add app', 'About'
 HUB = [LANGUAGE, APPEARANCE, SIZE, MANAGE, ADD, ABOUT]
 HUB_ZH = ['语言', '外观', '轮盘大小', '管理应用', '添加应用', '关于']
+HUB_JA = ['言語', '外観', 'リールの大きさ', 'アプリの管理', 'アプリを追加', 'バージョン情報']
 CUSTOM, PREVIOUS, NEXT = 'Custom app', 'Previous', 'Next'
 EDIT, SET_PREFERRED, REMOVE = 'Edit app', 'Set as preferred', 'Remove from reel'
 
@@ -1002,7 +1003,7 @@ def hub_hover(g, names, source, keyboard=False):
 
 
 def group_hub(g):
-    """Hub hover names in both languages, Tab, and the language adjust by keys, chevrons and icon."""
+    """Hub hover names in all three languages, Tab, and the language adjust by keys, chevrons and icon."""
     reel = g.reel
     reel.start()
     apps_before = (g.data / 'apps.ini').read_bytes()
@@ -1024,23 +1025,39 @@ def group_hub(g):
     wait_language(g, 'zh-CN')
     assert_page(g, seam.PAGE_SETTINGS, '设置', HUB_ZH)
     hub_hover(g, HUB_ZH, 'zh-CN')
+    reel.key(seam.VK_D)
+    wait_language(g, 'ja-JP')
+    assert_page(g, seam.PAGE_SETTINGS, '設定', HUB_JA)
+    hub_hover(g, HUB_JA, 'ja-JP')
+    reel.key(seam.VK_D)
+    wait_language(g, 'en-US')
+    reel.key(seam.VK_A)
+    wait_language(g, 'ja-JP')
+    reel.key(seam.VK_A)
+    wait_language(g, 'zh-CN')
     reel.key(seam.VK_A)
     wait_language(g, 'en-US')
     assert_page(g, seam.PAGE_SETTINGS, 'Settings', HUB)
-    g.passed('ZH hub hover names are correct; A and D switch the language on the hub')
+    g.passed('ZH and JA hub hover names are correct; D steps EN, ZH, JA and A steps back, both wrapping')
 
     reel.click(reel.canvas(*seam.LATER_CHEVRON_DIP))
     wait_language(g, 'zh-CN')
     reel.click(reel.canvas(*seam.EARLIER_CHEVRON_DIP))
     wait_language(g, 'en-US')
+    reel.click(reel.canvas(*seam.EARLIER_CHEVRON_DIP))
+    wait_language(g, 'ja-JP')
+    reel.click(reel.canvas(*seam.LATER_CHEVRON_DIP))
+    wait_language(g, 'en-US')
     reel.choose(LANGUAGE)
     wait_language(g, 'zh-CN')
     reel.choose(HUB_ZH[0])
+    wait_language(g, 'ja-JP')
+    reel.choose(HUB_JA[0])
     wait_language(g, 'en-US')
     assert_page(g, seam.PAGE_SETTINGS, 'Settings', HUB)
     assert (g.data / 'apps.ini').read_bytes() == apps_before, 'Switching language never changes the apps.'
     assert_no_launch(g, 0)
-    g.passed('both chevrons and the language icon switch and persist the language; the app profile is shared')
+    g.passed('both chevrons and the language icon step and persist the language; the app profile is shared')
     close_menu(g, 2)
     assert_quiet(g)
     reel.stop()

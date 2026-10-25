@@ -87,11 +87,21 @@ $commit = 'motion.events.commit'
 if ((Get-Number "$commit.totalMs") -ne (Get-Number "$commit.holdMs") + (Get-Number "$commit.fadeMs")) {
     throw "tokens.json: '$commit.totalMs' must equal holdMs + fadeMs."
 }
-$ranges = Get-Token 'typography.cjk.ranges'
-$ranges = @(@($ranges) | ForEach-Object {
-    if ($_ -isnot [string] -or $_ -notmatch '^([0-9A-Fa-f]{4,6})-([0-9A-Fa-f]{4,6})$') { throw "tokens.json: 'typography.cjk.ranges' entries must be 'XXXX-YYYY'." }
-    if ([Convert]::ToInt32($Matches[1], 16) -gt [Convert]::ToInt32($Matches[2], 16)) { throw "tokens.json: CJK range '$_' is reversed." }
-    '{0x' + $Matches[1].ToUpperInvariant() + ', 0x' + $Matches[2].ToUpperInvariant() + '}'
+function Ranges([string]$path) {
+    $values = Get-Token $path
+    @(@($values) | ForEach-Object {
+        if ($_ -isnot [string] -or $_ -notmatch '^([0-9A-Fa-f]{4,6})-([0-9A-Fa-f]{4,6})$') { throw "tokens.json: '$path' entries must be 'XXXX-YYYY'." }
+        if ([Convert]::ToInt32($Matches[1], 16) -gt [Convert]::ToInt32($Matches[2], 16)) { throw "tokens.json: range '$_' in '$path' is reversed." }
+        '{0x' + $Matches[1].ToUpperInvariant() + ', 0x' + $Matches[2].ToUpperInvariant() + '}'
+    })
+}
+$ranges = Ranges 'typography.cjk.ranges'
+$kana = Ranges 'typography.japanese.ranges'
+$fontFiles = Get-Token 'typography.japanese.files'
+$fontFiles = @(@($fontFiles) | ForEach-Object {
+    if ($_ -isnot [string] -or $_ -notmatch '^assets/fonts/[A-Za-z0-9._-]+\.ttf\z') { throw "tokens.json: 'typography.japanese.files' entries must be assets/fonts/<name>.ttf." }
+    if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $_))) { throw "tokens.json: '$_' does not exist; run tools/build-fonts.py." }
+    'L"' + $_ + '"'
 })
 $brandLines = New-Object Collections.Generic.List[string]
 $brandKeys = @{}
@@ -172,6 +182,10 @@ $lines = @(
     "inline constexpr wchar_t kCjkFamily[] = $(Text 'typography.cjk.family'), kCjkLocale[] = $(Text 'typography.cjk.locale');"
     'struct UnicodeRange { unsigned first, last; };'
     "inline constexpr UnicodeRange kCjkRanges[] = {$($ranges -join ', ')};"
+    "inline constexpr wchar_t kJapaneseFamily[] = $(Text 'typography.japanese.family'), kJapaneseSystemFamily[] = $(Text 'typography.japanese.systemFamily'), kJapaneseLocale[] = $(Text 'typography.japanese.locale');"
+    '// The bundled Japanese faces, relative to the executable.'
+    "inline constexpr const wchar_t* kJapaneseFontFiles[] = {$($fontFiles -join ', ')};"
+    "inline constexpr UnicodeRange kKanaRanges[] = {$($kana -join ', ')};"
     '// Command glyphs (Segoe Fluent Icons code points)'
     "inline constexpr wchar_t kIconFamily[] = $(Text 'iconography.commandFont'), kIconFallbackFamily[] = $(Text 'iconography.commandFontFallback');"
     "inline constexpr wchar_t kGlyphAdd = $(Glyph Add), kGlyphManage = $(Glyph Manage), kGlyphPreferred = $(Glyph Preferred), kGlyphSun = $(Glyph Sun), kGlyphMoon = $(Glyph Moon);"

@@ -158,6 +158,7 @@ Interaction acceptance for later x64 work runs through a test seam in the one Re
 - Pointer: `CursorPosition()` returns the synthetic cursor instead of `GetCursorPos`, for command capture, selection and release alike. Placement, center gating, hit-test math and rendering are unchanged.
 - Real input is disconnected. Raw Input is never registered, `WM_NCHITTEST` returns `HTTRANSPARENT`, and real mouse, key and Raw Input messages are dropped and counted. A preview records `activationRequested` instead of calling `SetForegroundWindow` or `SetFocus`.
 - Updates: only an active instance honors `COPILOT_REEL_TEST_UPDATE_FEED` (a releases feed; plain HTTP is accepted from `127.0.0.1` only), `COPILOT_REEL_TEST_VERSION` (the version it updates from) and `COPILOT_REEL_TEST_UPDATE_DELAY` (milliseconds to its first automatic check; without it, it checks only when asked). Its installs stop after downloading and verifying the package (`updateVerified=1`) and never reach the package manager. Without a feed it has no updater, as a development build.
+- Launches: an active instance with `COPILOT_REEL_TEST_LAUNCH=log` logs `Test launch logged: <name>` instead of opening a target, so `tools/record-demos.py` can show real web and app targets without opening any.
 - Diagnostics add `testInput=on`, `testRun`, `realInputIgnored` and `activationRequested` only in a test instance. Every 0.3.5 instance also writes `held`, `menuNames` (the display names of the page on screen, so a runner finds items by name), `adjust`, `addCatalog` and `addInstalled` when `--diagnostics` is requested; the file stays in the local data directory.
 
 ### Channels
@@ -171,6 +172,20 @@ Interaction acceptance for later x64 work runs through a test seam in the one Re
 Test packets are decoded only while the seam is active. Inactive, truncated, future-version, unknown-action, out-of-range-key and nonzero-reserved packets return FALSE, like any unknown dwData. Test packets share the command FIFO, so a click can never overtake a queued release. Every test packet logs `Test input <seq> done; page=<n>; selected=<n>; active=<0|1>; drag=<n>; target=<none|trash|slot:n>` to `run.log` (`drag` is the lifted app's index, or -1 when no tile is lifted), and the driver waits on that line as its ordering barrier. A Key packet with virtual key 0 routes nowhere and is a pure barrier.
 
 ### Runner
+
+Unit, smoke and regression runs go through one script, never through hand-run steps:
+
+```text
+powershell -File tools\test.ps1 [-Tier unit|smoke|regression] [-Installed]
+```
+
+| Tier | Steps |
+| --- | --- |
+| `unit` | `tools/build.ps1`: Release x64 and every unit test |
+| `smoke` | `unit`, then the seam preflight and groups `a` and `hub` |
+| `regression` (default) | `unit`, every seam group, and `tools/capture-seam.py` against the reference stills |
+
+`-Installed` adds a check that the installed package's executable equals `build\Release\CopilotReel.exe` and is running. Each step writes its log, and the run its `summary.json` (tier, commit, dirty tree, each step's status, time and the runners' own evidence), under `artifacts/qa/test-<stamp>/`; the script exits 1 when any step fails. The seam suite can still run alone:
 
 ```text
 uv run --python 3.14 python tests\run-reel-seam.py [--exe build\Release\CopilotReel.exe] [--groups a,b,...] [--list]
@@ -190,7 +205,7 @@ Before any driver code runs, a static self-check refuses to start if the driver 
 | `c` | Manage apps (0.3.6): the actions page starts with the app itself and has no reorder (A, D, Right, Delete and the old chevron spot change nothing); a press and release in place is a click; a drag (Press, Pointer moves, Release) shows the idle trash, opens the slot under the pointer and saves the order with a reflow, keeping the preferred agent and selecting the moved app; a drag back to its own slot or canceled by Escape saves nothing and its release is not a click; a drop on the armed trash parks the app in `parked.ini`; Add lists it first and one tap restores it with its arguments; A/D move the selected app and Delete parks it; Remove from reel parks too; with one app the trash is disabled |
 | `d` | Add page, after the discovery that opening the hub starts: installed entries come first (`addInstalled`); choosing the first one saves it into `apps.ini` without launching, after which it appears on no Add page and `addCatalog` and `addInstalled` drop by one; `Custom app` plus Previous/Next within 8 entries on every page; the center returns to whichever page opened Add. On a host without discovered agents the add step is recorded as skipped |
 | `e` | `SC_MINIMIZE` on an open or hidden reel never makes it iconic; a window made iconic without activation (`SW_SHOWMINNOACTIVE`) is restored before the next placement, which is exact |
-| `fast-path`, `interior`, `hub`, `preferred`, `draws`, `cold` | Ported quiet-tier groups of `tests/run-radial.py`: the 0x8001 contract, an exact off-center interior placement, EN/ZH hub hover names with Tab and the language adjust, Set as preferred on an app's actions page, stable surface draws, and cold tap, cold hold, protocol Tap through a second process in the test namespace, orphan release, and a bare start without arguments, which an unpackaged build classifies as a preview |
+| `fast-path`, `interior`, `hub`, `preferred`, `draws`, `cold` | Ported quiet-tier groups of `tests/run-radial.py`: the 0x8001 contract, an exact off-center interior placement, EN/ZH/JA hub hover names with Tab and the language stepping forward and back by keys, chevrons and the tile, Set as preferred on an app's actions page, stable surface draws, and cold tap, cold hold, protocol Tap through a second process in the test namespace, orphan release, and a bare start without arguments, which an unpackaged build classifies as a preview |
 
 `results.json` records per-group checks and errors, placements, interruption and hover samples, draw samples, foreground samples, `inputInjection: none`, whether the installed instance was resident and unchanged, the seam run ids, `realInputIgnored` and the binary hash.
 

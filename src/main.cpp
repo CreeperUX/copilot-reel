@@ -233,7 +233,7 @@ HRESULT Activate(const AppTarget& target) {
 void ReportLaunchFailure(const AppTarget& target,HRESULT hr) {
     wchar_t number[40]{};swprintf_s(number,L"0x%08X",static_cast<unsigned>(hr));
     Log(L"Launch failed "+std::wstring(number));
-    MessageBoxW(nullptr,(std::wstring(Tr(L"Could not open: ",L"无法打开："))+AppDisplayName(target)+Tr(L"\nCheck the target and arguments in App settings.\n\n",L"\n请检查应用设置中的目标与参数。\n\n")+number).c_str(),kAppName,MB_OK|MB_ICONERROR);
+    MessageBoxW(nullptr,(std::wstring(Tr(L"Could not open: ",L"无法打开：",L"開けませんでした: "))+AppDisplayName(target)+Tr(L"\nCheck the target and arguments in App settings.\n\n",L"\n请检查应用设置中的目标与参数。\n\n",L"\nアプリ設定で対象と引数を確認してください。\n\n")+number).c_str(),kAppName,MB_OK|MB_ICONERROR);
 }
 struct LaunchFailure { AppTarget target; HRESULT hr=S_OK; };
 std::atomic<int> launchesInFlight{0};
@@ -359,7 +359,7 @@ public:
         std::wstring error;
         if(!renderer_->Initialize(error)) {
             Log(L"Renderer initialization failed: "+error);
-            MessageBoxW(nullptr,(std::wstring(Tr(L"Could not initialize native Windows rendering.\n",L"无法初始化 Windows 原生绘制。\n"))+error).c_str(),kAppName,MB_OK|MB_ICONERROR); return false;
+            MessageBoxW(nullptr,(std::wstring(Tr(L"Could not initialize native Windows rendering.\n",L"无法初始化 Windows 原生绘制。\n",L"Windows のネイティブ描画を初期化できませんでした。\n"))+error).c_str(),kAppName,MB_OK|MB_ICONERROR); return false;
         }
         WTSRegisterSessionNotification(window,NOTIFY_FOR_THIS_SESSION);
         if(!CurrentVisualOverride().raw.empty())Log(L"Visual override: "+CurrentVisualOverride().raw);
@@ -575,10 +575,10 @@ public:
     }
     std::wstring MenuTitle() const {
         switch(page_) {
-        case MenuPage::Manage:return Tr(L"Your apps",L"管理应用");
-        case MenuPage::Presets:return Tr(L"Add an agent",L"添加应用");
-        case MenuPage::Settings:return Tr(L"Settings",L"设置");
-        case MenuPage::About:return Tr(L"About",L"关于");
+        case MenuPage::Manage:return Tr(L"Your apps",L"管理应用",L"アプリの管理");
+        case MenuPage::Presets:return Tr(L"Add an agent",L"添加应用",L"アプリを追加");
+        case MenuPage::Settings:return Tr(L"Settings",L"设置",L"設定");
+        case MenuPage::About:return Tr(L"About",L"关于",L"バージョン情報");
         case MenuPage::Entry:return editing_>=0 && static_cast<size_t>(editing_)<items_.size()?AppDisplayName(items_[editing_]):L"";
         default:return L"Copilot Reel";
         }
@@ -685,11 +685,13 @@ public:
             if(wasAwaiting && !gesture_.AwaitingCenter())Log(L"Center entered; direction selection armed");
         }
     }
-    void SwitchLanguage() {
-        const auto language=CurrentLanguage()==Language::English?Language::SimplifiedChinese:Language::English;
+    // The language tile and its later chevron step forward through EN, ZH and JA; the earlier
+    // chevron and A step back. Every step wraps.
+    void SwitchLanguage(int direction=1) {
+        const auto language=StepLanguage(CurrentLanguage(),direction<0?-1:1);
         if(!SaveLanguage(language)) {Log(L"Language save failed");return;}
         SetLanguage(language);renderer_->SetLanguage(language);RenderMenu();RefreshOsdAppearance();
-        Log(language==Language::English?L"Language changed: English":L"Language changed: Simplified Chinese");
+        Log(std::wstring(L"Language changed: ")+LocaleName(language));
     }
     // The hub's Reel size moves to the next step and wraps. The open reel is placed again around
     // the point it opened at, so the edges clamp the new size exactly as they clamp an opening,
@@ -885,7 +887,8 @@ public:
             const auto backup=parkedPath+L".unreadable."+std::to_wstring(EventStamp())+L".bak";
             if(!CopyFileW(parkedPath.c_str(),backup.c_str(),TRUE))
                 return fail(Tr(L"parked.ini could not be read or backed up, so no app can be taken out of the reel now.",
-                    L"无法读取或备份 parked.ini，暂时不能将应用移出轮盘。"));
+                    L"无法读取或备份 parked.ini，暂时不能将应用移出轮盘。",
+                    L"parked.ini を読み取りもバックアップもできないため、今はアプリをリールから外せません。"));
             Log(L"Unreadable parked list kept as "+backup);
         }
         auto parked=parked_;Park(parked,items_[index]);
@@ -917,10 +920,10 @@ public:
         if(!CanConfirm(menu_,index)) {Log(index<0?L"Confirm ignored: no selection":L"Confirm ignored: unavailable item");return;}
         Choose(index);
     }
-    // Slot 0 of the hub is the language; both chevrons switch it.
-    void Adjust(int) {
+    // Slot 0 of the hub is the language; the earlier chevron steps back, the later one forward.
+    void Adjust(int direction) {
         input_.EndHold();KeepAlive();
-        if(page_==MenuPage::Settings)SwitchLanguage();
+        if(page_==MenuPage::Settings)SwitchLanguage(direction);
     }
     void Release() {
         if(!gesture_.Active())return;
@@ -930,7 +933,13 @@ public:
         else Choose(*selected);
     }
     void LaunchTarget(const AppTarget& target) {
+        // A test instance recording a demo (COPILOT_REEL_TEST_LAUNCH=log) shows real targets but opens none.
+        static const bool logOnly=[] {
+            wchar_t value[8]{};
+            return CurrentTestInput().active && GetEnvironmentVariableW(L"COPILOT_REEL_TEST_LAUNCH",value,8) && std::wstring_view(value)==L"log";
+        }();
         if(smoke)Log(L"Smoke simulated launch: "+target.name);
+        else if(logOnly)Log(L"Test launch logged: "+target.name);
         else if(!ActivateRunning(target))Launch(target,window);
     }
     bool PersistLocalTargets(const std::vector<AppTarget>& candidate,int preferred=-1) {
@@ -956,8 +965,8 @@ public:
         gesture_.Cancel();Hide(false);FinishHide();
         std::array<wchar_t,32768> path{};
         OPENFILENAMEW picker{sizeof(picker)};picker.hwndOwner=window;
-        picker.lpstrTitle=Tr(L"Choose a local application",L"选择本机应用");
-        picker.lpstrFilter=Tr(L"Applications and shortcuts\0*.exe;*.lnk\0\0",L"应用程序和快捷方式\0*.exe;*.lnk\0\0");
+        picker.lpstrTitle=Tr(L"Choose a local application",L"选择本机应用",L"この PC のアプリを選択");
+        picker.lpstrFilter=Tr(L"Applications and shortcuts\0*.exe;*.lnk\0\0",L"应用程序和快捷方式\0*.exe;*.lnk\0\0",L"アプリとショートカット\0*.exe;*.lnk\0\0");
         picker.lpstrFile=path.data();picker.nMaxFile=static_cast<DWORD>(path.size());
         picker.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR|OFN_NODEREFERENCELINKS;
         editorOpen_=true;
@@ -973,7 +982,8 @@ public:
             if(IsVerifiedLocalApplication(candidate[index]) && PersistLocalTargets(candidate,index)) {
                 if(launchAfterSelection)LaunchTarget(items_[index]);else Start(true,anchor_,MenuPage::Manage);
             } else MessageBoxW(nullptr,Tr(L"Could not save this local application. Choose an executable or a shortcut to an installed application.",
-                L"无法保存此本机应用。请选择可执行程序或指向已安装应用的快捷方式。"),kAppName,MB_OK|MB_ICONWARNING);
+                L"无法保存此本机应用。请选择可执行程序或指向已安装应用的快捷方式。",
+                L"このアプリを保存できませんでした。実行ファイルか、インストール済みアプリへのショートカットを選んでください。"),kAppName,MB_OK|MB_ICONWARNING);
         } else if(!launchAfterSelection)Start(true,anchor_,MenuPage::Manage);
     }
     void Choose(int selected) {
@@ -1190,8 +1200,8 @@ public:
             Log(L"Configuration validation failed; original file preserved, fallback targets loaded.");
             // Never block initialization in a modal message loop. Settings shows the full error.
             NOTIFYICONDATAW notice{sizeof(notice)};notice.hWnd=window;notice.uID=1;notice.uFlags=NIF_INFO;
-            wcscpy_s(notice.szInfoTitle,Tr(L"Copilot Reel configuration needs attention",L"Copilot Reel 配置需要检查"));
-            wcscpy_s(notice.szInfo,Tr(L"The original file is preserved. Default targets are temporarily loaded. Open App settings to review the error.",L"原配置已保留，暂时使用默认入口。请从托盘打开应用设置查看错误。"));
+            wcscpy_s(notice.szInfoTitle,Tr(L"Copilot Reel configuration needs attention",L"Copilot Reel 配置需要检查",L"Copilot Reel の構成を確認してください"));
+            wcscpy_s(notice.szInfo,Tr(L"The original file is preserved. Default targets are temporarily loaded. Open App settings to review the error.",L"原配置已保留，暂时使用默认入口。请从托盘打开应用设置查看错误。",L"元のファイルは保持されています。一時的に既定の項目を読み込みました。アプリ設定を開いて問題を確認してください。"));
             notice.dwInfoFlags=NIIF_WARNING;Shell_NotifyIconW(NIM_MODIFY,&notice);
         }
     }
@@ -1226,11 +1236,11 @@ public:
     // `anchor` is the icon's anchor point, so a menu opened from the keyboard sits beside it too.
     void TrayMenu(POINT anchor) {
         const UINT choice=ShowTrayMenu(window,anchor,currentAppearance_,{
-            {kCommandPreview,Tr(L"Preview reel (click to open)",L"预览轮盘（点击打开）"),vi::kGlyphTrayPreview,true},
-            {kCommandSettings,Tr(L"Quick menu...",L"快捷菜单…"),vi::kGlyphTraySettings},
-            {kCommandDiagnostics,Tr(L"Write diagnostics",L"写出诊断信息"),vi::kGlyphTrayDiagnostics},
+            {kCommandPreview,Tr(L"Preview reel (click to open)",L"预览轮盘（点击打开）",L"リールを表示 (クリックで開く)"),vi::kGlyphTrayPreview,true},
+            {kCommandSettings,Tr(L"Quick menu...",L"快捷菜单…",L"簡易メニュー…"),vi::kGlyphTraySettings},
+            {kCommandDiagnostics,Tr(L"Write diagnostics",L"写出诊断信息",L"診断情報を書き出す"),vi::kGlyphTrayDiagnostics},
             {},
-            {kCommandExit,Tr(L"Exit",L"退出"),vi::kGlyphTrayExit}});
+            {kCommandExit,Tr(L"Exit",L"退出",L"終了"),vi::kGlyphTrayExit}});
         if(choice) PostMessageW(window,WM_COMMAND,choice,0);
     }
     void SaveDiagnostics() {
@@ -1525,7 +1535,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
         winrt::init_apartment(winrt::apartment_type::single_threaded);
         LoadLanguage();LoadReelSize();LoadUpdatePreferences();
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
-        if(command==Command::Invalid) {MessageBoxW(nullptr,Tr(L"Usage: CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]",L"用法：CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]"),kAppName,MB_OK|MB_ICONINFORMATION);return 2;}
+        if(command==Command::Invalid) {MessageBoxW(nullptr,Tr(L"Usage: CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]",L"用法：CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]",L"使い方: CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]"),kAppName,MB_OK|MB_ICONINFORMATION);return 2;}
         const bool smoke=command==Command::SmokeTest;
         const auto& test=CurrentTestInput();
         // A misconfigured test run must never fall into the user's own instance. It logs only

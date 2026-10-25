@@ -29,13 +29,16 @@ add_custom_command(
   COMMENT "Generating src/vi_tokens.h from design/vi/tokens.json"
   VERBATIM)
 add_custom_target(vi_tokens DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/vi_tokens.stamp")
-add_executable(CopilotReel WIN32 src/main.cpp src/appearance.cpp src/renderer.cpp src/settings.cpp src/localization.cpp src/iconography.cpp src/osd.cpp src/behavior.cpp src/presets.cpp src/official_icons.cpp src/local_launch.cpp src/installed_apps.cpp src/list_viewport.cpp src/updates.cpp src/artwork.cpp src/acrylic.cpp src/test_input.cpp src/tray_menu.cpp src/vi_tokens.h packaging/app.rc)
+add_executable(CopilotReel WIN32 src/main.cpp src/appearance.cpp src/renderer.cpp src/settings.cpp src/localization.cpp src/iconography.cpp src/osd.cpp src/behavior.cpp src/presets.cpp src/official_icons.cpp src/local_launch.cpp src/installed_apps.cpp src/list_viewport.cpp src/updates.cpp src/artwork.cpp src/acrylic.cpp src/test_input.cpp src/tray_menu.cpp src/typography.cpp src/vi_tokens.h packaging/app.rc)
 add_dependencies(CopilotReel vi_tokens)
 add_custom_command(TARGET CopilotReel POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/brands"
     "$<TARGET_FILE_DIR:CopilotReel>/assets/brands"
-  COMMENT "Copying official brand artwork and provenance")
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts"
+    "$<TARGET_FILE_DIR:CopilotReel>/assets/fonts"
+  COMMENT "Copying official brand artwork, provenance and the bundled Japanese faces")
 target_include_directories(CopilotReel PRIVATE src packaging)
 target_compile_definitions(CopilotReel PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
 if(MSVC)
@@ -128,6 +131,19 @@ if(MSVC)
   target_compile_options(test_input_tests PRIVATE /utf-8 /EHsc /W4)
 endif()
 reel_test(test_input test_input_tests)
+add_executable(typography_tests tests/typography_tests.cpp src/typography.cpp)
+add_dependencies(typography_tests vi_tokens)
+add_custom_command(TARGET typography_tests POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts"
+    "$<TARGET_FILE_DIR:typography_tests>/assets/fonts")
+target_include_directories(typography_tests PRIVATE src)
+target_compile_definitions(typography_tests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+target_link_libraries(typography_tests PRIVATE dwrite windowsapp ole32 user32)
+if(MSVC)
+  target_compile_options(typography_tests PRIVATE /utf-8 /EHsc /W4)
+endif()
+reel_test(typography typography_tests)
 add_executable(launch_probe WIN32 tests/launch_probe.cpp)
 target_compile_definitions(launch_probe PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)
