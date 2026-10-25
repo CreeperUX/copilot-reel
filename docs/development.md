@@ -65,6 +65,6 @@ Development documentation, code comments, diagnostics, and commit messages use E
 
 ## Tests and README media
 
-`tools/test.ps1` is the one entry point for unit, smoke and regression tests (`-Tier unit|smoke|regression`, `-Installed` to also compare the installed package with the build). It writes every step's log and a `summary.json` under `artifacts/qa/test-<stamp>/` and exits 1 when a step fails. See [testing plan](testing-plan.md).
+`tools/test.ps1` is the one entry point for unit, smoke and regression tests (`-Tier unit|smoke|regression`; `-Tier installed` only compares the installed package with `build\Release` without building, and `-Installed` adds that comparison to another tier). Release builds are reproducible (`/Brepro`): one source tree gives one executable SHA-256. It writes every step's log and a `summary.json` under `artifacts/qa/test-<stamp>/` and exits 1 when a step fails. See [testing plan](testing-plan.md).
 
 `tools/record-demos.py` records the README's GIFs and step stills in each README language through the test seam, and `tools/readme-art.py` draws its language pills, download buttons and the launch image; both write to `docs/readme/`. `tools/build-fonts.py` rebuilds `assets/fonts/` from Noto Sans JP.

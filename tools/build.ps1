@@ -71,7 +71,11 @@ try {
     try { & $resourceCompiler /nologo "/fo$buildRoot\app.res" app.rc; if($LASTEXITCODE -ne 0) {throw 'Resource compilation failed.'} }
     finally { Pop-Location }
     $flags=@('/nologo','/std:c++20','/utf-8','/EHsc','/MT','/W4','/DUNICODE','/D_UNICODE','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN','/D_WIN32_WINNT=0x0A00',"/I$projectRoot\src")
-    if($Configuration -eq 'Debug') { $flags+=@('/Od','/Zi') } else { $flags+=@('/O2','/DNDEBUG') }
+    # Release objects and the app's image are reproducible: /Brepro replaces the compile and link
+    # timestamps with a hash of the content, so one source tree always yields one SHA-256 and the
+    # installed-package check (AGENTS.md, tools/test.ps1 -Tier installed) survives a rebuild.
+    $reproducible = @()
+    if($Configuration -eq 'Debug') { $flags+=@('/Od','/Zi') } else { $flags+=@('/O2','/DNDEBUG','/Brepro'); $reproducible += '/Brepro' }
     $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','installed_apps.cpp','list_viewport.cpp','updates.cpp','artwork.cpp','acrylic.cpp','test_input.cpp','tray_menu.cpp','typography.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
     $libraries=@('d3d11.lib','d2d1.lib','dwrite.lib','dxgi.lib','dxguid.lib','dwmapi.lib','windowsapp.lib','CoreMessaging.lib','user32.lib','gdi32.lib','shell32.lib','ole32.lib','oleaut32.lib','propsys.lib','shlwapi.lib','comdlg32.lib','comctl32.lib','advapi32.lib','wtsapi32.lib','windowscodecs.lib','uuid.lib','imm32.lib','uxtheme.lib','shcore.lib','wintrust.lib','crypt32.lib','bcrypt.lib','version.lib')
     Push-Location $buildRoot
@@ -80,7 +84,7 @@ try {
         New-Item -ItemType Directory -Path $buildAssets -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\brands') -Destination $buildAssets -Recurse -Force
         Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\fonts') -Destination $buildAssets -Recurse -Force
-        & $compiler @flags @sources app.res /Fe:CopilotReel.exe /link /SUBSYSTEM:WINDOWS /MANIFEST:NO @machineLink @libraries
+        & $compiler @flags @sources app.res /Fe:CopilotReel.exe /link /SUBSYSTEM:WINDOWS /MANIFEST:NO @reproducible @machineLink @libraries
         if($LASTEXITCODE -ne 0) {throw 'Application compilation failed.'}
         Assert-PeMachine (Join-Path $buildRoot 'CopilotReel.exe')
         & $compiler @flags "$projectRoot\tests\core_tests.cpp" "$projectRoot\src\localization.cpp" "$projectRoot\src\settings.cpp" /Fe:core_tests.exe /link @machineLink user32.lib gdi32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib

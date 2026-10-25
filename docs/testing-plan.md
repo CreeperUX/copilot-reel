@@ -176,7 +176,7 @@ Test packets are decoded only while the seam is active. Inactive, truncated, fut
 Unit, smoke and regression runs go through one script, never through hand-run steps:
 
 ```text
-powershell -File tools\test.ps1 [-Tier unit|smoke|regression] [-Installed]
+powershell -File tools\test.ps1 [-Tier unit|smoke|regression|installed] [-Installed]
 ```
 
 | Tier | Steps |
@@ -184,8 +184,9 @@ powershell -File tools\test.ps1 [-Tier unit|smoke|regression] [-Installed]
 | `unit` | `tools/build.ps1`: Release x64 and every unit test |
 | `smoke` | `unit`, then the seam preflight and groups `a` and `hub` |
 | `regression` (default) | `unit`, every seam group, and `tools/capture-seam.py` against the reference stills |
+| `installed` | No build: the installed package's executable equals `build\Release\CopilotReel.exe` and is running |
 
-`-Installed` adds a check that the installed package's executable equals `build\Release\CopilotReel.exe` and is running. Each step writes its log, and the run its `summary.json` (tier, commit, dirty tree, each step's status, time and the runners' own evidence), under `artifacts/qa/test-<stamp>/`; the script exits 1 when any step fails. The seam suite can still run alone:
+`-Installed` adds the `installed` check after another tier's build and tests. Release builds are reproducible (`/Brepro`), so rebuilding the same tree keeps the executable's SHA-256 and the check holds; when it fails, it also compares the staged `artifacts\package\CopilotReel.exe` and says whether the install or the build is out of date. Each step writes its log, and the run its `summary.json` (tier, commit, dirty tree, the built executable's SHA-256, each step's status, time and the runners' own evidence), under `artifacts/qa/test-<stamp>/`; the script exits 1 when any step fails. The seam suite can still run alone:
 
 ```text
 uv run --python 3.14 python tests\run-reel-seam.py [--exe build\Release\CopilotReel.exe] [--groups a,b,...] [--list]
