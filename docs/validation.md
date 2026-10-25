@@ -1,6 +1,22 @@
 # Validation status
 
-Snapshot: 2026-10-23, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.6.1**. This records demonstrated behavior and its limits, not full release acceptance.
+Snapshot: 2026-10-25, Windows 11 25H2 build `26200.9711`, x64. Installed application: **0.3.7**. This records demonstrated behavior and its limits, not full release acceptance.
+
+## Verified in v0.3.7
+
+0.3.7 is pull request #1 from `CreeperUX/copilot-reel` (Choose app, the aligned editor, the themed tray menu, pixel scrolling in the picker and Reel size), merged on 2026-10-25 after the user accepted Reel size as a fifth hub item, plus the timestamped signing from 2026-10-24. The contributor's own ARM64 evidence follows in the next section; this one is the x64 machine.
+
+| Area | Evidence and scope |
+| --- | --- |
+| Review | Every changed line was read before anything from the branch ran. The build changes only add the new sources and `uxtheme`/`shcore`. Open findings, none blocking: the Choose app list is one LISTBOX as tall as its rows, so more than about 480 Start apps at 200% exceed 32767 px; list and icon messages already posted when the editor closes are not freed; the tray menu uses uxtheme's undocumented ordinals 135/136, which match `SetPreferredAppMode`/`FlushMenuThemes` on the manifest's minimum build 22621. |
+| Native build | x64 and ARM64 (cross-compiled, not run) without warnings. All eight x64 unit-test executables passed, including `installed_apps_tests`: 519 checks, 249 Start apps listed here, each a verified local application. |
+| Interaction | `tests/run-reel-seam.py` passed all 12 groups (`artifacts/qa/seam-20261025-113354-a19e9a/`). |
+| Reel size | A seam script clicked the hub's Reel size tile through every step and once more, at the work-area center and 20 px inside its bottom-right corner: 432, 524, 616 and 708 px windows (effective DPI 108, 131, 154, 177 on this 192 DPI display), every one inside the work area, centered on the opening point in the middle and flush with the right and bottom edges in the corner; the hub kept its names and stayed open; each step was saved as `ReelSize`, a language switch kept it and it survived a restart (`artifacts/qa/size-20261025-113423/`). |
+| Rendering | `tools/capture-seam.py` published `output/runtime/v0.3.7/` (seven variants, eleven stills each) with `--no-reference`. Two comparison runs agreed with each other but not with 13 published stills (dark-frosted `main-claude`, `hub-appearance`, `hub-language`, `entry-app`; light-frosted `main`, `main-claude`, `hub`, `hub-appearance`, `hub-language`, `manage`, `manage-drag`, `manage-trash`, `gated`): 268-1986 pixels just over the 2-level tolerance at the center name and the plate's lower edge and shadow, with no visible difference. Those stills were replaced by the agreeing run's, and a fourth run then compared every still with 0 pixels beyond tolerance (`artifacts/qa/capture-seam-20261025-114425-464446/`). The same two-state differences (268, 304, 414, 504 and 2348 pixels) also appear with the 0.3.6.1 build against the 0.3.6 references, so they predate this release. |
+| Packages | `CopilotReel_0.3.7.0_x64.msix` and `CopilotReel_0.3.7.0_arm64.msix`, signed with `CN=CopilotReel Development` and a DigiCert RFC 3161 timestamp; `signtool verify /pa` passed. Executable SHA-256: x64 `38C96556…009B`, ARM64 `4AFC153B…FA53`. |
+| Installation | 0.3.7.0 replaced 0.3.6.1.0 after a backup (`artifacts/backups/20261025-114701`); four configuration files were restored, `preferences.ini` without a `ReelSize`, so the reel stays at 100%. Started in the background; the installed executable equals the tested build, and the Copilot key still selects `CopilotReel.Desktop_nks6vs6sjb1qw!App`. |
+
+Not verified on x64: the Choose app page, the editor's new layout and the themed tray menu. The editor takes the foreground, so the seam tier does not open it; it needs one check by hand, with a real right-click on the tray icon.
 
 ## Installed-app picker and editor layout (fork contribution, 2026-10-24)
 

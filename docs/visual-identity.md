@@ -157,6 +157,7 @@ Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, s
 - EN/ZH: idle Main pixel-identical; the hub differs only inside the monogram.
 - Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections stay within 2 levels per channel of the 0.3.4 captures in five variants (0.3.5.1, every channel compared; the 0.3.5 report of 0 differing pixels compared only alpha); App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam). 0.3.6 removed those chevrons with the reorder they served.
 - Drag and trash (0.3.6): `output/runtime/v0.3.6/*-manage-drag.png` and `*-manage-trash.png` show a tile lifted over another slot and over the armed trash in seven variants; the 0.8 reel scale and the four-item hub make every 0.3.6 still a new reference.
+- Reel size (0.3.7): `output/runtime/v0.3.7/` is the reference set for the five-item hub, with the Reel size tile showing `100%` as a 12 DIP monogram in seven variants.
 - Placement: zero interior offset, minimal clamp at eight edge and corner positions, no cursor warp.
 
 Not verified:
