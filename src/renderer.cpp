@@ -73,7 +73,8 @@ struct OrbitRenderer::Impl {
     struct Item {
         PageItem entry;
         ArtworkClass artClass = ArtworkClass::Generic;
-        bool plated = false, preferred = false;
+        bool plated = false;
+        TileBadge badge = TileBadge::None;  // preferred agent or switch on (check), update ready (dot)
         float angle = 0, cx = 0, cy = 0;     // exact orbit center (DIP); hit testing uses the same
         // Where a drag last sent the item and at what scale: a Reflow page starts its items here.
         D2D1_POINT_2F at{};
@@ -604,7 +605,7 @@ struct OrbitRenderer::Impl {
         const auto& plate = appearance.surface;
         return appearance.highContrast ? plate.r * .2126f + plate.g * .7152f + plate.b * .0722f < .5f : appearance.dark;
     }
-    void DrawItemArt(ID2D1DeviceContext* context, wn::float2 size, const AppTarget& visual, bool preferred, bool selected) {
+    void DrawItemArt(ID2D1DeviceContext* context, wn::float2 size, const AppTarget& visual, TileBadge badge, bool selected) {
         const float h = size.x / 2, t = SnapDip(vi::kTile / 2);
         const auto tile = D2D1::RectF(h - t, h - t, h + t, h + t);
         const auto glyph = Color(selected && appearance.highContrast ? appearance.selectionText : appearance.foreground);
@@ -620,21 +621,22 @@ struct OrbitRenderer::Impl {
             // Plated marks replace the neutral tile, so they carry its hairline themselves.
             if (ClassifyArtwork(visual) == ArtworkClass::Plated) DrawTile(context, size, false);
         }
-        if (preferred) {
-            // Accent disc with a plate-colored ring that reads as a cutout.
-            const D2D1_POINT_2F badge{h + vi::kBadgeOffset, h - vi::kBadgeOffset};
-            context->FillEllipse(D2D1::Ellipse(badge, vi::kBadgeRingRadius, vi::kBadgeRingRadius),
+        if (badge != TileBadge::None) {
+            // Accent disc with a plate-colored ring that reads as a cutout; the dot is smaller and has no check.
+            const bool check = badge == TileBadge::Check;
+            const D2D1_POINT_2F at{h + vi::kBadgeOffset, h - vi::kBadgeOffset};
+            const float ring = check ? vi::kBadgeRingRadius : vi::kBadgeDotRingRadius, disc = check ? vi::kBadgeRadius : vi::kBadgeDotRadius;
+            context->FillEllipse(D2D1::Ellipse(at, ring, ring),
                 SolidBrush(context, Color(selected ? appearance.selection : appearance.surface)).get());
-            context->FillEllipse(D2D1::Ellipse(badge, vi::kBadgeRadius, vi::kBadgeRadius),
-                SolidBrush(context, Color(appearance.accent)).get());
-            DrawGlyph(context, Glyph::Check, badge, 2 * vi::kBadgeRadius, Color(appearance.textOnAccent),
-                static_cast<float>(dpi));
+            context->FillEllipse(D2D1::Ellipse(at, disc, disc), SolidBrush(context, Color(appearance.accent)).get());
+            if (check)
+                DrawGlyph(context, Glyph::Check, at, 2 * vi::kBadgeRadius, Color(appearance.textOnAccent), static_cast<float>(dpi));
         }
     }
 
-    std::wstring ArtKey(const AppTarget& visual, bool preferred, bool selected) const {
+    std::wstring ArtKey(const AppTarget& visual, TileBadge badge, bool selected) const {
         std::wstring key = selected ? L"S" : L"N";
-        key += preferred ? L"P|" : L"-|";
+        key += badge == TileBadge::Check ? L"P|" : badge == TileBadge::Dot ? L"D|" : L"-|";
         // The artwork source, not the target: catalog entries without a target share an empty one.
         // A Shell icon that appears later (a drive or package becoming available) changes it.
         key += ArtworkIdentity(visual, DarkPlate());
@@ -644,17 +646,17 @@ struct OrbitRenderer::Impl {
         return key;
     }
     // Item artwork is rasterized once per identity, theme and DPI; selection never redraws it.
-    wc::CompositionSurfaceBrush ArtBrush(const AppTarget& visual, bool preferred, bool selected) {
-        const auto key = ArtKey(visual, preferred, selected);
+    wc::CompositionSurfaceBrush ArtBrush(const AppTarget& visual, TileBadge badge, bool selected) {
+        const auto key = ArtKey(visual, badge, selected);
         if (const auto found = art.find(key); found != art.end()) return found->second;
         const auto canvas = MakeCanvas(itemSize.x / 2, itemSize.y / 2);
-        Paint(canvas.surface, [&](ID2D1DeviceContext* context) { DrawItemArt(context, canvas.size, visual, preferred, selected); });
+        Paint(canvas.surface, [&](ID2D1DeviceContext* context) { DrawItemArt(context, canvas.size, visual, badge, selected); });
         auto brush = compositor.CreateSurfaceBrush(canvas.surface);
         art.emplace(key, brush);
         return brush;
     }
     // The selected variant differs only in the badge ring and in high-contrast glyph color.
-    bool HasSelectedVariant(const Item& item) const { return item.preferred || appearance.highContrast; }
+    bool HasSelectedVariant(const Item& item) const { return item.badge != TileBadge::None || appearance.highContrast; }
 
     void BuildStatic() {
         const D2D1_POINT_2F c{kCenter, kCenter};
@@ -758,10 +760,10 @@ struct OrbitRenderer::Impl {
             item.cx = kCenter + vi::kOrbitRadius * std::cos(item.angle);
             item.cy = kCenter + vi::kOrbitRadius * std::sin(item.angle);
             item.at = {item.cx, item.cy};
-            item.preferred = static_cast<int>(i) == model.preferredIndex;
+            item.badge = static_cast<int>(i) == model.preferredIndex ? TileBadge::Check : model.items[i].badge;
             item.artClass = ClassifyArtwork(item.entry.visual);
             item.plated = item.artClass == ArtworkClass::Plated;
-            item.artKey = ArtKey(item.entry.visual, item.preferred, false);
+            item.artKey = ArtKey(item.entry.visual, item.badge, false);
             item.root = compositor.CreateContainerVisual();
             item.root.Size(itemSize);
             item.root.Offset({SnapDip(item.cx - itemSize.x / 2), SnapDip(item.cy - itemSize.y / 2), 0});
@@ -771,10 +773,10 @@ struct OrbitRenderer::Impl {
                 item.tile = MakeSprite(tileBrush, itemSize, local);
                 item.root.Children().InsertAtTop(item.tile);
             }
-            item.art = MakeSprite(ArtBrush(item.entry.visual, item.preferred, false), itemSize, local);
+            item.art = MakeSprite(ArtBrush(item.entry.visual, item.badge, false), itemSize, local);
             item.root.Children().InsertAtTop(item.art);
             if (HasSelectedVariant(item)) {
-                item.artSelected = MakeSprite(ArtBrush(item.entry.visual, item.preferred, true), itemSize, local);
+                item.artSelected = MakeSprite(ArtBrush(item.entry.visual, item.badge, true), itemSize, local);
                 item.artSelected.Opacity(0);
                 item.root.Children().InsertAtTop(item.artSelected);
             }
@@ -824,12 +826,12 @@ struct OrbitRenderer::Impl {
         for (size_t i = 0; i != p.items.size(); ++i) {
             auto& item = p.items[i];
             item.entry = model.items[i];
-            item.preferred = static_cast<int>(i) == model.preferredIndex;
-            const auto key = ArtKey(item.entry.visual, item.preferred, false);
+            item.badge = static_cast<int>(i) == model.preferredIndex ? TileBadge::Check : model.items[i].badge;
+            const auto key = ArtKey(item.entry.visual, item.badge, false);
             const D2D1_POINT_2F local{itemSize.x / 2, itemSize.y / 2};
             if (key != item.artKey) {
                 auto previous = item.art;
-                item.art = MakeSprite(ArtBrush(item.entry.visual, item.preferred, false), itemSize, local);
+                item.art = MakeSprite(ArtBrush(item.entry.visual, item.badge, false), itemSize, local);
                 item.root.Children().InsertAbove(item.art, previous);
                 item.artKey = key;
                 if (animate) {
@@ -845,7 +847,7 @@ struct OrbitRenderer::Impl {
                 }
             }
             if (HasSelectedVariant(item)) {
-                auto brush = ArtBrush(item.entry.visual, item.preferred, true);
+                auto brush = ArtBrush(item.entry.visual, item.badge, true);
                 if (!item.artSelected) {
                     item.artSelected = MakeSprite(brush, itemSize, local);
                     item.artSelected.Opacity(0);

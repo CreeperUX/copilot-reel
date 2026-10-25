@@ -29,6 +29,7 @@ inline const wchar_t* TransitionName(PageTransition transition) {
 struct PageItem {
     AppTarget visual;
     bool enabled = true;   // disabled items keep their slot, draw at reduced opacity and cannot be chosen
+    TileBadge badge = TileBadge::None;  // the preferred agent's check comes from preferredIndex
 };
 
 struct PageModel {

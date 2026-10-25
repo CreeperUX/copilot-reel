@@ -65,7 +65,7 @@ POINTER, CLICK, RIGHT_CLICK, KEY, PRESS, RELEASE, ACTION_COUNT = range(7)
 # Copilot fast-path wParam
 FAST_TAP, FAST_HOLD_START, FAST_HOLD_STOP = range(3)
 # src/radial_menu.h MenuPage (4 was the Preferred agent page)
-PAGE_MAIN, PAGE_MANAGE, PAGE_PRESETS, PAGE_SETTINGS, PAGE_ENTRY = 0, 1, 2, 3, 5
+PAGE_MAIN, PAGE_MANAGE, PAGE_PRESETS, PAGE_SETTINGS, PAGE_ENTRY, PAGE_ABOUT = 0, 1, 2, 3, 5, 6
 
 VK_TAB, VK_RETURN, VK_ESCAPE, VK_SPACE = 0x09, 0x0D, 0x1B, 0x20
 VK_LEFT, VK_RIGHT, VK_DELETE = 0x25, 0x27, 0x2E
@@ -332,7 +332,7 @@ class Diagnostics:
 class Reel:
     """One isolated test instance: its process, window, data directory and synthetic cursor."""
 
-    def __init__(self, exe, data, run_id=None, pointer=None, visual=None):
+    def __init__(self, exe, data, run_id=None, pointer=None, visual=None, extra=None):
         self.exe = Path(exe).resolve()
         self.data = Path(data).resolve()
         self.run_id = run_id or uuid.uuid4().hex
@@ -341,6 +341,8 @@ class Reel:
         left, top, right, bottom = primary_work_area()
         self.cursor = tuple(pointer) if pointer else ((left + right) // 2, (top + bottom) // 2)
         self.visual = visual
+        # More COPILOT_REEL_TEST_* settings for this instance, such as an update feed.
+        self.extra = dict(extra or {})
         self.process = None
         self.hwnd = None
         self.sequence = 0
@@ -358,6 +360,7 @@ class Reel:
         env['COPILOT_REEL_TEST_POINTER'] = f'{round(point[0])},{round(point[1])}'
         if self.visual:
             env['COPILOT_REEL_VISUAL_OVERRIDE'] = self.visual
+        env.update(self.extra)
         return env
 
     def start(self, argument='--background', pointer=None):

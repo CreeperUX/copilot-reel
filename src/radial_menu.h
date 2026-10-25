@@ -8,11 +8,26 @@
 
 namespace reel {
 // The values are logged and read by the seam tests; 4 was the Preferred agent page.
-enum class MenuPage { Main, Manage, Presets, Settings, Entry=5 };
+enum class MenuPage { Main, Manage, Presets, Settings, Entry=5, About=6 };
 enum class MenuAction { Launch, Manage, Settings, Edit, Presets, Preset, Restore, Custom,
-    Language, SetPreferred, Appearance, Entry, Remove, Previous, Next, Done, Size };
+    Language, SetPreferred, Appearance, Entry, Remove, Previous, Next, Done, Size,
+    About, AboutInfo, GitHub, AutoCheck, AutoInstall, CheckUpdate, InstallUpdate };
 // Disabled entries keep their slot and name but can never be chosen.
-struct MenuEntry { AppTarget visual; MenuAction action; int index=-1; bool enabled=true; };
+struct MenuEntry { AppTarget visual; MenuAction action; int index=-1; bool enabled=true; TileBadge badge=TileBadge::None; };
+inline constexpr wchar_t kAuthor[]=L"baka_sayaka";
+inline constexpr wchar_t kRepositoryUrl[]=L"https://github.com/bakasayaka/copilot-reel";
+// What the About page shows: the running version, the two update switches and where an update
+// stands. `offered` is the version an update would install, or empty.
+struct AboutState {
+    std::wstring version;
+    bool autoCheck=true,autoInstall=false;
+    UpdateStage stage=UpdateStage::Idle;
+    std::wstring offered;
+};
+// An update waits to be installed: its tile and the hub's About tile carry the dot.
+inline bool UpdateWaiting(const AboutState& about) {
+    return !about.offered.empty() && (about.stage==UpdateStage::Available || about.stage==UpdateStage::Failed);
+}
 inline constexpr size_t kMaxApps=8;
 // Apps taken out of the reel keep their settings as Add candidates; the oldest leave first.
 inline constexpr size_t kMaxParked=16;
@@ -128,10 +143,12 @@ inline int AdjustDirection(UINT key) {return key=='A' || key==VK_LEFT?-1:1;}
 // reach ShellExecute and app entries retain their official icon identity.
 // On the Add page the first `restorable` catalog entries are parked apps.
 inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarget>& apps,
-    const std::vector<AppTarget>& presets,size_t offset=0,int editing=-1,size_t restorable=0) {
+    const std::vector<AppTarget>& presets,size_t offset=0,int editing=-1,size_t restorable=0,
+    const AboutState& about=AboutState{}) {
     std::vector<MenuEntry> result;
-    auto action=[&](const wchar_t* name,const wchar_t* glyph,MenuAction kind,int index=-1,bool enabled=true) {
-        result.push_back({{name,TargetKind::Shell,glyph,L"",L""},kind,index,enabled});
+    auto action=[&](std::wstring name,const wchar_t* glyph,MenuAction kind,int index=-1,bool enabled=true,
+        TileBadge badge=TileBadge::None) {
+        result.push_back({{std::move(name),TargetKind::Shell,glyph,L"",L""},kind,index,enabled,badge});
     };
     auto entries=[&](MenuAction kind) {
         for(size_t i=0;i<apps.size();++i) result.push_back({apps[i],kind,static_cast<int>(i)});
@@ -157,7 +174,41 @@ inline std::vector<MenuEntry> BuildMenu(MenuPage page,const std::vector<AppTarge
         // Shows its step in the tile; each confirm moves to the next and wraps.
         action(Tr(L"Reel size",L"轮盘大小"),L"reel:size",MenuAction::Size);
         action(Tr(L"Manage apps",L"管理应用"),L"reel:manage",MenuAction::Manage);
-        action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets,-1,canAdd);break;
+        action(Tr(L"Add app",L"添加应用"),L"reel:add",MenuAction::Presets,-1,canAdd);
+        action(Tr(L"About",L"关于"),L"reel:about",MenuAction::About,-1,true,UpdateWaiting(about)?TileBadge::Dot:TileBadge::None);break;
+    case MenuPage::About: {
+        // The reel's own mark comes first, named by the version and the author, then GitHub's mark,
+        // two switches that show their state in the icon and the update tile, which checks or
+        // installs the update it found. Every name fits the center's one line.
+        const bool updatable=about.stage!=UpdateStage::Unavailable;
+        const auto state=[](const wchar_t* target,bool on){return std::wstring(target)+(on?L":on":L":off");};
+        result.push_back({{about.version+L" · "+kAuthor,TargetKind::Shell,L"reel:author",L"",L""},MenuAction::AboutInfo});
+        result.push_back({{L"GitHub",TargetKind::Shell,L"reel:github",L"",L""},MenuAction::GitHub});
+        result.push_back({{Tr(L"Auto-check updates",L"自动检查更新"),TargetKind::Shell,state(L"reel:auto-check",about.autoCheck),L"",L""},
+            MenuAction::AutoCheck,-1,updatable});
+        result.push_back({{Tr(L"Auto-install updates",L"自动安装更新"),TargetKind::Shell,state(L"reel:auto-install",about.autoInstall),L"",L""},
+            MenuAction::AutoInstall,-1,updatable});
+        const auto& version=about.offered;
+        switch(about.stage) {
+        case UpdateStage::Unavailable:
+            action(Tr(L"Installed app only",L"安装版才能更新"),L"reel:check-update",MenuAction::CheckUpdate,-1,false);break;
+        case UpdateStage::Checking:
+            action(Tr(L"Checking…",L"正在检查…"),L"reel:check-update",MenuAction::CheckUpdate);break;
+        case UpdateStage::Current:
+            action(Tr(L"Up to date",L"已是最新版本"),L"reel:check-update",MenuAction::CheckUpdate);break;
+        case UpdateStage::Available:
+            action(Tr(L"Install ",L"安装 ")+version,L"reel:install-update",MenuAction::InstallUpdate,-1,true,TileBadge::Dot);break;
+        case UpdateStage::Installing:
+            action(Tr(L"Installing ",L"正在安装 ")+version+L"…",L"reel:install-update",MenuAction::InstallUpdate);break;
+        case UpdateStage::Failed:
+            if(version.empty())action(Tr(L"Check failed · Retry",L"检查失败 · 重试"),L"reel:check-failed",MenuAction::CheckUpdate);
+            else action(Tr(L"Install failed · Retry",L"安装失败 · 重试"),L"reel:install-update",MenuAction::InstallUpdate,-1,true,TileBadge::Dot);
+            break;
+        default:
+            action(Tr(L"Check for updates",L"检查更新"),L"reel:check-update",MenuAction::CheckUpdate);break;
+        }
+        break;
+    }
     case MenuPage::Entry:
         // The app itself comes first and carries its preferred badge; choosing it is done.
         // Its place in the reel changes by dragging it on the Manage page.

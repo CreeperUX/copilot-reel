@@ -2,9 +2,12 @@
 #include "settings.h"
 #include "vi_tokens.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cwchar>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -12,6 +15,8 @@ namespace reel {
 namespace {
 std::atomic<Language> currentLanguage{Language::English};
 std::atomic<unsigned> currentReelSize{vi::kReelSizeDefault};
+std::mutex updatesLock;
+UpdatePreferences currentUpdates;
 
 std::wstring PreferencesPath() {
     const auto config = ConfigPath();
@@ -73,9 +78,31 @@ unsigned LoadReelSize() noexcept {
     return step;
 }
 
+UpdatePreferences CurrentUpdatePreferences() noexcept {
+    std::lock_guard guard(updatesLock);
+    return currentUpdates;
+}
+
+UpdatePreferences LoadUpdatePreferences() noexcept {
+    UpdatePreferences preferences;
+    try {
+        const auto path = PreferencesPath();
+        if (!path.empty()) {
+            preferences.autoCheck = GetPrivateProfileIntW(L"Updates", L"AutoCheck", 1, path.c_str()) != 0;
+            preferences.autoInstall = GetPrivateProfileIntW(L"Updates", L"AutoInstall", 0, path.c_str()) != 0;
+            std::array<wchar_t, 32> value{};
+            GetPrivateProfileStringW(L"Updates", L"LastCheck", L"0", value.data(), static_cast<DWORD>(value.size()), path.c_str());
+            preferences.lastCheck = (std::max)(0LL, std::wcstoll(value.data(), nullptr, 10));
+        }
+    } catch (...) { }
+    std::lock_guard guard(updatesLock);
+    currentUpdates = preferences;
+    return preferences;
+}
+
 namespace {
 // Rewrites preferences.ini whole through a temporary file and an atomic replacement.
-bool WritePreferences(Language language, unsigned reelSize) noexcept {
+bool WritePreferences(Language language, unsigned reelSize, const UpdatePreferences& updates) noexcept {
     std::wstring temporary;
     HANDLE file=INVALID_HANDLE_VALUE;
     bool owned=false;
@@ -86,7 +113,9 @@ bool WritePreferences(Language language, unsigned reelSize) noexcept {
         if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) return false;
         const wchar_t* value = language == Language::SimplifiedChinese ? L"zh-CN" : L"en-US";
         const std::wstring content=std::wstring(L"\xfeff[General]\r\nLanguage=")+value+
-            L"\r\nReelSize="+std::to_wstring(ReelSizePercent(reelSize))+L"\r\n";
+            L"\r\nReelSize="+std::to_wstring(ReelSizePercent(reelSize))+
+            L"\r\n[Updates]\r\nAutoCheck="+(updates.autoCheck?L"1":L"0")+L"\r\nAutoInstall="+(updates.autoInstall?L"1":L"0")+
+            L"\r\nLastCheck="+std::to_wstring(updates.lastCheck)+L"\r\n";
         temporary=path+L"."+std::to_wstring(GetCurrentProcessId())+L"."+std::to_wstring(GetTickCount64())+L".tmp";
         file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
         if(file==INVALID_HANDLE_VALUE) return false;
@@ -111,6 +140,12 @@ bool WritePreferences(Language language, unsigned reelSize) noexcept {
 }
 }
 
-bool SaveLanguage(Language language) noexcept { return WritePreferences(language, CurrentReelSize()); }
-bool SaveReelSize(unsigned step) noexcept { return WritePreferences(CurrentLanguage(), step); }
+bool SaveLanguage(Language language) noexcept { return WritePreferences(language, CurrentReelSize(), CurrentUpdatePreferences()); }
+bool SaveReelSize(unsigned step) noexcept { return WritePreferences(CurrentLanguage(), step, CurrentUpdatePreferences()); }
+bool SaveUpdatePreferences(const UpdatePreferences& preferences) noexcept {
+    if (!WritePreferences(CurrentLanguage(), CurrentReelSize(), preferences)) return false;
+    std::lock_guard guard(updatesLock);
+    currentUpdates = preferences;
+    return true;
+}
 }

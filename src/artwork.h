@@ -20,8 +20,10 @@ struct ArtworkStyle {
 };
 
 // Native command glyphs: Segoe Fluent Icons, with a vector fallback.
+// GenericApp stays last: it sizes the glyph cache.
 enum class Glyph { Add, Manage, Preferred, Sun, Moon, Edit, Remove, Previous, Next,
-                   ChevronLeftSmall, ChevronRightSmall, BackChevron, Check, GenericApp };
+                   ChevronLeftSmall, ChevronRightSmall, BackChevron, Check,
+                   About, SwitchOn, SwitchOff, CheckUpdate, CheckFailed, Download, GenericApp };
 
 // UI thread. Call when the configured targets or the DPI change. May perform file
 // and Shell I/O (vendor artwork, Shell icons, per-DPI raster prescale). Drawing never

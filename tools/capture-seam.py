@@ -5,11 +5,12 @@ pointer, sends input, takes the foreground or touches the installed instance. Ea
 Main, a selected vendor tile, the hub, two hub selections and an edge-gated hold (the still set of
 tools/capture-v034.py), and from 0.3.6 'Your apps', an app tile dragged over another slot and over the
 armed center trash (the drag is canceled with Escape, so the order never changes), and an app's actions
-page without reorder chevrons. Every image that also exists in the reference folder is compared pixel by
-pixel, in every channel; a channel may differ by --tolerance levels (default 2, because at rest some
-anti-aliased edges render up to two levels away), and every changed pixel is counted either way.
+page without reorder chevrons, and from 0.3.8 About with its first tile and a switch. Every image that also
+exists in the reference folder is compared pixel by pixel, in every channel; a channel may differ by
+--tolerance levels (default 2, because at rest some anti-aliased edges render up to two levels away), and
+every changed pixel is counted either way.
 0.3.6 draws the reel at 0.8 of its DIP geometry, so 0.3.4 and 0.3.5 stills are no longer comparable, and
-0.3.7 adds Reel size as a fifth hub entry: the reference set is output/runtime/v0.3.7, published with
+0.3.7 adds Reel size and 0.3.8 About to the hub: the reference set is output/runtime/v0.3.8, published with
 --no-reference.
 
 Last, each variant opens Add from the hub once agent discovery has completed and captures every Add page
@@ -25,7 +26,7 @@ tolerance or has another size, when a reference state has no reference image, wh
 their identities, or when a variant cannot be captured. --no-reference records every still without a
 comparison, to publish a new reference set after a deliberate visual change.
 
-    uv run --python 3.14 --with pillow python tools/capture-seam.py [--reference output/runtime/v0.3.7]
+    uv run --python 3.14 --with pillow python tools/capture-seam.py [--reference output/runtime/v0.3.8]
         [--output output/runtime/vX.Y.Z] [--variants dark-solid,light-solid,...] [--tolerance 2] [--no-reference]
 
 Without --output the stills go to the run's evidence directory under artifacts/qa.
@@ -60,7 +61,10 @@ VARIANTS = [('dark-solid', 'theme=dark;material=solid'), ('light-solid', 'theme=
             ('dark-150', 'theme=dark;material=solid;dpi=144')]
 # Each must have a reference image.
 REFERENCE_STATES = ('main', 'main-claude', 'hub', 'hub-appearance', 'hub-language', 'manage', 'manage-drag',
-                    'manage-trash', 'entry', 'entry-app', 'gated')
+                    'manage-trash', 'entry', 'entry-app', 'about', 'about-author', 'about-switch', 'gated')
+# About shows its updater as an installed reel does: a feed that is never asked (nothing checks by itself
+# in a test instance) and a version, so the switches and the update tile are enabled.
+UPDATER = {'COPILOT_REEL_TEST_UPDATE_FEED': 'http://127.0.0.1:9/releases', 'COPILOT_REEL_TEST_VERSION': '0.3.8.0'}
 # Every animation has come to rest: captured after 0.35 s, a seat that had just travelled still differed
 # from its resting pixels by up to three levels, while 1 s and 3 s captures are identical.
 SETTLE_SECONDS = 1.0
@@ -137,7 +141,7 @@ def capture_variant(variant, override, output, data):
     write_profiles(directory)
     work = seam.primary_work_area()
     anchor = ((work[0] + work[2]) // 2, (work[1] + work[3]) // 2)
-    reel = seam.Reel(EXE, directory, run_id='cap-' + uuid.uuid4().hex[:12], pointer=anchor, visual=override)
+    reel = seam.Reel(EXE, directory, run_id='cap-' + uuid.uuid4().hex[:12], pointer=anchor, visual=override, extra=UPDATER)
     shots = []
     try:
         reel.start()
@@ -185,6 +189,24 @@ def capture_variant(variant, override, output, data):
         shots.append(still(reel, output, variant, 'entry', ''))
         reel.pointer(slot(reel, 0, len(values.names)))
         shots.append(still(reel, output, variant, 'entry-app', 'Claude'))
+        reel.send_command(seam.CANCEL)
+        wait_visible(reel, False)
+        # 0.3.8: About from the hub, its first tile (the reel's mark, named by the version and the
+        # author) and the auto-check switch, which is on.
+        reel.pointer(anchor)
+        reel.send_command(seam.SETTINGS, anchor)
+        wait_visible(reel, True)
+        hub = reel.diagnostics().names
+        reel.pointer(slot(reel, hub.index('About'), len(hub)))
+        reel.click(slot(reel, hub.index('About'), len(hub)))
+        reel.pointer(anchor)
+        values = reel.diagnostics()
+        assert values.page == seam.PAGE_ABOUT and len(values.names) == 5, values.text
+        shots.append(still(reel, output, variant, 'about', ''))
+        reel.pointer(slot(reel, 0, 5))
+        shots.append(still(reel, output, variant, 'about-author', values.names[0]))
+        reel.pointer(slot(reel, 2, 5))
+        shots.append(still(reel, output, variant, 'about-switch', values.names[2]))
         reel.send_command(seam.CANCEL)
         wait_visible(reel, False)
         corner = (work[0] + 24, work[1] + 24)
@@ -299,7 +321,7 @@ def describe(comparison):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--reference', default='output/runtime/v0.3.7')
+    parser.add_argument('--reference', default='output/runtime/v0.3.8')
     parser.add_argument('--no-reference', action='store_true',
                         help='Record every still without comparing it, to publish a new reference set.')
     # Routine runs write to the evidence directory; publishing a version's stills to

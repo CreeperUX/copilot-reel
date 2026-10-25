@@ -146,7 +146,8 @@ private:
 
 // KeyHold is a hold whose release no message reports (the Shell's argument-less activation
 // while the key is down): the resident polls the key instead.
-enum class Command : unsigned { Background, Settings, Preview, HoldStart, HoldStop, Cancel, Quit, Tap, Diagnostics, SmokeTest, KeyHold, Invalid };
+enum class Command : unsigned { Background, Settings, Preview, HoldStart, HoldStop, Cancel, Quit, Tap, Diagnostics, SmokeTest, KeyHold,
+    UpdateCheck, UpdateInstall, Invalid };
 
 inline Command ParseUri(std::wstring_view uri) {
     // This private activation protocol intentionally accepts no launch targets. Behind a Shell

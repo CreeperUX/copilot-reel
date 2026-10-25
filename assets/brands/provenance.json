@@ -277,6 +277,41 @@
       "processing": "Unmodified upstream file"
     },
     {
+      "file": "copilot-reel.png",
+      "sha256": "c0d2a84ba2f06f61ba2bd68d6d9a10e861231b6b6feb74ebbd6ba91bd8454c0a",
+      "owner": "Copilot Reel",
+      "source": "tools/generate-assets.py (the Soft Orbit app mark, the same raster as packaging/assets/CopilotReel.ico)",
+      "processing": "Generated at 256 x 256; About's first tile"
+    },
+    {
+      "file": "github-dark.png",
+      "sha256": "0d4c235fef9efec54174a7c005fc0fe0ce2d63d35c21898ab5148587111397a9",
+      "owner": "GitHub",
+      "source": "https://brand.github.com/GitHub_Logos.zip (retrieved 2026-10-25, SHA-256 e2a67d6cc51d990a52c46c1cf6bcab688db4830982174bca50e0be7a5c2f3194): GitHub Logos/PNG/GitHub_Invertocat_White.png",
+      "processing": "Unmodified upstream file. The white Invertocat for dark plates, as a button that links to this project's repository (brand.github.com/foundations/logo, 'Social button')"
+    },
+    {
+      "file": "github-dark.svg",
+      "sha256": "ccd84c89b1056345608fc3489357f8acc7397e49a3cdc2d418b6c8016911d47b",
+      "owner": "GitHub",
+      "source": "https://brand.github.com/GitHub_Logos.zip: GitHub Logos/SVG/GitHub_Invertocat_White.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
+      "file": "github-light.png",
+      "sha256": "2a2f5cbcc74c7fa83c40127dd8b0e42c23f1157131aebe28492aa1ac27bbdc6d",
+      "owner": "GitHub",
+      "source": "https://brand.github.com/GitHub_Logos.zip: GitHub Logos/PNG/GitHub_Invertocat_Black.png",
+      "processing": "Unmodified upstream file. The black Invertocat for light plates"
+    },
+    {
+      "file": "github-light.svg",
+      "sha256": "693d7abe6f899646cc2e96856723b45e95f71885a54910b2749f6decdf7e1ee1",
+      "owner": "GitHub",
+      "source": "https://brand.github.com/GitHub_Logos.zip: GitHub Logos/SVG/GitHub_Invertocat_Black.svg",
+      "processing": "Unmodified upstream file"
+    },
+    {
       "file": "zcode.png",
       "sha256": "ae8cc4ca59180441ce3ba60a572ee9a5ee802f9ab9e7de1177ae5e0027c36a7a",
       "owner": "Z.ai",

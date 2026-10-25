@@ -72,8 +72,8 @@ try {
     finally { Pop-Location }
     $flags=@('/nologo','/std:c++20','/utf-8','/EHsc','/MT','/W4','/DUNICODE','/D_UNICODE','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN','/D_WIN32_WINNT=0x0A00',"/I$projectRoot\src")
     if($Configuration -eq 'Debug') { $flags+=@('/Od','/Zi') } else { $flags+=@('/O2','/DNDEBUG') }
-    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','installed_apps.cpp','artwork.cpp','acrylic.cpp','test_input.cpp','tray_menu.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
-    $libraries=@('d3d11.lib','d2d1.lib','dwrite.lib','dxgi.lib','dxguid.lib','dwmapi.lib','windowsapp.lib','CoreMessaging.lib','user32.lib','gdi32.lib','shell32.lib','ole32.lib','oleaut32.lib','propsys.lib','shlwapi.lib','comdlg32.lib','comctl32.lib','advapi32.lib','wtsapi32.lib','windowscodecs.lib','uuid.lib','imm32.lib','uxtheme.lib','shcore.lib')
+    $sources=@('main.cpp','appearance.cpp','renderer.cpp','settings.cpp','localization.cpp','iconography.cpp','osd.cpp','behavior.cpp','presets.cpp','official_icons.cpp','local_launch.cpp','installed_apps.cpp','list_viewport.cpp','updates.cpp','artwork.cpp','acrylic.cpp','test_input.cpp','tray_menu.cpp') | ForEach-Object {Join-Path $projectRoot "src\$_"}
+    $libraries=@('d3d11.lib','d2d1.lib','dwrite.lib','dxgi.lib','dxguid.lib','dwmapi.lib','windowsapp.lib','CoreMessaging.lib','user32.lib','gdi32.lib','shell32.lib','ole32.lib','oleaut32.lib','propsys.lib','shlwapi.lib','comdlg32.lib','comctl32.lib','advapi32.lib','wtsapi32.lib','windowscodecs.lib','uuid.lib','imm32.lib','uxtheme.lib','shcore.lib','wintrust.lib','crypt32.lib','bcrypt.lib','version.lib')
     Push-Location $buildRoot
     try {
         $buildAssets=Join-Path $buildRoot 'assets'
@@ -100,6 +100,12 @@ try {
         & $compiler @flags "$projectRoot\tests\installed_apps_tests.cpp" "$projectRoot\src\installed_apps.cpp" "$projectRoot\src\local_launch.cpp" /Fe:installed_apps_tests.exe /link @machineLink user32.lib gdi32.lib shell32.lib ole32.lib propsys.lib windowsapp.lib uuid.lib
         if($LASTEXITCODE -ne 0) {throw 'Installed apps tests compilation failed.'}
         Invoke-CompiledTest 'installed_apps_tests.exe'
+        & $compiler @flags "$projectRoot\tests\list_viewport_tests.cpp" "$projectRoot\src\list_viewport.cpp" /Fe:list_viewport_tests.exe /link @machineLink user32.lib
+        if($LASTEXITCODE -ne 0) {throw 'List viewport tests compilation failed.'}
+        Invoke-CompiledTest 'list_viewport_tests.exe'
+        & $compiler @flags "$projectRoot\tests\updates_tests.cpp" "$projectRoot\src\updates.cpp" "$projectRoot\src\settings.cpp" "$projectRoot\src\localization.cpp" "$projectRoot\src\test_input.cpp" /Fe:updates_tests.exe /link @machineLink user32.lib gdi32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib shlwapi.lib windowsapp.lib wintrust.lib crypt32.lib bcrypt.lib version.lib
+        if($LASTEXITCODE -ne 0) {throw 'Update tests compilation failed.'}
+        Invoke-CompiledTest 'updates_tests.exe'
         & $compiler @flags "$projectRoot\tests\display_names_tests.cpp" "$projectRoot\src\iconography.cpp" "$projectRoot\src\behavior.cpp" "$projectRoot\src\localization.cpp" "$projectRoot\src\settings.cpp" /Fe:display_names_tests.exe /link @machineLink d2d1.lib windowsapp.lib user32.lib gdi32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib
         if($LASTEXITCODE -ne 0) {throw 'Display name tests compilation failed.'}
         Invoke-CompiledTest 'display_names_tests.exe'

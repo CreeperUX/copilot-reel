@@ -22,4 +22,6 @@ resample=Image.Resampling.LANCZOS
 for name,size in [('Square44x44Logo',44),('Square150x150Logo',150),('StoreLogo',50)]:
     im.resize((size,size),resample).save(out/f'{name}.png')
 im.resize((256,256),resample).save(out/'CopilotReel.ico',sizes=[(s,s) for s in [16,24,32,48,64,128,256]])
-print('Generated 3 package PNGs and Soft Orbit ICO.')
+# The reel's own mark among the brands, as plated artwork: About's first tile shows it.
+im.resize((256,256),resample).save(root/'assets/brands/copilot-reel.png')
+print('Generated 3 package PNGs, Soft Orbit ICO and the copilot-reel brand PNG.')

@@ -46,9 +46,9 @@ assert seam.forbidden_tokens() == FORBIDDEN
 
 APPS = ['Probe 0', 'Probe 1', 'Probe 2']
 PLUS = 'Apps and settings'
-LANGUAGE, APPEARANCE, SIZE, MANAGE, ADD = 'Language', 'Appearance', 'Reel size', 'Manage apps', 'Add app'
-HUB = [LANGUAGE, APPEARANCE, SIZE, MANAGE, ADD]
-HUB_ZH = ['语言', '外观', '轮盘大小', '管理应用', '添加应用']
+LANGUAGE, APPEARANCE, SIZE, MANAGE, ADD, ABOUT = 'Language', 'Appearance', 'Reel size', 'Manage apps', 'Add app', 'About'
+HUB = [LANGUAGE, APPEARANCE, SIZE, MANAGE, ADD, ABOUT]
+HUB_ZH = ['语言', '外观', '轮盘大小', '管理应用', '添加应用', '关于']
 CUSTOM, PREVIOUS, NEXT = 'Custom app', 'Previous', 'Next'
 EDIT, SET_PREFERRED, REMOVE = 'Edit app', 'Set as preferred', 'Remove from reel'
 
@@ -1152,10 +1152,149 @@ def group_cold(g):
     g.passed(f"a bare start of a fresh test instance logs '{match.group(1)}' and opens the preview without launching")
 
 
+class LocalFeed:
+    """A releases feed on 127.0.0.1 offering `package` (a signed x64 package from artifacts/), or nothing.
+
+    mode 'good' offers it with its SHA-256, 'digest' with a wrong one, 'tampered' offers a copy with
+    one byte changed, and 'name' an asset name that is a path."""
+
+    def __init__(self, folder, package):
+        import hashlib
+        import http.server
+        import threading
+        self.package, self.mode = package, 'good'
+        self.version = re.search(r'CopilotReel_(\d+\.\d+\.\d+)\.\d+_x64\.msix', package.name).group(1) if package else ''
+        folder.mkdir(parents=True, exist_ok=True)
+        if package:
+            data = bytearray(package.read_bytes())
+            self.digest = hashlib.sha256(data).hexdigest()
+            data[len(data) // 2] ^= 0x5A
+            (folder / 'tampered.msix').write_bytes(bytes(data))
+            self.tampered_digest = hashlib.sha256(data).hexdigest()
+            (folder / 'good.msix').write_bytes(package.read_bytes())
+        feed = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                if self.path.startswith('/releases'):
+                    body, kind = feed.releases().encode(), 'application/json'
+                else:
+                    path = folder / self.path.lstrip('/')
+                    if not path.is_file():
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+                    body, kind = path.read_bytes(), 'application/octet-stream'
+                self.send_response(200)
+                self.send_header('Content-Type', kind)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.url = f'http://127.0.0.1:{self.server.server_address[1]}'
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def releases(self):
+        if not self.package:
+            return '[]'
+        name = self.package.name if self.mode != 'name' else f'CopilotReel_{self.version}-x\\..\\..\\evil_x64.msix'
+        file, digest = ('tampered.msix', self.tampered_digest) if self.mode == 'tampered' else ('good.msix', self.digest)
+        if self.mode == 'digest':
+            digest = '0' * 64
+        return json.dumps([{'tag_name': f'v{self.version}-beta', 'draft': False, 'prerelease': True, 'assets': [
+            {'name': name, 'size': self.package.stat().st_size, 'digest': 'sha256:' + digest,
+             'browser_download_url': f'{self.url}/{file}'}]}])
+
+    def close(self):
+        self.server.shutdown()
+
+
+def group_about(g):
+    """About from the hub: names, marks and switches, then the updater against a local feed (a test instance only verifies)."""
+    packages = sorted(ROOT.glob('artifacts/CopilotReel_*_x64.msix'),
+                      key=lambda p: [int(n) for n in re.findall(r'\d+', p.name)[:4]])
+    package = packages[-1] if packages else None
+    feed = LocalFeed(g.data / 'feed', package)
+    reel = g.reel
+    reel.extra = {'COPILOT_REEL_TEST_UPDATE_FEED': feed.url + '/releases', 'COPILOT_REEL_TEST_VERSION': '0.3.6.0'}
+    try:
+        reel.start()
+        state = reel.diagnostics()
+        assert state['updateStage'] == 'idle' and state['updateRunning'] == '0.3.6|x64', state.text
+        assert state['autoCheck'] == '1' and state['autoInstall'] == '0', 'Checking is on and installing off by default.'
+        open_preview(g, ANCHOR)
+        reel.choose(PLUS)
+        assert_page(g, seam.PAGE_SETTINGS, 'Settings', HUB)
+        assert reel.diagnostics()['menuBadges'].split('|')[5] == '-', 'About carries no dot before a check.'
+        reel.choose(ABOUT)
+        names = ['0.3.6 · baka_sayaka', 'GitHub', 'Auto-check updates', 'Auto-install updates', 'Check for updates']
+        state = assert_page(g, seam.PAGE_ABOUT, 'About', names)
+        github = 'source|github-dark' if state['dark'] == '1' else 'source|github-light'
+        assert state.art[:4] == ['source|copilot-reel', github, 'command|reel:auto-check:on', 'command|reel:auto-install:off'], state.art
+        assert state['menuBadges'] == '-|-|-|-|-', 'A switch shows its state in its icon, not with a badge.'
+        g.passed('About lists the reel mark named by version and author, GitHub, two switches and Check for updates')
+
+        reel.choose('Auto-install updates')
+        seam.wait(lambda: reel.diagnostics()['autoInstall'] == '1', 'automatic installs on')
+        state = assert_page(g, seam.PAGE_ABOUT)
+        assert state.art[3] == 'command|reel:auto-install:on', state.art
+        assert 'AutoInstall=1' in (g.data / 'preferences.ini').read_text(encoding='utf-16')
+        reel.choose('Auto-install updates')
+        seam.wait(lambda: reel.diagnostics()['autoInstall'] == '0', 'automatic installs off')
+        assert_no_launch(g, 0)
+        g.passed('a switch turns over in place, is saved and stays on About')
+
+        reel.choose('Check for updates')
+        if not package:
+            seam.wait(lambda: reel.diagnostics()['updateStage'] == 'current', 'an empty feed')
+            assert reel.diagnostics().names[4] == 'Up to date'
+            g.note('no signed x64 package in artifacts/: the install checks need one (tools/package.ps1 and signtool)')
+            return
+        seam.wait(lambda: reel.diagnostics()['updateStage'] == 'available', 'the offer', timeout=30)
+        state = reel.diagnostics()
+        install = f'Install {feed.version}'
+        assert state.names[4] == install and state['menuBadges'].split('|')[4] == 'dot', state.text
+        assert state['lastUpdateCheck'] != '0' and state.page == seam.PAGE_ABOUT, state.text
+        g.passed(f'a check against the feed offers {feed.version}; its tile carries the dot and the check is saved')
+
+        reel.choose(install)
+        reel.hidden()
+        seam.wait(lambda: reel.diagnostics()['updateVerified'] == '1', 'the verified package', timeout=60)
+        state = reel.diagnostics()
+        assert state['updateStage'] == 'available' and not state['updateError'] and state['updatePrepared'] == '0', state.text
+        g.passed('Install closes the reel, downloads the package and verifies its digest, signature and identity; a test instance stops there')
+
+        open_preview(g, ANCHOR)
+        reel.choose(PLUS)
+        assert reel.diagnostics()['menuBadges'].split('|')[5] == 'dot', 'The hub shows the waiting update.'
+        close_menu(g, 2)
+        for mode, expect in (('digest', "GitHub's SHA-256"), ('tampered', 'signature is not trusted')):
+            feed.mode = mode
+            assert reel.client('--update-install') == 0
+            seam.wait(lambda: reel.diagnostics()['updateStage'] == 'failed', f'the {mode} refusal', timeout=60)
+            state = reel.diagnostics()
+            assert expect in state['updateError'] and state['updateVerified'] == '0', state.text
+        g.passed('an install asks the feed again, and refuses a wrong digest and a tampered package')
+
+        feed.mode = 'name'
+        assert reel.client('--update-check') == 0
+        seam.wait(lambda: reel.diagnostics()['updateStage'] == 'current', 'the refused asset name', timeout=30)
+        assert reel.diagnostics()['updateOffer'] == ''
+        assert_quiet(g)
+        g.passed('an asset named like a path is never offered')
+        reel.stop()
+    finally:
+        feed.close()
+
+
 GROUPS = {
     'a': group_a, 'b': group_b, 'c': group_c, 'd': group_d, 'e': group_e,
     'fast-path': group_fast_path, 'interior': group_interior, 'hub': group_hub,
-    'preferred': group_preferred, 'draws': group_draws, 'cold': group_cold,
+    'preferred': group_preferred, 'draws': group_draws, 'cold': group_cold, 'about': group_about,
 }
 
 

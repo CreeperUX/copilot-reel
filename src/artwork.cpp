@@ -55,6 +55,12 @@ wchar_t CodePoint(Glyph glyph) {
     case Glyph::ChevronLeftSmall: return vi::kGlyphChevronLeftSmall;
     case Glyph::ChevronRightSmall: return vi::kGlyphChevronRightSmall;
     case Glyph::BackChevron: return vi::kGlyphBackChevron;
+    case Glyph::About: return vi::kGlyphAbout;
+    case Glyph::SwitchOn: return vi::kGlyphSwitchOn;
+    case Glyph::SwitchOff: return vi::kGlyphSwitchOff;
+    case Glyph::CheckUpdate: return vi::kGlyphCheckUpdate;
+    case Glyph::CheckFailed: return vi::kGlyphCheckFailed;
+    case Glyph::Download: return vi::kGlyphDownload;
     case Glyph::GenericApp: return vi::kGlyphGenericApp;
     case Glyph::Check: break;  // the badge check is always a path
     }
@@ -208,6 +214,22 @@ void FallbackFigures(ID2D1GeometrySink* sink, Glyph glyph, D2D1_POINT_2F center,
     case Glyph::ChevronRightSmall: poly({{-.1f, -.3f}, {.1f, 0}, {-.1f, .3f}}); break;
     case Glyph::Check: poly({{-.25f, 0}, {-.0833f, .1667f}, {.25f, -.1667f}}); break;
     case Glyph::GenericApp: box(-.4f, -.36f, .4f, .36f, .08f); poly({{-.4f, -.15f}, {.4f, -.15f}}); break;
+    case Glyph::About: circle(0, 0, .42f); poly({{0, -.06f}, {0, .22f}}); poly({{0, -.2f}, {0, -.19f}}); break;
+    // The vector switches are outlines: the knob sits left when off and right when on.
+    case Glyph::SwitchOn: case Glyph::SwitchOff:
+        box(-.44f, -.22f, .44f, .22f, .22f);
+        circle(glyph == Glyph::SwitchOn ? vi::kSwitchKnobX : -vi::kSwitchKnobX, 0, vi::kSwitchKnobRadius);
+        break;
+    case Glyph::CheckUpdate: case Glyph::CheckFailed:
+        sink->BeginFigure(at(.36f, -.2f), D2D1_FIGURE_BEGIN_HOLLOW);
+        arc(.2f, .36f, .42f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_LARGE);
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        poly({{.36f, -.42f}, {.36f, -.2f}, {.14f, -.2f}});
+        if (glyph == Glyph::CheckFailed) { poly({{0, -.14f}, {0, .06f}}); poly({{0, .17f}, {0, .18f}}); }
+        break;
+    case Glyph::Download:
+        poly({{0, -.42f}, {0, .18f}}); poly({{-.22f, -.04f}, {0, .18f}, {.22f, -.04f}}); poly({{-.36f, .42f}, {.36f, .42f}});
+        break;
     }
 }
 
@@ -295,7 +317,13 @@ std::wstring TargetKey(const AppTarget& item) {
     return (item.kind == TargetKind::Aumid ? L"aumid|" : L"shell|") + Lower(Unquote(item.target));
 }
 
-bool IsCommand(const AppTarget& item) { return item.target.starts_with(L"reel:"); }
+// About shows two marks among its commands: the reel's own and GitHub's.
+std::wstring_view MarkedCommand(const AppTarget& item) {
+    if (item.target == L"reel:author") return L"copilot-reel";
+    if (item.target == L"reel:github") return L"github";
+    return {};
+}
+bool IsCommand(const AppTarget& item) { return item.target.starts_with(L"reel:") && MarkedCommand(item).empty(); }
 
 const vi::BrandTreatment* FindTreatment(std::wstring_view key) {
     for (std::size_t i = 0; i < vi::kBrandCount; ++i)
@@ -409,7 +437,9 @@ Source* FindSource(std::wstring_view key) {
 std::wstring VendorKey(const AppTarget& item, bool dark) {
     auto brand = IdentifyBrand(item);
     if (brand.empty()) if (const auto link = linkBrands.find(TargetKey(item)); link != linkBrands.end()) brand = link->second;
+    if (const auto marked = MarkedCommand(item); !marked.empty()) brand = marked;
     if (brand == L"chatgpt") brand = dark ? L"chatgpt-dark" : L"chatgpt-light";
+    if (brand == L"github") brand = dark ? L"github-dark" : L"github-light";
     return !brand.empty() && OfficialArtworkBytes(brand) ? brand : std::wstring();
 }
 
@@ -696,6 +726,22 @@ bool DrawArtwork(ID2D1DeviceContext* context, const AppTarget& item,
         Glyph glyph{};
         if (!CommandGlyph(item, style.dark, glyph)) return false;
         DrawGlyphCore(context, glyph, center, em, style.glyph, style.dpi, style.highContrast);
+        // An on switch is ToggleFilled with its knob cut out, so the tile or the seat beneath the
+        // artwork shows through it. The vector fallback already draws an outlined knob.
+        if (const auto* font = glyph == Glyph::SwitchOn ? ResolveGlyph(glyph) : nullptr) {
+            // The ink center as DrawGlyphCore placed it on the pixel grid.
+            const auto origin = Snap(Grid(context), {center.x - (font->ink.left + font->ink.right) * .5f * em,
+                                                     center.y - (font->ink.top + font->ink.bottom) * .5f * em});
+            const D2D1_POINT_2F ink{origin.x + (font->ink.left + font->ink.right) * .5f * em,
+                                    origin.y + (font->ink.top + font->ink.bottom) * .5f * em};
+            com_ptr<ID2D1SolidColorBrush> clear;
+            if (SUCCEEDED(context->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0), clear.put()))) {
+                const float r = vi::kSwitchKnobRadius * em;
+                context->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_COPY);
+                context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ink.x + vi::kSwitchKnobX * em, ink.y), r, r), clear.get());
+                context->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_SOURCE_OVER);
+            }
+        }
         return true;
     }
     const auto key = SourceKey(item, style.dark);
@@ -714,8 +760,15 @@ bool CommandGlyph(const AppTarget& item, bool darkTheme, Glyph& glyph) {
     static constexpr std::pair<std::wstring_view, Glyph> commands[] = {
         {L"reel:add", Glyph::Add}, {L"reel:manage", Glyph::Manage}, {L"reel:preferred", Glyph::Preferred},
         {L"reel:edit", Glyph::Edit}, {L"reel:remove", Glyph::Remove},
-        {L"reel:previous", Glyph::Previous}, {L"reel:next", Glyph::Next}};
+        {L"reel:previous", Glyph::Previous}, {L"reel:next", Glyph::Next}, {L"reel:about", Glyph::About},
+        {L"reel:check-update", Glyph::CheckUpdate}, {L"reel:check-failed", Glyph::CheckFailed},
+        {L"reel:install-update", Glyph::Download}};
     if (item.target == L"reel:appearance") { glyph = darkTheme ? Glyph::Moon : Glyph::Sun; return true; }
+    // About's switches carry their state in the target, as Appearance takes it from the theme.
+    if (item.target.starts_with(L"reel:auto-") && (item.target.ends_with(L":on") || item.target.ends_with(L":off"))) {
+        glyph = item.target.ends_with(L":on") ? Glyph::SwitchOn : Glyph::SwitchOff;
+        return true;
+    }
     for (const auto& [target, value] : commands)
         if (item.target == target) { glyph = value; return true; }
     return false;

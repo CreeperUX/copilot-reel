@@ -47,6 +47,8 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 | Glyph-class artwork | long ink side on the 28 DIP keyline x per-brand `opticalScale` |
 | Plated artwork | cropped to its plate, covers 40, clipped to r 10, tile hairline on top |
 | Preferred badge | accent disc r 6 at (+17, -17); plate-colored ring r 7.5 (1.5 cutout); path check 1.5 in `textOnAccent` |
+| Update dot | the badge without its check, smaller: accent disc r 4, plate-colored ring r 5.5, same position; on the hub's About tile and About's update tile while an update waits |
+| Switch | in the command glyph's em: off is ToggleLeft (F19E); on is ToggleFilled (EC11) with the knob (center +0.25, r 0.125) cut out, so the tile or the seat shows through; `foreground`, never accent |
 | Adjust chevrons | ChevronLeft/Right (E76B/E76C) at em 14, centers (+-40, -112), hit 40 x 40, flanking slot 0, the EN/ZH tile on the + hub; `secondary`, `foreground` while slot 0 is selected |
 | Back chevron | E76B at em 14, `secondary`, idle submenus only |
 | Drag trash | Manage apps, only while a tile is lifted: Remove (E74D) at em 20 in `critical` inside a `critical` ring of 1.5 at the center-zone edge (r 44); armed (pointer inside r 44): a `criticalFill` disc r 30 with the glyph in `textOnCritical`, over the shrunken tile; disabled at 0.36 while one app remains |
@@ -96,7 +98,7 @@ The generator never writes `tokens.json`. Scenes use the token accent fallbacks;
 | Plated | own filled plate (alpha coverage >= 90%, rounded rectangle): Claude, Perplexity, ZCode, DeepSeek Harness, JetBrains Air |
 | Generic | no artwork: GenericApp E737 on the neutral tile; never initials |
 
-Command glyphs: Add E710, Manage F0E2, Preferred E930, Sun E706, Moon E708, Edit E70F, Remove E74D, Previous E76B, Next E76C, ChevronLeftSmall E76B, ChevronRightSmall E76C, BackChevron E76B, GenericApp E737. The badge check is a path. The tray menu is the native popup menu in the reel's light or dark theme with View E890 (Preview, bold as the click default), Settings E713 (Quick menu), Diagnostic E9D9 and PowerButton E7E8 (Exit) at the small-icon size in `foreground`; high contrast keeps the system menu without icons. Per-brand treatment (class, `opticalScale`, normalized content rect) is `iconography.brands`; page 6 shows every entry on light and dark tiles.
+Command glyphs: Add E710, Manage F0E2, Preferred E930, Sun E706, Moon E708, Edit E70F, Remove E74D, Previous E76B, Next E76C, ChevronLeftSmall E76B, ChevronRightSmall E76C, BackChevron E76B, GenericApp E737, About (Info) E946, SwitchOn (ToggleFilled) EC11, SwitchOff (ToggleLeft) F19E, CheckUpdate (Refresh) E72C, CheckFailed (SyncError) EA6A, Download E896. The badge check is a path. About's first two tiles are marks, not commands: the reel's own (`copilot-reel`, plated) and GitHub's Invertocat (`github-light` black on light plates, `github-dark` white on dark ones, glyph class), used as GitHub permits for a button that links to a project. The tray menu is the native popup menu in the reel's light or dark theme with View E890 (Preview, bold as the click default), Settings E713 (Quick menu), Diagnostic E9D9 and PowerButton E7E8 (Exit) at the small-icon size in `foreground`; high contrast keeps the system menu without icons. Per-brand treatment (class, `opticalScale`, normalized content rect) is `iconography.brands`; page 6 shows every entry on light and dark tiles.
 
 ## States
 
@@ -104,9 +106,9 @@ Idle (neutral tiles, faint ring); selected (the seat replaces the tile fill, one
 
 ## Layouts and navigation
 
-- One to nine items: App actions (3-4: the app itself in slot 0, Edit, Preferred, and Remove while more than one app remains), Main (2-9: up to 8 apps and +), the + hub (5: Language, Appearance, Reel size, Manage apps, Add), Manage apps (2-9: the apps and Add), Presets (up to 8: parked apps first, then presets, five per page, Custom, Previous, Next).
+- One to nine items: App actions (3-4: the app itself in slot 0, Edit, Preferred, and Remove while more than one app remains), Main (2-9: up to 8 apps and +), the + hub (6: Language, Appearance, Reel size, Manage apps, Add, About), About (5: the reel's own mark named by the version and the author, GitHub, Auto-check updates, Auto-install updates, the update tile), Manage apps (2-9: the apps and Add), Presets (up to 8: parked apps first, then presets, five per page, Custom, Previous, Next).
 - At 8 apps the hub and Manage keep their Add slot, disabled, without reflow.
-- Main (depth 0) -> + hub (1) -> Manage apps (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D) and Appearance act in place. On Manage apps a dragged tile reorders the reel in place, and the center trash takes an app out of it; App actions has no reorder control. The center or Esc returns one level.
+- Main (depth 0) -> + hub (1) -> Manage apps or About (2) -> Presets / App actions (3) -> focused native editor for names and targets. Language (chevrons or A/D), Appearance and About's switches act in place. On Manage apps a dragged tile reorders the reel in place, and the center trash takes an app out of it; App actions has no reorder control. The center or Esc returns one level.
 
 ## Placement and edge gating
 
@@ -158,6 +160,7 @@ Runtime-verified in 0.3.4 (native window captures in `output/runtime/v0.3.4/`, s
 - Adjust chevrons (0.3.5): each chevron is its own sprite showing its half of the unchanged two-glyph raster. Main, the hub and its selections stay within 2 levels per channel of the 0.3.4 captures in five variants (0.3.5.1, every channel compared; the 0.3.5 report of 0 differing pixels compared only alpha); App actions frames at the first, a middle and the last position show the dimmed blocked side (`output/runtime/v0.3.5/*-entry*.png`, captured through the test seam). 0.3.6 removed those chevrons with the reorder they served.
 - Drag and trash (0.3.6): `output/runtime/v0.3.6/*-manage-drag.png` and `*-manage-trash.png` show a tile lifted over another slot and over the armed trash in seven variants; the 0.8 reel scale and the four-item hub make every 0.3.6 still a new reference.
 - Reel size (0.3.7): `output/runtime/v0.3.7/` is the reference set for the five-item hub, with the Reel size tile showing `100%` as a 12 DIP monogram in seven variants.
+- About (0.3.8): `output/runtime/v0.3.8/` adds the six-item hub and About in seven variants: the reel's mark named by the version and the author, GitHub's mark in black or white, and the on switch with its cut-out knob over the seat.
 - Placement: zero interior offset, minimal clamp at eight edge and corner positions, no cursor warp.
 
 Not verified:

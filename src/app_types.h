@@ -26,6 +26,13 @@ struct AppTarget {
     std::wstring workingDirectory;
 };
 
+// A mark at a tile's upper right: the check of the preferred agent or of a switch that is on,
+// or a dot for an update that is ready.
+enum class TileBadge { None, Check, Dot };
+
+// Where the in-app update stands. Unavailable: a development build has no package to update.
+enum class UpdateStage { Idle, Checking, Current, Available, Installing, Failed, Unavailable };
+
 struct Rgba { float r = 0, g = 0, b = 0, a = 1; };
 // Resolved visual roles. Values come from design/vi/tokens.json (src/vi_tokens.h)
 // and the live Windows accent ramp; defaults are the light solid theme.

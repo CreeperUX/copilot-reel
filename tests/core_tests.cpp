@@ -160,9 +160,9 @@ int main() {
         Check(main[count].action==MenuAction::Settings && main[count].visual.target==L"reel:add",
             "the single plus icon opens the combined hub without launching an app");
         const auto hub=BuildMenu(MenuPage::Settings,apps,presets);
-        Check(hub.size()==5u && hub[4].action==MenuAction::Presets,"hub keeps its Add slot at every app count, so it never reflows");
+        Check(hub.size()==6u && hub[4].action==MenuAction::Presets,"hub keeps its Add slot at every app count, so it never reflows");
         Check(hub[4].enabled==(count<kMaxApps),"hub Add is enabled only while another app can be saved");
-        for(size_t i=0;i<4;++i)Check(hub[i].enabled,"hub commands other than Add are always enabled");
+        for(size_t i : {0u,1u,2u,3u,5u})Check(hub[i].enabled,"hub commands other than Add are always enabled");
         const auto manage=BuildMenu(MenuPage::Manage,apps,presets);
         Check(manage.size()==count+1,"manage wheel keeps its Add slot at the saved-app limit");
         for(size_t i=0;i<count;++i)
@@ -217,12 +217,49 @@ int main() {
         "a drop needs apps, room for them and a real pointer");
     const std::vector<AppTarget> noApps;
     const auto settings=BuildMenu(MenuPage::Settings,noApps,presets);
-    Check(settings.size()==5 && settings[0].action==MenuAction::Language &&
+    Check(settings.size()==6 && settings[0].action==MenuAction::Language &&
         settings[1].action==MenuAction::Appearance && settings[2].action==MenuAction::Size &&
-        settings[3].action==MenuAction::Manage && settings[4].action==MenuAction::Presets,
-        "the combined hub contains language, appearance, reel size, management, and Add; the preferred agent is set from an app's actions");
+        settings[3].action==MenuAction::Manage && settings[4].action==MenuAction::Presets && settings[5].action==MenuAction::About,
+        "the combined hub contains language, appearance, reel size, management, Add and About; the preferred agent is set from an app's actions");
     for(const auto& command:settings)Check(command.visual.target.starts_with(L"reel:") && command.action!=MenuAction::Launch,
         "settings metadata cannot be mistaken for an app-launch action");
+    Check(settings[5].badge==TileBadge::None,"About carries no dot while no update waits");
+
+    // About: the reel's mark named by the version and author, GitHub, the two switches with their
+    // state in the icon, and one tile that checks for an update or installs the one found.
+    {
+        AboutState about{L"0.3.8",true,false,UpdateStage::Idle,L""};
+        auto page=BuildMenu(MenuPage::About,noApps,presets,0,-1,0,about);
+        Check(page.size()==5 && page[0].action==MenuAction::AboutInfo && page[1].action==MenuAction::GitHub &&
+            page[2].action==MenuAction::AutoCheck && page[3].action==MenuAction::AutoInstall && page[4].action==MenuAction::CheckUpdate,
+            "About lists the version, GitHub, both switches and the update tile in order");
+        Check(page[0].visual.name==L"0.3.8 · baka_sayaka" && page[0].visual.target==L"reel:author" && page[1].visual.target==L"reel:github",
+            "the first tile is named by the version and the author");
+        Check(page[2].visual.target==L"reel:auto-check:on" && page[3].visual.target==L"reel:auto-install:off" &&
+            page[2].badge==TileBadge::None && page[3].badge==TileBadge::None,"a switch shows its state in its icon, without a badge");
+        for(const auto& entry:page)Check(entry.enabled && entry.visual.target.starts_with(L"reel:"),"every About tile is internal");
+        about.stage=UpdateStage::Available;about.offered=L"0.3.9";
+        page=BuildMenu(MenuPage::About,noApps,presets,0,-1,0,about);
+        Check(page[4].action==MenuAction::InstallUpdate && page[4].badge==TileBadge::Dot && page[4].visual.name==L"Install 0.3.9",
+            "a found update turns the last tile into its install, with the dot");
+        about.autoCheck=false;about.autoInstall=true;
+        page=BuildMenu(MenuPage::About,noApps,presets,0,-1,0,about);
+        Check(page[2].visual.target==L"reel:auto-check:off" && page[3].visual.target==L"reel:auto-install:on","the switches follow their state");
+        Check(BuildMenu(MenuPage::Settings,noApps,presets,0,-1,0,about)[5].badge==TileBadge::Dot,"the hub's About tile carries the dot");
+        about.stage=UpdateStage::Failed;
+        Check(UpdateWaiting(about) && BuildMenu(MenuPage::About,noApps,presets,0,-1,0,about)[4].action==MenuAction::InstallUpdate,
+            "a failed install keeps the update waiting");
+        about.offered.clear();
+        page=BuildMenu(MenuPage::About,noApps,presets,0,-1,0,about);
+        Check(!UpdateWaiting(about) && page[4].action==MenuAction::CheckUpdate && page[4].badge==TileBadge::None &&
+            page[4].visual.target==L"reel:check-failed","a failed check shows it and offers to check again");
+        about.stage=UpdateStage::Installing;about.offered=L"0.3.9";
+        Check(!UpdateWaiting(about),"an install in progress waits for nothing");
+        about.stage=UpdateStage::Unavailable;about.offered.clear();
+        page=BuildMenu(MenuPage::About,noApps,presets,0,-1,0,about);
+        Check(page[0].enabled && page[1].enabled && !page[2].enabled && !page[3].enabled && !page[4].enabled,
+            "a development build shows About but cannot update");
+    }
     for(size_t offset : {0u,5u,10u}) {
         const auto page=BuildMenu(MenuPage::Presets,noApps,presets,offset);
         const size_t shown=std::min(size_t{5},presets.size()-offset);
@@ -327,9 +364,9 @@ int main() {
     std::vector<AppTarget> full;
     for(int i=0;i<8;++i)full.push_back({L"App",TargetKind::Shell,L"C:\\A"+std::to_wstring(i)+L".exe",L"",L""});
     const auto fullHub=BuildMenu(MenuPage::Settings,full,presets),fullManage=BuildMenu(MenuPage::Manage,full,presets);
-    Check(!CanConfirm(fullHub,4) && !CanConfirm(fullManage,8) && CanConfirm(fullHub,0) && CanConfirm(fullManage,7),
+    Check(!CanConfirm(fullHub,4) && !CanConfirm(fullManage,8) && CanConfirm(fullHub,0) && CanConfirm(fullHub,5) && CanConfirm(fullManage,7),
         "a disabled Add cannot be confirmed; enabled items can");
-    Check(!CanConfirm(fullHub,-1) && !CanConfirm(fullHub,5),"nothing selected or a stale index confirms nothing");
+    Check(!CanConfirm(fullHub,-1) && !CanConfirm(fullHub,6),"nothing selected or a stale index confirms nothing");
 
     // Copilot events in every reel state.
     const ReelContext closed{},open{true,false},blocked{false,true},openBlocked{true,true};

@@ -190,6 +190,17 @@ void TestPreferences() {
     Require(reel::LoadReelSize() == reel::vi::kReelSizeDefault, "an unknown percentage selects the default");
     reel::SetReelSize(99);
     Require(reel::CurrentReelSize() == reel::vi::kReelSizeDefault, "an out-of-range step is never current");
+    // [Updates] shares the file: checking on and installing off until saved otherwise.
+    const auto defaults = reel::LoadUpdatePreferences();
+    Require(defaults.autoCheck && !defaults.autoInstall && defaults.lastCheck == 0, "checking is on and installing off by default");
+    Require(reel::SaveUpdatePreferences({false, true, 1761400000}), "the update preferences should save");
+    const auto updates = reel::LoadUpdatePreferences();
+    Require(!updates.autoCheck && updates.autoInstall && updates.lastCheck == 1761400000, "the update preferences round-trip");
+    Require(reel::SaveReelSize(1) && reel::SaveLanguage(reel::Language::English) && reel::LoadUpdatePreferences().autoInstall,
+        "saving the reel size or the language keeps the update preferences");
+    Require(WritePrivateProfileStringW(L"Updates", L"LastCheck", L"-5", path.c_str()) != 0, "fixture should write a negative time");
+    Require(reel::LoadUpdatePreferences().lastCheck == 0, "a negative check time reads as never");
+    Require(reel::SaveUpdatePreferences({}), "the update preferences should reset");
     reel::SetLanguage(reel::Language::English);
     data.Use(L"profile-a");
 }

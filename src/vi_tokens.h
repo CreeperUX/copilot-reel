@@ -17,7 +17,7 @@ inline constexpr float kSeat = 48.f, kSeatRadius = 14.f, kSeatStroke = 1.5f, kSe
 inline constexpr float kGlyphEm = 24.f;              // Segoe Fluent Icons em inside the tile
 inline constexpr float kGlyphFallbackStroke = 1.75f, kGlyphFallbackStrokeHighContrast = 2.f;  // vector fallback
 inline constexpr float kArtworkKeyline = 28.f;       // glyph-class vendor/system marks: optical box
-inline constexpr float kBadgeRadius = 6.f, kBadgeOffset = 17.f, kBadgeRing = 1.5f, kBadgeRingRadius = 7.5f, kBadgeCheckStroke = 1.5f;
+inline constexpr float kBadgeRadius = 6.f, kBadgeOffset = 17.f, kBadgeRing = 1.5f, kBadgeRingRadius = 7.5f, kBadgeCheckStroke = 1.5f, kBadgeDotRadius = 4.f, kBadgeDotRingRadius = 5.5f;
 inline constexpr float kLabelSize = 14.f, kLabelWidth = 132.f, kLabelHeight = 20.f, kMonogramSize = 16.f, kSizeMonogramSize = 12.f;
 inline constexpr float kChevronOffset = 40.f, kChevronEm = 14.f, kChevronHit = 40.f, kBackChevronEm = 14.f;
 inline constexpr float kRingStroke = 1.f, kRingGatedStroke = 1.5f, kGateDotRadius = 2.f;
@@ -78,6 +78,8 @@ inline constexpr wchar_t kGlyphAdd = L'\xE710', kGlyphManage = L'\xF0E2', kGlyph
 inline constexpr wchar_t kGlyphEdit = L'\xE70F', kGlyphRemove = L'\xE74D', kGlyphPrevious = L'\xE76B', kGlyphNext = L'\xE76C';
 inline constexpr wchar_t kGlyphChevronLeftSmall = L'\xE76B', kGlyphChevronRightSmall = L'\xE76C', kGlyphBackChevron = L'\xE76B', kGlyphGenericApp = L'\xE737';
 inline constexpr wchar_t kGlyphTrayPreview = L'\xE890', kGlyphTraySettings = L'\xE713', kGlyphTrayDiagnostics = L'\xE9D9', kGlyphTrayExit = L'\xE7E8';
+inline constexpr wchar_t kGlyphAbout = L'\xE946', kGlyphSwitchOn = L'\xEC11', kGlyphSwitchOff = L'\xF19E', kGlyphCheckUpdate = L'\xE72C', kGlyphCheckFailed = L'\xEA6A', kGlyphDownload = L'\xE896';
+inline constexpr float kSwitchKnobX = 0.25f, kSwitchKnobRadius = 0.125f;  // em of the command glyph
 // Motion (ms / unitless)
 inline constexpr unsigned kOpenFadeMs = 83, kOpenScaleMs = 167;  inline constexpr float kOpenScaleFrom = 0.96f;
 inline constexpr unsigned kCloseFadeMs = 83, kCloseScaleMs = 83;  inline constexpr float kCloseScaleTo = 0.98f;
@@ -106,8 +108,11 @@ inline constexpr BrandTreatment kBrands[] = {
     {L"chatgpt-light", false, 0.96f, 0.00391f, 0.00781f, 0.99609f, 0.99219f},
     {L"claude", true, 1.f, 0.f, 0.f, 1.f, 1.f},
     {L"clion", false, 0.86f, 0.f, 0.f, 1.f, 1.f},
+    {L"copilot-reel", true, 1.f, 0.f, 0.f, 1.f, 1.f},
     {L"dsh", true, 1.f, 0.03125f, 0.03125f, 0.96875f, 0.96875f},
     {L"gemini", false, 1.04f, 0.04102f, 0.04102f, 0.95898f, 0.95898f},
+    {L"github-dark", false, 0.92f, 0.f, 0.f, 1.f, 0.98958f},
+    {L"github-light", false, 0.92f, 0.f, 0.f, 1.f, 0.98958f},
     {L"goland", false, 0.86f, 0.f, 0.f, 1.f, 1.f},
     {L"intellij-idea", false, 0.86f, 0.f, 0.f, 1.f, 1.f},
     {L"jetbrains", false, 0.86f, 0.f, 0.f, 1.f, 1.f},
@@ -123,5 +128,5 @@ inline constexpr BrandTreatment kBrands[] = {
     {L"webstorm", false, 0.86f, 0.f, 0.f, 1.f, 1.f},
     {L"zcode", true, 1.f, 0.f, 0.f, 1.f, 1.f},
 };
-inline constexpr std::size_t kBrandCount = 22;
+inline constexpr std::size_t kBrandCount = 25;
 }

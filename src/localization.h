@@ -20,8 +20,16 @@ bool SaveLanguage(Language language) noexcept;
 unsigned CurrentReelSize() noexcept;
 void SetReelSize(unsigned step) noexcept;
 unsigned LoadReelSize() noexcept;
-// Each save keeps the other preference as it is now.
+// Each save keeps the other preferences as they are now.
 bool SaveReelSize(unsigned step) noexcept;
 // The step's percentage, as stored and as the Reel size tile shows it.
 unsigned ReelSizePercent(unsigned step) noexcept;
+
+// preferences.ini's [Updates]: checking is on and installing off unless saved otherwise.
+// lastCheck is when a check last completed, in Unix seconds, or 0.
+struct UpdatePreferences { bool autoCheck = true, autoInstall = false; long long lastCheck = 0; };
+UpdatePreferences CurrentUpdatePreferences() noexcept;
+UpdatePreferences LoadUpdatePreferences() noexcept;
+// Keeps the language and the reel size as they are now; sets the current preferences when saved.
+bool SaveUpdatePreferences(const UpdatePreferences& preferences) noexcept;
 }

@@ -148,7 +148,7 @@ $lines = @(
     "inline constexpr float kGlyphEm = $(Float "$g.glyph.em");              // Segoe Fluent Icons em inside the tile"
     "inline constexpr float kGlyphFallbackStroke = $(Float "$g.glyph.fallbackStroke"), kGlyphFallbackStrokeHighContrast = $(Float "$g.glyph.fallbackStrokeHighContrast");  // vector fallback"
     "inline constexpr float kArtworkKeyline = $(Float "$g.artwork.keyline");       // glyph-class vendor/system marks: optical box"
-    "inline constexpr float kBadgeRadius = $(Float "$g.badge.radius"), kBadgeOffset = $(Float "$g.badge.offset"), kBadgeRing = $(Float "$g.badge.ring"), kBadgeRingRadius = $(Float "$g.badge.ringRadius"), kBadgeCheckStroke = $(Float "$g.badge.checkStroke");"
+    "inline constexpr float kBadgeRadius = $(Float "$g.badge.radius"), kBadgeOffset = $(Float "$g.badge.offset"), kBadgeRing = $(Float "$g.badge.ring"), kBadgeRingRadius = $(Float "$g.badge.ringRadius"), kBadgeCheckStroke = $(Float "$g.badge.checkStroke"), kBadgeDotRadius = $(Float "$g.badge.dotRadius"), kBadgeDotRingRadius = $(Float "$g.badge.dotRingRadius");"
     "inline constexpr float kLabelSize = $(Float "$label.size"), kLabelWidth = $(Float "$label.width"), kLabelHeight = $(Float "$label.height"), kMonogramSize = $(Float 'typography.iconMonogram.size'), kSizeMonogramSize = $(Float 'typography.iconMonogram.sizeStep.size');"
     "inline constexpr float kChevronOffset = $(Float "$g.chevrons.offset"), kChevronEm = $(Float "$g.chevrons.em"), kChevronHit = $(Float "$g.chevrons.hit"), kBackChevronEm = $(Float "$g.chevrons.backEm");"
     "inline constexpr float kRingStroke = $(Float "$g.centerZone.ringStroke"), kRingGatedStroke = $(Float "$g.centerZone.ringGatedStroke"), kGateDotRadius = $(Float "$g.centerZone.gateDotRadius");"
@@ -178,6 +178,8 @@ $lines = @(
     "inline constexpr wchar_t kGlyphEdit = $(Glyph Edit), kGlyphRemove = $(Glyph Remove), kGlyphPrevious = $(Glyph Previous), kGlyphNext = $(Glyph Next);"
     "inline constexpr wchar_t kGlyphChevronLeftSmall = $(Glyph ChevronLeftSmall), kGlyphChevronRightSmall = $(Glyph ChevronRightSmall), kGlyphBackChevron = $(Glyph BackChevron), kGlyphGenericApp = $(Glyph GenericApp);"
     "inline constexpr wchar_t kGlyphTrayPreview = $(Glyph TrayPreview), kGlyphTraySettings = $(Glyph TraySettings), kGlyphTrayDiagnostics = $(Glyph TrayDiagnostics), kGlyphTrayExit = $(Glyph TrayExit);"
+    "inline constexpr wchar_t kGlyphAbout = $(Glyph About), kGlyphSwitchOn = $(Glyph SwitchOn), kGlyphSwitchOff = $(Glyph SwitchOff), kGlyphCheckUpdate = $(Glyph CheckUpdate), kGlyphCheckFailed = $(Glyph CheckFailed), kGlyphDownload = $(Glyph Download);"
+    "inline constexpr float kSwitchKnobX = $(Float "$g.switch.knobX"), kSwitchKnobRadius = $(Float "$g.switch.knobRadius");  // em of the command glyph"
     '// Motion (ms / unitless)'
     "inline constexpr unsigned kOpenFadeMs = $(UInt "$m.open.fadeMs"), kOpenScaleMs = $(UInt "$m.open.scaleMs");  inline constexpr float kOpenScaleFrom = $(Float "$m.open.scaleFrom");"
     "inline constexpr unsigned kCloseFadeMs = $(UInt "$m.close.fadeMs"), kCloseScaleMs = $(UInt "$m.close.scaleMs");  inline constexpr float kCloseScaleTo = $(Float "$m.close.scaleTo");"

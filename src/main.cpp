@@ -14,6 +14,7 @@
 #include "display_names.h"
 #include "test_input.h"
 #include "tray_menu.h"
+#include "updates.h"
 #include "vi_tokens.h"
 #include <windowsx.h>
 #include <shellapi.h>
@@ -47,8 +48,8 @@
 
 namespace reel {
 namespace {
-constexpr UINT kSmokeTimer=101, kIdleTimer=102, kCloseTimer=103, kKeyPollTimer=104;
-constexpr UINT kLaunchFailedMessage=WM_APP+21, kPresetsReadyMessage=WM_APP+22, kIdleArtworkMessage=WM_APP+23;
+constexpr UINT kSmokeTimer=101, kIdleTimer=102, kCloseTimer=103, kKeyPollTimer=104, kUpdateTimer=105;
+constexpr UINT kLaunchFailedMessage=WM_APP+21, kPresetsReadyMessage=WM_APP+22, kIdleArtworkMessage=WM_APP+23, kUpdateMessage=WM_APP+24;
 constexpr UINT kCommandPreview=201,kCommandSettings=202,kCommandDiagnostics=203,kCommandExit=204;
 constexpr ULONG_PTR kIpcMagic=0x5245454c;
 constexpr PROPERTYKEY kFastPathKey={{0x38652bca,0x4329,0x4e74,{0x86,0xf9,0x39,0xcf,0x29,0x34,0x5e,0xea}},2};
@@ -110,6 +111,8 @@ Command CommandLine() {
         else if(arg==L"--cancel") result=Command::Cancel;
         else if(arg==L"--quit") result=Command::Quit;
         else if(arg==L"--diagnostics") result=Command::Diagnostics;
+        else if(arg==L"--update-check") result=Command::UpdateCheck;
+        else if(arg==L"--update-install") result=Command::UpdateInstall;
         else if(arg==L"--smoke-test") result=Command::SmokeTest;
         else result=Command::Invalid;
     } else if(count==3 && std::wstring_view(args[1])==L"--copilot-uri") result=ParseUri(args[2]);
@@ -365,6 +368,7 @@ public:
         RefreshAppearance(); Reload();
         // A cold start serves a Copilot key press; discovery waits on a worker unless Reload needed it.
         RefreshPresets();
+        updater_=std::make_unique<Updater>(window,kUpdateMessage);ScheduleUpdates();
         if(CurrentTestInput().active) {
             // A test instance is invisible to the Shell, the tray and the user's hotkey.
             ready_=true;const auto pointer=CursorPosition();
@@ -461,6 +465,8 @@ public:
             quitting_=true;
             if(CloseOsd())DestroyWindow(window);else quitting_=false;break;
         case Command::Diagnostics: SaveDiagnostics();break;
+        case Command::UpdateCheck: Log(updater_->Check()?L"Update check started (command)":L"Update check not started");break;
+        case Command::UpdateInstall: Log(updater_->Install()?L"Update install started (command)":L"Update install not started: no update found yet");break;
         case Command::SmokeTest: BeginSmoke();break;
         default: break;
         }
@@ -572,6 +578,7 @@ public:
         case MenuPage::Manage:return Tr(L"Your apps",L"管理应用");
         case MenuPage::Presets:return Tr(L"Add an agent",L"添加应用");
         case MenuPage::Settings:return Tr(L"Settings",L"设置");
+        case MenuPage::About:return Tr(L"About",L"关于");
         case MenuPage::Entry:return editing_>=0 && static_cast<size_t>(editing_)<items_.size()?AppDisplayName(items_[editing_]):L"";
         default:return L"Copilot Reel";
         }
@@ -579,7 +586,7 @@ public:
     static int Depth(MenuPage page) {
         switch(page) {
         case MenuPage::Settings:return 1;
-        case MenuPage::Manage:return 2;
+        case MenuPage::Manage:case MenuPage::About:return 2;
         case MenuPage::Presets:case MenuPage::Entry:return 3;
         default:return 0;
         }
@@ -590,9 +597,9 @@ public:
     // A drop or a trash on Manage reflows the saved order from where the tiles are (`reflow`).
     void RenderMenu(int origin=-1,bool reflow=false) {
         if(page_==MenuPage::Entry && (editing_<0 || static_cast<size_t>(editing_)>=items_.size()))page_=MenuPage::Manage;
-        menu_=BuildMenu(page_,items_,addCatalog_,presetOffset_,editing_,addParked_);
+        menu_=BuildMenu(page_,items_,addCatalog_,presetOffset_,editing_,addParked_,About());
         PageModel model;
-        for(const auto& entry:menu_)model.items.push_back({entry.visual,entry.enabled});
+        for(const auto& entry:menu_)model.items.push_back({entry.visual,entry.enabled,entry.badge});
         model.title=MenuTitle();model.isSubmenu=page_!=MenuPage::Main;
         const auto adjust=AdjustFor(page_);
         model.adjustControl=adjust.control;model.adjustEarlier=adjust.earlier;model.adjustLater=adjust.later;
@@ -634,7 +641,7 @@ public:
         switch(page_) {
         case MenuPage::Presets:Navigate(presetsParent_);break;
         case MenuPage::Entry:Navigate(MenuPage::Manage);break;
-        case MenuPage::Manage:Navigate(MenuPage::Settings);break;
+        case MenuPage::Manage:case MenuPage::About:Navigate(MenuPage::Settings);break;
         case MenuPage::Main:Cancel();break;
         default:Navigate(MenuPage::Main);break;
         }
@@ -681,7 +688,7 @@ public:
     void SwitchLanguage() {
         const auto language=CurrentLanguage()==Language::English?Language::SimplifiedChinese:Language::English;
         if(!SaveLanguage(language)) {Log(L"Language save failed");return;}
-        SetLanguage(language);renderer_->SetLanguage(language);RenderMenu();UpdateTrayTip();RefreshOsdAppearance();
+        SetLanguage(language);renderer_->SetLanguage(language);RenderMenu();RefreshOsdAppearance();
         Log(language==Language::English?L"Language changed: English":L"Language changed: Simplified Chinese");
     }
     // The hub's Reel size moves to the next step and wraps. The open reel is placed again around
@@ -702,7 +709,7 @@ public:
     }
     // The native editor changed and saved the language.
     void LanguageChanged() {
-        renderer_->SetLanguage(CurrentLanguage());RenderMenu();UpdateTrayTip();
+        renderer_->SetLanguage(CurrentLanguage());RenderMenu();
     }
     void KeyDown(WPARAM key) {
         if(!input_.Persistent() || !gesture_.Active())return;
@@ -997,6 +1004,31 @@ public:
         case MenuAction::Next:presetOffset_+=5;Navigate(MenuPage::Presets);break;
         case MenuAction::Custom:OpenEditor(-1);break;
         case MenuAction::Done:Navigate(MenuPage::Manage);break;
+        case MenuAction::About:Navigate(MenuPage::About,selected);break;
+        // The version and the author are its name; choosing it changes nothing.
+        case MenuAction::AboutInfo:Log(L"About: "+entry.visual.name);break;
+        case MenuAction::GitHub:
+            gesture_.Cancel();Hide(false,HideStyle::Commit);LaunchTarget({L"GitHub",TargetKind::Shell,kRepositoryUrl,L"",L""});break;
+        case MenuAction::AutoCheck:case MenuAction::AutoInstall: {
+            auto preferences=CurrentUpdatePreferences();
+            bool& value=entry.action==MenuAction::AutoCheck?preferences.autoCheck:preferences.autoInstall;
+            value=!value;
+            if(!SaveUpdatePreferences(preferences)) {Log(L"Update preference save failed");break;}
+            Log(std::wstring(entry.action==MenuAction::AutoCheck?L"Automatic update checks ":L"Automatic update installs ")+(value?L"on":L"off"));
+            RenderMenu();
+            // Turned on, checking catches up at once when the last check is a day old.
+            if(entry.action==MenuAction::AutoCheck && value)UpdateTick();
+            break;
+        }
+        case MenuAction::CheckUpdate:
+            if(updater_->Snapshot().stage!=UpdateStage::Checking)Log(updater_->Check()?L"Update check started":L"Update check not started");
+            break;
+        // The package manager closes the reel to update it, so the reel leaves first.
+        case MenuAction::InstallUpdate:
+            if(UpdateWaiting(About())) {
+                gesture_.Cancel();Hide(false,HideStyle::Commit);
+                Log(updater_->Install()?L"Update install started":L"Update install not started");
+            }break;
         // A parked app goes back as it was saved, without the local-target check a preset needs.
         case MenuAction::Restore:
             if(items_.size()<kMaxApps) {
@@ -1051,6 +1083,66 @@ public:
         KillTimer(window,kCloseTimer);closing_=false;renderer_->Hide();ShowWindow(window,SW_HIDE);
         if(artworkPending_)PostMessageW(window,kIdleArtworkMessage,0,0);
         if(!failures_.empty())PostMessageW(window,kLaunchFailedMessage,0,0);
+        InstallWhenIdle();
+    }
+    // What the About page shows.
+    AboutState About() const {
+        const auto preferences=CurrentUpdatePreferences();
+        const auto update=updater_?updater_->Snapshot():UpdateSnapshot{UpdateStage::Unavailable};
+        return {updater_?updater_->CurrentVersion():L"",preferences.autoCheck,preferences.autoInstall,update.stage,
+            update.offer?VersionText(update.offer->version):L""};
+    }
+    // The first check waits two minutes after a start, so sign-in stays quick; then an hourly tick
+    // checks once a day while checking is on. A test instance checks by itself only on its own delay.
+    void ScheduleUpdates() {
+        if(updater_->Snapshot().stage==UpdateStage::Unavailable)return;
+        UINT delay=120000;
+        if(CurrentTestInput().active) {
+            wchar_t value[16]{};
+            if(!GetEnvironmentVariableW(L"COPILOT_REEL_TEST_UPDATE_DELAY",value,16))return;
+            delay=(std::max)(1u,static_cast<UINT>(_wtoi(value)));
+        }
+        SetTimer(window,kUpdateTimer,delay,nullptr);
+    }
+    void UpdateTick() {
+        SetTimer(window,kUpdateTimer,3600000,nullptr);
+        const auto preferences=CurrentUpdatePreferences();
+        const auto now=std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        // A clock set back counts as a day passed.
+        if(preferences.autoCheck && (now-preferences.lastCheck>=86400 || preferences.lastCheck>now)) {
+            if(updater_->Check())Log(L"Update check started (daily)");
+        } else InstallWhenIdle();
+    }
+    // A check, an install or a failure finished: record a completed check, show it, install if asked.
+    void UpdateChanged() {
+        const auto update=updater_->Snapshot();
+        if(update.stage!=shownUpdate_)
+            Log(L"Update: "+std::wstring(update.stage==UpdateStage::Checking?L"checking":update.stage==UpdateStage::Current?L"up to date":
+                update.stage==UpdateStage::Available?L"available ":update.stage==UpdateStage::Installing?L"installing ":
+                update.stage==UpdateStage::Failed?L"failed ":L"idle")+(update.offer?VersionText(update.offer->version):L"")+
+                (update.error.empty()?L"":L"; "+update.error));
+        shownUpdate_=update.stage;
+        // Any new time is saved, also one before a saved time from a clock that ran ahead.
+        if(auto preferences=CurrentUpdatePreferences(); update.checkedAt && update.checkedAt!=preferences.lastCheck) {
+            preferences.lastCheck=update.checkedAt;
+            if(!SaveUpdatePreferences(preferences))Log(L"Update check time not saved");
+        }
+        if(gesture_.Active() && (page_==MenuPage::About || page_==MenuPage::Settings))RenderMenu();
+        InstallWhenIdle();
+    }
+    // Installing closes the reel, so Windows gets a verified package only while the reel is closed, no
+    // editor is open and no launch is under way. An automatic install starts under the same
+    // conditions and tries each version once; a failure waits for the user on the About page.
+    void InstallWhenIdle() {
+        if(!updater_ || gesture_.Active() || closing_ || editorOpen_ || drag_.active || launchesInFlight.load())return;
+        if(updater_->Prepared()) {Log(updater_->Commit()?L"Update handed to Windows":L"Update not handed to Windows");return;}
+        if(!CurrentUpdatePreferences().autoInstall)return;
+        const auto update=updater_->Snapshot();
+        if(update.stage!=UpdateStage::Available || !update.offer)return;
+        const auto version=VersionText(update.offer->version);
+        if(autoInstalled_==version)return;
+        autoInstalled_=version;
+        Log(updater_->Install()?L"Update install started automatically: "+version:L"Update install not started");
     }
     void RefreshAppearance() {
         if(!appearance_ || !renderer_)return;
@@ -1120,20 +1212,15 @@ public:
         if(raw->header.dwType==RIM_TYPEMOUSE) MovePointer();
         else if(!input_.Persistent() && raw->header.dwType==RIM_TYPEKEYBOARD && raw->data.keyboard.VKey==VK_ESCAPE && !(raw->data.keyboard.Flags&RI_KEY_BREAK)) Cancel();
     }
-    static const wchar_t* TrayTip() {return Tr(L"Copilot Reel - Ctrl+Alt+R to preview",L"Copilot Reel · Ctrl+Alt+R 预览");}
+    // The tray tooltip is the app's name alone, the same in every language.
     // NOTIFYICON_VERSION_4 suppresses the standard tooltip unless NIF_SHOWTIP is set.
     void AddTray() {
         NOTIFYICONDATAW data{sizeof(data)};data.hWnd=window;data.uID=1;
         data.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP|NIF_SHOWTIP;data.uCallbackMessage=kTrayMessage;
         data.hIcon=LoadIconW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1));
         if(!data.hIcon) data.hIcon=LoadIconW(nullptr,IDI_APPLICATION);
-        wcscpy_s(data.szTip,TrayTip());
+        wcscpy_s(data.szTip,kAppName);
         Shell_NotifyIconW(NIM_ADD,&data);data.uVersion=NOTIFYICON_VERSION_4;Shell_NotifyIconW(NIM_SETVERSION,&data);
-    }
-    // Updates the existing icon in place; removing and re-adding it flashes and may reorder it.
-    void UpdateTrayTip() {
-        NOTIFYICONDATAW data{sizeof(data)};data.hWnd=window;data.uID=1;data.uFlags=NIF_TIP|NIF_SHOWTIP;
-        wcscpy_s(data.szTip,TrayTip());Shell_NotifyIconW(NIM_MODIFY,&data);
     }
     void RemoveTray() {NOTIFYICONDATAW data{sizeof(data)};data.hWnd=window;data.uID=1;Shell_NotifyIconW(NIM_DELETE,&data);}
     // `anchor` is the icon's anchor point, so a menu opened from the keyboard sits beside it too.
@@ -1158,7 +1245,7 @@ public:
         const wchar_t* adjustName=!adjust.control?L"none":adjust.earlier && adjust.later?L"both":adjust.earlier?L"earlier":adjust.later?L"later":L"blocked";
         std::wstring parkedNames;
         for(const auto& app:parked_)parkedNames+=(parkedNames.empty()?L"":L"|")+AppDisplayName(app);
-        text<<L"Copilot Reel 0.3.7\r\n"<<L"DPI="<<dpi_<<L"\r\nreelScale="<<vi::kReelScale<<L"\r\nreelSize="<<ReelSizePercent(CurrentReelSize())<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
+        text<<L"Copilot Reel 0.3.8\r\n"<<L"DPI="<<dpi_<<L"\r\nreelScale="<<vi::kReelScale<<L"\r\nreelSize="<<ReelSizePercent(CurrentReelSize())<<L"\r\n"<<L"dark="<<currentAppearance_.dark<<L"\r\ntransparencyRequested="<<currentAppearance_.transparency
             <<L"\r\nanimations="<<currentAppearance_.animations<<L"\r\nhighContrast="<<currentAppearance_.highContrast<<L"\r\ntargetCount="<<items_.size()
             <<L"\r\nmenuPage="<<static_cast<int>(page_)<<L"\r\nmenuEntries="<<menu_.size()<<L"\r\npresetOffset="<<presetOffset_
             <<L"\r\npreferredIndex="<<PreferredTargetIndex(items_)<<L"\r\ngestureActive="<<gesture_.Active()
@@ -1172,6 +1259,12 @@ public:
             <<L"\r\nvisualOverride="<<(visual.raw.empty()?std::wstring(L"none"):visual.raw)
             // Captured pointer relative to the plate center in DIP; nonzero only when an edge clamped the plate.
             <<L"\r\nanchor="<<(anchor_.x-centerX_)*96/dpi_<<L","<<(anchor_.y-centerY_)*96/dpi_;
+        std::wstring badges;
+        for(const auto& entry:menu_)
+            badges+=(badges.empty()?L"":L"|")+std::wstring(entry.badge==TileBadge::Check?L"check":entry.badge==TileBadge::Dot?L"dot":L"-");
+        const auto updates=CurrentUpdatePreferences();
+        text<<L"\r\nmenuBadges="<<badges<<L"\r\nautoCheck="<<updates.autoCheck<<L"\r\nautoInstall="<<updates.autoInstall
+            <<L"\r\nlastUpdateCheck="<<updates.lastCheck<<L"\r\n"<<updater_->Diagnostics();
         if(CurrentTestInput().active)
             text<<L"\r\ntestInput=on\r\ntestRun="<<CurrentTestInput().runId<<L"\r\nrealInputIgnored="<<realInputIgnored_
                 <<L"\r\nactivationRequested="<<activationRequested_;
@@ -1298,6 +1391,9 @@ private:
     UINT dpi_=96;
     bool hotkey_=false,ready_=false;
     int smokeStep_=0;
+    std::unique_ptr<Updater> updater_;
+    UpdateStage shownUpdate_=UpdateStage::Idle;
+    std::wstring autoInstalled_;
 };
 
 LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
@@ -1342,6 +1438,7 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
         case kLanguageChangedMessage:self->LanguageChanged();return 0;
         case kLaunchFailedMessage:self->LaunchFailed(std::unique_ptr<LaunchFailure>(reinterpret_cast<LaunchFailure*>(lParam)));return 0;
         case kIdleArtworkMessage:if(!self->Active())self->FlushArtwork();return 0;
+        case kUpdateMessage:self->UpdateChanged();return 0;
         case kPresetsReadyMessage:self->PresetsReady(std::unique_ptr<std::vector<AppTarget>>(reinterpret_cast<std::vector<AppTarget>*>(lParam)));return 0;
         case WM_INPUT:self->RawInput(reinterpret_cast<HRAWINPUT>(lParam));break;
         case WM_MOUSEMOVE:self->MovePointer();return 0;
@@ -1382,6 +1479,7 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
             else if(wParam==kIdleTimer)self->Cancel();
             else if(wParam==kCloseTimer)self->FinishHide();
             else if(wParam==kKeyPollTimer)self->PollCopilotKey();
+            else if(wParam==kUpdateTimer)self->UpdateTick();
             return 0;
         case WM_DPICHANGED:self->DpiChanged(HIWORD(wParam));return 0;
         case WM_WTSSESSION_CHANGE:if(wParam==WTS_SESSION_LOCK || wParam==WTS_CONSOLE_DISCONNECT || wParam==WTS_REMOTE_DISCONNECT)self->Cancel();return 0;
@@ -1389,6 +1487,15 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
         case WM_ERASEBKGND:return 1;
         case WM_PAINT:{PAINTSTRUCT ps{};BeginPaint(hwnd,&ps);EndPaint(hwnd,&ps);return 0;}
         case WM_CLOSE:self->Cancel();return 0;
+        // An update of the package or the end of the session closes the reel: it leaves at once
+        // instead of waiting to be terminated, and an update starts it again.
+        case WM_QUERYENDSESSION:return TRUE;
+        case WM_ENDSESSION:
+            if(wParam) {
+                Log(lParam&ENDSESSION_CLOSEAPP?L"Closing for an update or a restart":L"Closing at the end of the session");
+                DestroyWindow(hwnd);
+            }
+            return 0;
         case WM_DESTROY:
             UnregisterHotKey(hwnd,1);self->RemoveTray();WTSUnRegisterSessionNotification(hwnd);PostQuitMessage(0);return 0;
         }
@@ -1416,9 +1523,9 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
         const HWND foreground=bare?GetForegroundWindow():nullptr;
         CommandPacket initialEvent=CaptureCommand(command,true);
         winrt::init_apartment(winrt::apartment_type::single_threaded);
-        LoadLanguage();LoadReelSize();
+        LoadLanguage();LoadReelSize();LoadUpdatePreferences();
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
-        if(command==Command::Invalid) {MessageBoxW(nullptr,Tr(L"Usage: CopilotReel.exe [--settings | --preview | --background | --diagnostics | --quit]",L"用法：CopilotReel.exe [--settings | --preview | --background | --diagnostics | --quit]"),kAppName,MB_OK|MB_ICONINFORMATION);return 2;}
+        if(command==Command::Invalid) {MessageBoxW(nullptr,Tr(L"Usage: CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]",L"用法：CopilotReel.exe [--settings | --preview | --background | --diagnostics | --update-check | --update-install | --quit]"),kAppName,MB_OK|MB_ICONINFORMATION);return 2;}
         const bool smoke=command==Command::SmokeTest;
         const auto& test=CurrentTestInput();
         // A misconfigured test run must never fall into the user's own instance. It logs only
