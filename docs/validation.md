@@ -27,6 +27,7 @@ The user reported that after installing 0.3.6 a Copilot hold showed nothing whil
 | Interaction | `tests/run-reel-seam.py` passed all 12 groups (`artifacts/qa/seam-20261023-215448-1fdedd/`); preflight now asserts that the test window is topmost before it first opens. |
 | Installation | 0.3.6.1.0 replaced 0.3.6.0 after a backup (`artifacts/backups/20261023-215519`), and was started in the background exactly as before. A HoldStart command then opened it topmost, with no ordinary window above it; the installed executable equals the tested build. |
 | ARM64 package | Cross-compiled (machine `0xAA64`, not run), signed with the development certificate, `signtool verify /pa` passed; executable SHA-256 `11D6C382…D338`. |
+| Release signing (2026-10-24) | An ARM64 user reported the package as unsigned. The release had both packages signed but no certificate, so only a machine that already trusted `CN=CopilotReel Development` could install them, and the signatures had no timestamp. Both packages were re-signed with a DigiCert RFC 3161 timestamp; against the earlier packages only `AppxSignature.p7x` and `AppxMetadata/CodeIntegrity.cat` differ. `signtool verify /pa /v` passed and reports the timestamp; the downloaded release assets match the local SHA-256 (x64 `52323795…3C46`, ARM64 `9C675D51…F9C6`, `CopilotReel-Development.cer` `470E40C5…92AB`). Not verified: an install on a machine that does not yet trust the certificate. |
 
 Not yet verified: a physical Copilot hold after a reboot, when the startup task starts the reel.
 

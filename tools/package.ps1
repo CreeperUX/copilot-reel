@@ -14,6 +14,7 @@ if(-not (Test-Path -LiteralPath $binary)) {throw 'Build the application with too
 $sdkBin=Join-Path $PSScriptRoot 'local\sdk\c\bin\10.0.26100.0\x64'
 $makeappx=Join-Path $sdkBin 'makeappx.exe'
 $signtool=Join-Path $sdkBin 'signtool.exe'
+$timestampServer='http://timestamp.digicert.com'
 if(-not (Test-Path -LiteralPath $makeappx)) {throw 'Windows SDK packaging tool not found.'}
 # Keep the ARM64 layout out of artifacts\package so it cannot replace a loose x64 registration directory.
 $stageName=if($Architecture -eq 'arm64') {'package-arm64'} else {'package'}
@@ -56,7 +57,8 @@ $package=Join-Path $projectRoot "artifacts\CopilotReel_${version}_${Architecture
 & $makeappx pack /d $stage /p $package /o
 if($LASTEXITCODE -ne 0) {throw 'MSIX validation/packing failed.'}
 if($CertificateThumbprint) {
-    & $signtool sign /fd SHA256 /sha1 $CertificateThumbprint $package
+    # Without a timestamp the package stops installing once the certificate expires.
+    & $signtool sign /fd SHA256 /tr $timestampServer /td SHA256 /sha1 $CertificateThumbprint $package
     if($LASTEXITCODE -ne 0) {throw 'MSIX signing failed. Certificate publisher must match the manifest Identity.'}
     & $signtool verify /pa $package
     if($LASTEXITCODE -ne 0) {throw 'Package signature chain verification failed.'}
