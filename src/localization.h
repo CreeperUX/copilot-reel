@@ -24,4 +24,11 @@ unsigned LoadReelSize() noexcept;
 bool SaveReelSize(unsigned step) noexcept;
 // The step's percentage, as stored and as the Reel size tile shows it.
 unsigned ReelSizePercent(unsigned step) noexcept;
+
+// And the notification-area icon: TrayIcon=monochrome draws the mark alone in the taskbar's
+// foreground; anything else keeps the color icon. Loading also sets it.
+bool CurrentTrayMonochrome() noexcept;
+void SetTrayMonochrome(bool monochrome) noexcept;
+bool LoadTrayMonochrome() noexcept;
+bool SaveTrayMonochrome(bool monochrome) noexcept;
 }
